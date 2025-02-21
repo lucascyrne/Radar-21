@@ -1,6 +1,3 @@
-Radar-Competencias-lideranca-4.0.md
-
-
 # Unlogged Home
 
 ## Hero Section
@@ -157,6 +154,7 @@ Resultados
 
 <main>
     <radar-graph>
+        
     ![radar_chart](https://github.com/user-attachments/assets/0f290340-2e32-4dd4-8e1c-c57d65aefa89)
     
     </radar-graph>
