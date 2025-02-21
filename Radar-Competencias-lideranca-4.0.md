@@ -42,20 +42,32 @@ Lattes, LinkedIn.
 Orientador: Alex Sandro Gomes
 
 # Login 
+![Captura de tela 2025-02-21 112527](https://github.com/user-attachments/assets/885f34b2-9b28-4d52-aa68-8b3f6358a9fe)
 
 # Signup 
+![Captura de tela 2025-02-21 112541](https://github.com/user-attachments/assets/f1d2be0e-c378-4b76-98a0-fdb9ba617c1a)
+
 
 # Minha Equipe
 
 <Sidebar>
-Minha Equipe
-Meu Perfil
-Radar das Competências de Liderança 4.0
-Resultados
+    Minha Equipe
+    Meu Perfil
+    Radar das Competências de Liderança 4.0
+    Resultados
 </Sidebar>
 
 <main>
-
+    Nome da equipe: 
+    Meu papel na equipe é: [Líder da equipe, Colaborador na Equipe]
+    Número de pessoas: 
+    
+ <H3> Enviar Convite </h3>
+    <form>
+    Emails: 
+    Mensagem:
+    <button> Convidar </button>
+    </form>
 </main>
 
 # Meu Perfil
