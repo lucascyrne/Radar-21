@@ -2,7 +2,6 @@
 
 ## Hero Section
 
-### Hero Section:
 <h1>A era da Indústria 4.0 requer novas competências </h1>
 <h3>Você e sua equipe estão preparados? </h3>
 
@@ -33,8 +32,9 @@
 ### Sobre os pesquisadores
 
 Edmilson Rodrigues do Nascimento Junior
-Email
-Lattes, LinkedIn.
+Email: ernj@cin.ufpe.br 
+[Lattes]([url](http://lattes.cnpq.br/2041701030190884)), [LinkedIn]([url](https://www.linkedin.com/in/edmilsonrodrigues/)
+).
 
 Orientador: Alex Sandro Gomes
 
@@ -83,8 +83,8 @@ Resultados
 Nome da equipe: 
 Meu papel é de: [Líder da equipe, colaborador na equipe]
 Número de pessoas na equipe: 
-
-Convidar Equipe:
+</form>
+<h3>Convidar Equipe: </h3>
 
 <form>
 Nome: 
@@ -98,7 +98,7 @@ Mensagem:
 <main>
 
 <h3> Dados sobre Meu Perfil <h3>
-    <form>
+<form>
     Nome Completo: 
     Data de Nascimento: 
     Escolaridade: [2o Grau, Superior Incompleto, Superior Completo, Pós-Graduação Lato Senso, Mestrado, Doutorado]
@@ -110,7 +110,7 @@ Mensagem:
     Porte: [Micro, Pequena, Média, Grande]
     Número de colaboradores:
 
-    </form>
+</form>
 </main>
 
 # Radar de Competências da Liderança 4.0
@@ -153,9 +153,9 @@ Resultados
 </Sidebar>
 
 <main>
-    <radar-graph>
+<radar-graph>
         
-    ![radar_chart](https://github.com/user-attachments/assets/0f290340-2e32-4dd4-8e1c-c57d65aefa89)
+![radar_chart](https://github.com/user-attachments/assets/0f290340-2e32-4dd4-8e1c-c57d65aefa89)
     
-    </radar-graph>
+</radar-graph>
 </main>
