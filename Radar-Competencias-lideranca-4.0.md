@@ -75,11 +75,11 @@ Nome da equipe:
 Meu papel é de: [Líder da equipe, colaborador na equipe]
 Número de pessoas na equipe: 
 
-Convidar:
+Convidar Equipe:
 
+<form>
 Nome: 
 Email: 
-
 Mensagem:
 
 </formulário>
@@ -89,7 +89,7 @@ Mensagem:
 <main>
 
 <h3> Dados sobre Meu Perfil <h3>
-    <formulario>
+    <form>
     Nome Completo: 
     Data de Nascimento: 
     Escolaridade: [2o Grau, Superior Incompleto, Superior Completo, Pós-Graduação Lato Senso, Mestrado, Doutorado]
@@ -99,8 +99,9 @@ Mensagem:
     Site: (Insira o site) 
     Tipo: [Pública, Privada, 3o Setor]
     Porte: [Micro, Pequena, Média, Grande]
-    Número de colaboradores: 
-    </formulário>
+    Número de colaboradores:
+
+    </form>
 </main>
 
 # Radar de Competências da Liderança 4.0
@@ -145,5 +146,7 @@ Resultados
 </Sidebar>
 
 <main>
+<radar-graph>
 
+</radar-graph>
 </main>
