@@ -139,6 +139,7 @@ Resultados
     | Colaboração | (Q11) No ambiente de trabalho, os desafios são tratados de forma colaborativa, aproveitando efetivamente as competências individuais dos membros da equipe? | Escala Likert |
     | Resiliência | (Q12) No ambiente de trabalho, você considera que mantém uma atitude positiva, proativa e de aprendizado diante de obstáculos e fracassos? | Escala Likert |
     | Ambiente de Trabalho | (Q13) Na sua opinião, o que poderia ser melhorado no ambiente de trabalho físico ou psicológico, ou nas relações profissionais dentro da equipe ou com a gestão? | Aberta |
+    | Formação | (Q14) Na sua opinião, como a universidadede poderia ter lhe preparado melhor para os desafios profissionais que você enfrentou após a graduação? | Aberta |
 
 </form>
 </main>
