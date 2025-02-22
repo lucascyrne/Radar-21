@@ -11,7 +11,7 @@
 
     Feature 1: 
     <H3> Indústria 4.0 <H3>
-    <p> Quarta Revolução Industrial ou Indústria 4.0[1] é um neologismo que descreve o rápido avanço tecnológico no século XXI.</p>
+    <p> Quarta Revolução Industrial ou Indústria 4.0 é um neologismo que descreve o rápido avanço tecnológico no século XXI.</p>
     
     Feature 2: 
     <H3> As Competências de Liderança </H3>
@@ -24,7 +24,7 @@
 ### New Section: Steps
 
 1. Cadastre-se e convide sua equipe. 
-2. Preencha seu perfil e responda as 13 perguntas do Radar da Liderança 4.0
+2. Preencha seu perfil e responda as 14 perguntas do Radar da Liderança 4.0 .
 3. Você ganha o gráfico das competências de Liderança 4.0 de sua equipe. 
 4. Pode entender onde vai bem, pontos de melhoria e como se compara com a indústria.
 5. Compartilhe seu resultado pelo WhatsApp ou LinkedIn
@@ -32,6 +32,7 @@
 ### Sobre os pesquisadores
 
 Edmilson Rodrigues do Nascimento Junior
+<p></p>
 Email: ernj@cin.ufpe.br 
 [Lattes]([url](http://lattes.cnpq.br/2041701030190884)), [LinkedIn]([url](https://www.linkedin.com/in/edmilsonrodrigues/)
 ).
@@ -47,34 +48,12 @@ Orientador: Alex Sandro Gomes
 
 # Minha Equipe
 
-<Sidebar>
-    Minha Equipe
+<Progress bar UI>
+**  Minha Equipe**
     Meu Perfil
     Radar das Competências de Liderança 4.0
     Resultados
-</Sidebar>
-
-<main>
-    Nome da equipe: 
-    Meu papel na equipe é: [Líder da equipe, Colaborador na Equipe]
-    Número de pessoas: 
-    
- <H3> Enviar Convite </h3>
-    <form>
-    Emails: 
-    Mensagem:
-    <button> Convidar </button>
-    </form>
-</main>
-
-# Meu Perfil
-
-<Sidebar>
-Minha Equipe
-Meu Perfil
-Radar das Competências de Liderança 4.0
-Resultados
-</Sidebar>
+<Progress bar UI>
 
 <main>
 <h3> Dados Sobre a equipe: </h3> 
@@ -83,17 +62,30 @@ Resultados
 Nome da equipe: 
 Meu papel é de: [Líder da equipe, colaborador na equipe]
 Número de pessoas na equipe: 
+
+    <button> Enviar </button>
 </form>
 <h3>Convidar Equipe: </h3>
-
 <form>
-Nome: 
-Email: 
-Mensagem:
 
+Email: (separar por virgula)
+Mensagem: (Mensagem padrão: Favor preencher essa ferramenta para que possamos saber como nossa equipe está em relação às competências de liderança 4.0)
+<button> Enviar </button>
 </form>
+| Equipe {Nome da equipe}                                      |
+|Email | Status do convite (enviado, cadastrado ou respondido) |
+| {email1@gmail.com}       |    Enviado                         | 
 
 </main>
+
+# Meu Perfil
+
+<Progress bar UI>
+    Minha Equipe
+    **Meu Perfil**
+    Radar das Competências de Liderança 4.0
+    Resultados
+<Progress bar UI>
 
 <main>
 
@@ -113,15 +105,14 @@ Mensagem:
 </form>
 </main>
 
-# Radar de Competências da Liderança 4.0
+# Questionário de Competências da Liderança 4.0
 
-<Sidebar>
-Minha Equipe
-Meu Perfil
-Radar das Competências de Liderança 4.0
-Resultados
-</Sidebar>
-
+<Progress bar UI>
+    Minha Equipe
+    Meu Perfil
+    **Questionário das Competências de Liderança 4.0**
+    Resultados
+<Progress bar UI>
 <main>
 <form>
 
@@ -146,17 +137,23 @@ Resultados
 
 # Resultados
 
-<Sidebar>
+<Progress bar UI>
     Minha Equipe
     Meu Perfil
-    Radar das Competências de Liderança 4.0
-    Resultados
-</Sidebar>
+    Questionário das Competências de Liderança 4.0
+    **Resultados**
+<Progress bar UI>
 
 <main>
 <radar-graph>
-        
+
+| Equipe {Nome da equipe}                                      |
+|Email | Status do convite (enviado, cadastrado ou respondido) |
+| {email1@gmail.com}       |    Enviado                         | 
+
 ![radar_chart](https://github.com/user-attachments/assets/0f290340-2e32-4dd4-8e1c-c57d65aefa89)
-    
+
+<button> Baixar gráfico </button>
+<button> Compartilhar url único </button>
 </radar-graph>
 </main>
