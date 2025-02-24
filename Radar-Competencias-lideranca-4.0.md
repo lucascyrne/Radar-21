@@ -60,27 +60,32 @@ Orientador: Alex Sandro Gomes
 <Progress bar UI>
 
 <main>
+<Toggle> Criar Equipe | Entrar em Equipe </Toggle>
+    
 <h3> Dados Sobre a equipe: </h3> 
 
-<form>
+<Criar Equipe>
 Nome da equipe: 
 Meu papel é de: [Líder da equipe, colaborador na equipe]
 Número de pessoas na equipe: 
 
     <button> Criar Equipe </button>
-</form>
+</Criar Equipe>
 <h3>Convidar Equipe: </h3>
-<form>
 
-<form>
+
+<Entrar em Equipe>
 Nome da equipe: 
 Email da pessoa que criou a equipe:
     <button> Entrar Equipe </button>
-</form>
+</Entrar em Equipe>
+
+<form>
 <p> Customize e envie a mensagem abaixo para sua equipe nos seus canais.</p>
-Mensagem: (Mensagem padrão: Favor preencher essa ferramenta para que possamos saber como nossa equipe está em relação às competências de liderança 4.0. Lembre de inserir o meu email [INSERIR EMAIL] e o nome da equipe [INSERIR NOME] )
+Mensagem: (Mensagem padrão: Oi. Tudo bem? Favor preencher essa ferramenta para que possamos saber como nossa equipe está em relação às competências de liderança 4.0. Lembre de selecionar "Entrar em Equipe" na página de equipe e inserir o meu email [INSERIR EMAIL] e o nome da equipe [INSERIR NOME] )
 <button> Copiar Mensagem </button>
 </form>
+
 | Equipe {Nome da equipe}                                      |
 |Email | Status do convite (enviado, cadastrado ou respondido) |
 | {email1@gmail.com}       |    Enviado                         | 
