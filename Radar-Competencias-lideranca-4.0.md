@@ -52,13 +52,6 @@ Email: ernj@cin.ufpe.br
 
 Orientador: Alex Sandro Gomes
 
-# Login 
-![Captura de tela 2025-02-21 112527](https://github.com/user-attachments/assets/885f34b2-9b28-4d52-aa68-8b3f6358a9fe)
-
-# Signup 
-![Captura de tela 2025-02-21 112541](https://github.com/user-attachments/assets/f1d2be0e-c378-4b76-98a0-fdb9ba617c1a)
-
-
 # Minha Equipe
 
 <Progress bar UI>
@@ -74,7 +67,8 @@ Orientador: Alex Sandro Gomes
 <h3> Dados Sobre a equipe: </h3> 
 
 <Criar Equipe>
-Nome da equipe: 
+Nome da equipe:
+Meu email: 
 Meu papel é de: [Líder da equipe, colaborador na equipe]
 Número de pessoas na equipe: 
 
@@ -86,12 +80,13 @@ Número de pessoas na equipe:
 <Entrar em Equipe>
 Nome da equipe: 
 Email da pessoa que criou a equipe:
+Meu email: 
     <button> Entrar Equipe </button>
 </Entrar em Equipe>
 
 <form>
 <p> Customize e envie a mensagem abaixo para sua equipe nos seus canais.</p>
-Mensagem: (Mensagem padrão: Oi. Tudo bem? Favor preencher essa ferramenta para que possamos saber como nossa equipe está em relação às competências de liderança 4.0. Lembre de selecionar "Entrar em Equipe" na página de equipe e inserir o meu email [INSERIR EMAIL] e o nome da equipe [INSERIR NOME] )
+Mensagem: (Mensagem padrão: Oi. Tudo bem? Favor preencher essa ferramenta para que possamos saber como nossa equipe está em relação às competências de liderança 4.0. Lembre de selecionar "Entrar em Equipe" na página de equipe e inserir o meu email {INSERIR EMAIL do usuário} e o nome da equipe {Nome da equipe} )
 <button> Copiar Mensagem </button>
 </form>
 
