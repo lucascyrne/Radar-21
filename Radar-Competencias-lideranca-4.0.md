@@ -1,8 +1,17 @@
-I want to create a simple system to apply a survey and give feedback to the respondents comparing his answers and his team's answers as a radar graph. I want the user to be able to login with a Google email or sign up with any email or password. In the end, I want the user to be able to download his radar graph. 
+I want to create a simple system to apply a survey and give feedback to the respondents comparing his answers and his team's answers as a radar graph. There is no Login or Signup functionality. Below there is the content and the pages for the system in Markdown. Each new H1 title is a new page. Each H2 title is a new section of the page, or the section is marked between HTML tags.
 
-Below there is the content and the pages for the system in Markdown. Each new H1 title is a new page. Each H2 title is a new section of the page, or the section is marked between HTML tags.
+This is the sitemap and flow: 
 
-# Unlogged Home
+- Home
+- Team Setup
+- Profile
+- Survey (Questions 1 to 12 in the Markdown table)
+- Open Questions (Questions 13 and 14 in the Markdown table)
+- Radar (In the end, I want the user to be able to download his radar graph.)
+
+The Design and UI of the project should be clean and minimalistic.
+
+# Home
 
 ## Hero Section
 
@@ -144,11 +153,25 @@ Mensagem: (Mensagem padrão: Oi. Tudo bem? Favor preencher essa ferramenta para 
     | Auto-organização | (Q10) No ambiente de trabalho, a equipe se auto-organiza e se esforça coletivamente para resolver uma tarefa complexa ou um desafio inesperado? | Escala Likert |
     | Colaboração | (Q11) No ambiente de trabalho, os desafios são tratados de forma colaborativa, aproveitando efetivamente as competências individuais dos membros da equipe? | Escala Likert |
     | Resiliência | (Q12) No ambiente de trabalho, você considera que mantém uma atitude positiva, proativa e de aprendizado diante de obstáculos e fracassos? | Escala Likert |
-    | Ambiente de Trabalho | (Q13) Na sua opinião, o que poderia ser melhorado no ambiente de trabalho físico ou psicológico, ou nas relações profissionais dentro da equipe ou com a gestão? | Aberta |
-    | Formação | (Q14) Na sua opinião, como a universidadede poderia ter lhe preparado melhor para os desafios profissionais que você enfrentou após a graduação? | Aberta |
+
 
 </form>
 </main>
+
+# Open Questions
+
+<Progress bar UI>
+    Minha Equipe
+    Meu Perfil
+    **Questionário das Competências de Liderança 4.0**
+    Resultados
+<Progress bar UI>
+    
+    <form>
+     | COMPETÊNCIA AVALIADA | PERGUNTA | TIPO DE PERGUNTA |
+    | Ambiente de Trabalho | (Q13) Na sua opinião, o que poderia ser melhorado no ambiente de trabalho físico ou psicológico, ou nas relações profissionais dentro da equipe ou com a gestão? | Aberta |
+    | Formação | (Q14) Na sua opinião, como a universidadede poderia ter lhe preparado melhor para os desafios profissionais que você enfrentou após a graduação? | Aberta |
+</form>
 
 # Resultados
 
