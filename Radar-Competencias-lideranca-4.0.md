@@ -44,13 +44,13 @@ The Design and UI of the project should be clean and minimalistic.
 
 ### Sobre os pesquisadores
 
-Edmilson Rodrigues do Nascimento Junior
+<card>Edmilson Rodrigues do Nascimento Junior
 <p></p>
 Email: ernj@cin.ufpe.br 
 [Lattes]([url](http://lattes.cnpq.br/2041701030190884)), [LinkedIn]([url](https://www.linkedin.com/in/edmilsonrodrigues/)
-).
+). </card>
 
-Orientador: Alex Sandro Gomes
+<card> Orientador: Alex Sandro Gomes </card>
 
 # Minha Equipe
 
@@ -181,8 +181,8 @@ Mensagem: (Mensagem padrão: Oi. Tudo bem? Favor preencher essa ferramenta para 
 <radar-graph>
 
 | Equipe {Nome da equipe}                                      |
-|Email | Status do convite (enviado, cadastrado ou respondido) |
-| {email1@gmail.com}       |    Enviado                         | 
+|Email | Status do convite [enviado, cadastrado ou respondido] |
+| {email1@gmail.com}       |    {Enviado}                         | 
 
 ![radar_chart](https://github.com/user-attachments/assets/0f290340-2e32-4dd4-8e1c-c57d65aefa89)
 
