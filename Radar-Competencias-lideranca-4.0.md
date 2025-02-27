@@ -50,7 +50,7 @@ Email: ernj@cin.ufpe.br
 [Lattes]([url](http://lattes.cnpq.br/2041701030190884)), [LinkedIn]([url](https://www.linkedin.com/in/edmilsonrodrigues/)
 ). </card>
 
-<card> Orientador: Alex Sandro Gomes </card>
+<card> Orientador: Alex Sandro Gomes, Phd. </card>
 
 # Minha Equipe
 
