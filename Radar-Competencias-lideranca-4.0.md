@@ -1,4 +1,4 @@
-I want to create a simple system to apply a survey and give feedback to the respondents comparing his answers and his team's answers as a radar graph. There is no Login or Signup functionality. Below there is the content and the pages for the system in Markdown. Each new H1 title is a new page. Each H2 title is a new section of the page, or the section is marked between HTML tags.
+I want to create a simple system to apply a survey and give feedback to the respondents comparing his answers and his team's answers as a radar graph. There should be a  Login/Signup functionality with password and with Google login. Below there is the content and the pages for the system in Markdown. Each new H1 title is a new page. Each H2 title is a new section of the page, or the section is marked between HTML tags.
 
 This is the sitemap and flow: 
 
