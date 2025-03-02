@@ -180,15 +180,19 @@ Mensagem: (Mensagem padrão: Oi. Tudo bem? Favor preencher essa ferramenta para 
 <Progress bar UI>
 
 <main>
-<radar-graph>
-
 | Equipe {Nome da equipe}                                      |
 |Email | Status do convite [enviado, cadastrado ou respondido] |
 | {email1@gmail.com}       |    {Enviado}                         | 
 
-![radar_chart](https://github.com/user-attachments/assets/0f290340-2e32-4dd4-8e1c-c57d65aefa89)
+<radar-graph>
+![Captura de tela 2025-02-27 172344](https://github.com/user-attachments/assets/84adc2f1-2cda-44bc-8a74-37b5c21d1c66)
 
 <button> Baixar gráfico </button>
 <button> Compartilhar url único </button>
 </radar-graph>
+<table> 
+    | Competência | Descrição | Meu Score | Média da equipe | Delta | 
+    | Liderança | Capacidade de influentar outros | 4 | 3 | +1 |
+
+</table>
 </main>
