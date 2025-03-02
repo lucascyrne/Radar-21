@@ -120,6 +120,8 @@ Mensagem: (Mensagem padrão: Oi. Tudo bem? Favor preencher essa ferramenta para 
     Tipo: [Pública, Privada, 3o Setor]
     Porte: [Micro, Pequena, Média, Grande]
     Número de colaboradores:
+    Cidade em que você trabalha: 
+    Modelo de Trabalho: [Em pessoa, remoto, híbrido]
 
 </form>
 </main>
