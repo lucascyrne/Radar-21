@@ -1,330 +1,467 @@
 "use client"
 
-import type React from "react"
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/resources/auth/auth-context';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { CreateTeamFormValues, JoinTeamFormValues, createTeamSchema, joinTeamSchema } from '@/resources/team/team-model';
+import { TeamService } from '@/resources/team/team.service';
+import Link from 'next/link';
 
-import { useState, useRef, useEffect } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Textarea } from "@/components/ui/textarea"
-import { Progress } from "@/components/ui/progress"
-import { Check, Copy, Plus } from "lucide-react"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Layout } from "@/components/layout"
+// Componentes shadcn/ui
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
+import { Separator } from '@/components/ui/separator';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { 
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import { toast } from '@/hooks/use-toast';
 
-type TeamMember = {
-  email: string
-  status: "Enviado" | "Cadastrado" | "Respondido"
-}
+export default function TeamSetupPage() {
+  const router = useRouter();
+  const { user, isLoading, isAuthenticated } = useAuth();
+  const [activeTab, setActiveTab] = useState<string>("create");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [teamCreated, setTeamCreated] = useState(false);
+  const [teamJoined, setTeamJoined] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState('');
+  const [teamMembers, setTeamMembers] = useState<any[]>([]);
+  const [userTeams, setUserTeams] = useState<any[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
 
-export default function TeamSetup() {
-  const router = useRouter()
-  const [teamName, setTeamName] = useState("")
-  const [userEmail, setUserEmail] = useState("")
-  const [userRole, setUserRole] = useState("")
-  const [teamSize, setTeamSize] = useState("")
-  const [members, setMembers] = useState<TeamMember[]>([])
-  const [copied, setCopied] = useState(false)
-  const [invitationMessage, setInvitationMessage] = useState("")
-  const [hasJoinedTeam, setHasJoinedTeam] = useState(false)
-  const messageRef = useRef<HTMLTextAreaElement>(null)
-
+  // Redirecionar se não estiver autenticado
   useEffect(() => {
-    const savedTeamName = localStorage.getItem("teamName") || ""
-    const savedUserEmail = localStorage.getItem("userEmail") || ""
-    const savedTeamMembers = JSON.parse(localStorage.getItem("teamMembers") || "[]")
-
-    setTeamName(savedTeamName)
-    setUserEmail(savedUserEmail)
-    setMembers([
-      { email: savedUserEmail, status: "Cadastrado" },
-      ...savedTeamMembers.filter((member: TeamMember) => member.email !== savedUserEmail),
-    ])
-
-    updateInvitationMessage(savedTeamName, savedUserEmail)
-  }, [])
-
-  const addMember = () => {
-    setMembers([...members, { email: "", status: "Enviado" }])
-  }
-
-  const updateMember = (index: number, email: string) => {
-    const newMembers = [...members]
-    newMembers[index].email = email
-    setMembers(newMembers)
-    localStorage.setItem("teamMembers", JSON.stringify(newMembers.slice(1)))
-  }
-
-  const handleCreateTeam = (e: React.FormEvent) => {
-    e.preventDefault()
-    localStorage.setItem("teamName", teamName)
-    localStorage.setItem("userEmail", userEmail)
-    localStorage.setItem("userRole", userRole)
-    localStorage.setItem("teamSize", teamSize)
-    localStorage.setItem("teamMembers", JSON.stringify(members.slice(1)))
-    localStorage.setItem("isTeamCreator", "true")
-  }
-
-  const handleJoinTeam = (e: React.FormEvent) => {
-    e.preventDefault()
-    localStorage.setItem("teamName", teamName)
-    localStorage.setItem("userEmail", userEmail)
-    localStorage.setItem("isTeamCreator", "false")
-
-    const mockTeamMembers = [
-      { email: userEmail, status: "Cadastrado" },
-      { email: "member1@example.com", status: "Enviado" },
-      { email: "member2@example.com", status: "Respondido" },
-    ]
-    setMembers(mockTeamMembers)
-    updateInvitationMessage(teamName, userEmail)
-    setHasJoinedTeam(true)
-  }
-
-  const copyMessage = () => {
-    if (messageRef.current) {
-      messageRef.current.select()
-      document.execCommand("copy")
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
+    if (!isLoading && !isAuthenticated) {
+      router.push('/auth');
     }
-  }
+  }, [isLoading, isAuthenticated, router]);
 
-  const updateInvitationMessage = (teamName: string, userEmail: string) => {
-    setInvitationMessage(
-      `Oi. Tudo bem? Favor preencher essa ferramenta para que possamos saber como nossa equipe está em relação às competências de liderança 4.0. Lembre de selecionar "Entrar em Equipe" na página de equipe e inserir o meu email ${userEmail} e o nome da equipe ${teamName}`,
-    )
+  // Carregar equipes do usuário
+  useEffect(() => {
+    const loadUserTeams = async () => {
+      if (user) {
+        try {
+          const { teams, memberships } = await TeamService.getUserTeams(user.id);
+          setUserTeams(teams);
+          
+          // Se o usuário já tem equipes, selecionar a primeira
+          if (teams.length > 0) {
+            setSelectedTeam(teams[0].id);
+            loadTeamMembers(teams[0].id);
+          }
+        } catch (error) {
+          console.error('Erro ao carregar equipes:', error);
+        }
+      }
+    };
+    
+    loadUserTeams();
+  }, [user]);
+
+  // Carregar membros da equipe selecionada
+  const loadTeamMembers = async (teamId: string) => {
+    try {
+      const members = await TeamService.getTeamMembers(teamId);
+      setTeamMembers(members);
+    } catch (error) {
+      console.error('Erro ao carregar membros da equipe:', error);
+    }
+  };
+
+  // Configuração do formulário de criação de equipe
+  const createTeamForm = useForm<CreateTeamFormValues>({
+    resolver: zodResolver(createTeamSchema),
+    defaultValues: {
+      name: '',
+      role: 'leader',
+      team_size: 5,
+    },
+  });
+
+  // Configuração do formulário de entrada em equipe
+  const joinTeamForm = useForm<JoinTeamFormValues>({
+    resolver: zodResolver(joinTeamSchema),
+    defaultValues: {
+      team_name: '',
+      owner_email: '',
+    },
+  });
+
+  // Manipuladores de envio de formulário
+  const handleCreateTeamSubmit = async (data: CreateTeamFormValues) => {
+    if (!user) return;
+    
+    setIsSubmitting(true);
+    setError(null);
+    
+    try {
+      // Criar a equipe
+      const team = await TeamService.createTeam(
+        data.name,
+        user.id,
+        user.email || '',
+        data.team_size
+      );
+      
+      // Adicionar o criador como membro/líder
+      await TeamService.addTeamMember(
+        team.id,
+        user.id,
+        user.email || '',
+        data.role as 'leader' | 'member',
+        'registered'
+      );
+      
+      // Gerar mensagem de convite
+      const message = TeamService.generateInviteMessage(team.name, user.email || '');
+      setInviteMessage(message);
+      
+      // Atualizar estado
+      setTeamCreated(true);
+      setSelectedTeam(team.id);
+      
+      // Recarregar equipes e membros
+      const { teams } = await TeamService.getUserTeams(user.id);
+      setUserTeams(teams);
+      loadTeamMembers(team.id);
+      
+      toast({
+        title: "Equipe criada com sucesso!",
+        description: "Agora você pode convidar membros para sua equipe.",
+      });
+      
+    } catch (error: any) {
+      console.error('Erro ao criar equipe:', error);
+      setError(error.message || 'Erro ao criar equipe. Tente novamente.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const handleJoinTeamSubmit = async (data: JoinTeamFormValues) => {
+    if (!user) return;
+    
+    setIsSubmitting(true);
+    setError(null);
+    
+    try {
+      // Encontrar a equipe pelo nome e email do proprietário
+      const team = await TeamService.findTeamByNameAndOwner(data.team_name, data.owner_email);
+      
+      if (!team) {
+        throw new Error('Equipe não encontrada. Verifique o nome da equipe e o email do proprietário.');
+      }
+      
+      // Entrar na equipe
+      await TeamService.joinTeam(team.id, user.id, user.email || '');
+      
+      // Atualizar estado
+      setTeamJoined(true);
+      setSelectedTeam(team.id);
+      
+      // Recarregar equipes e membros
+      const { teams } = await TeamService.getUserTeams(user.id);
+      setUserTeams(teams);
+      loadTeamMembers(team.id);
+      
+      toast({
+        title: "Você entrou na equipe com sucesso!",
+        description: "Agora você pode ver os membros da equipe.",
+      });
+      
+    } catch (error: any) {
+      console.error('Erro ao entrar na equipe:', error);
+      setError(error.message || 'Erro ao entrar na equipe. Tente novamente.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // Copiar mensagem de convite para a área de transferência
+  const copyInviteMessage = () => {
+    navigator.clipboard.writeText(inviteMessage);
+    toast({
+      title: "Mensagem copiada!",
+      description: "A mensagem de convite foi copiada para a área de transferência.",
+    });
+  };
+
+  // Mudar equipe selecionada
+  const handleTeamChange = (teamId: string) => {
+    setSelectedTeam(teamId);
+    loadTeamMembers(teamId);
+  };
+
+  // Limpar erros ao mudar de aba
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    setError(null);
+    createTeamForm.reset();
+    joinTeamForm.reset();
+  };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
   }
 
   return (
-    <Layout>
-      <div className="max-w-4xl mx-auto">
-        <div className="mb-8">
-          <div className="flex justify-between mb-2 text-sm font-medium">
-            <span className="font-bold">Minha Equipe</span>
-            <span className="text-muted-foreground">Meu Perfil</span>
-            <span className="text-muted-foreground">Radar das Competências de Liderança 4.0</span>
-            <span className="text-muted-foreground">Resultados</span>
+    <div className="min-h-screen bg-gray-50">
+      <header className="bg-white shadow-sm">
+        <div className="container mx-auto py-4 px-4">
+          <div className="flex flex-col items-center justify-between space-y-4 md:flex-row md:space-y-0">
+            <h1 className="text-2xl font-bold">Radar das Competências 4.0</h1>
+            <nav className="flex items-center space-x-1">
+              <Button variant="ghost" className="font-medium" asChild>
+                <Link href="/team-setup">Minha Equipe</Link>
+              </Button>
+              <Button variant="ghost" asChild>
+                <Link href="/profile">Meu Perfil</Link>
+              </Button>
+              <Button variant="ghost" asChild>
+                <Link href="/radar">Competências</Link>
+              </Button>
+              <Button variant="ghost" asChild>
+                <Link href="/results">Resultados</Link>
+              </Button>
+              <Separator orientation="vertical" className="h-6 mx-1" />
+              <Button variant="ghost" className="text-red-500 hover:text-red-700 hover:bg-red-50" asChild>
+                <Link href="/logout">Sair</Link>
+              </Button>
+            </nav>
           </div>
-          <Progress value={25} className="h-2" />
         </div>
-
-        <h1 className="text-3xl font-bold mb-8 text-center">Minha Equipe</h1>
-
-        <Tabs defaultValue="create" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 mb-8">
-            <TabsTrigger value="create">Criar Equipe</TabsTrigger>
-            <TabsTrigger value="join">Entrar em Equipe</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value="create">
-            <Card>
-              <CardHeader>
-                <CardTitle>Criar Nova Equipe</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <form onSubmit={handleCreateTeam} className="space-y-8">
-                  <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="team-name">Nome da equipe</Label>
-                      <Input id="team-name" value={teamName} onChange={(e) => setTeamName(e.target.value)} required />
+      </header>
+      
+      <main className="container mx-auto py-8 px-4">
+        <div className="max-w-5xl mx-auto">
+          <h2 className="text-3xl font-bold mb-8 text-center">Minha Equipe</h2>
+          
+          {userTeams.length > 0 && (
+            <div className="mb-8">
+              <Card className="shadow-md border-0">
+                <CardHeader>
+                  <CardTitle>Minhas Equipes</CardTitle>
+                  <CardDescription>Selecione uma equipe para ver seus membros</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="max-w-md mx-auto">
+                    <Select value={selectedTeam || undefined} onValueChange={handleTeamChange}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Selecione uma equipe" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {userTeams.map((team) => (
+                          <SelectItem key={team.id} value={team.id}>
+                            {team.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  
+                  {selectedTeam && teamMembers.length > 0 && (
+                    <div className="mt-6">
+                      <h3 className="text-lg font-medium mb-2">Membros da Equipe</h3>
+                      <Table>
+                        <TableHeader>
+                          <TableRow>
+                            <TableHead>Email</TableHead>
+                            <TableHead>Papel</TableHead>
+                            <TableHead>Status</TableHead>
+                          </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                          {teamMembers.map((member) => (
+                            <TableRow key={member.id}>
+                              <TableCell>{member.email}</TableCell>
+                              <TableCell>{member.role === 'leader' ? 'Líder' : 'Membro'}</TableCell>
+                              <TableCell>
+                                {member.status === 'invited' ? 'Convidado' : 
+                                 member.status === 'registered' ? 'Cadastrado' : 'Respondido'}
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
                     </div>
-
+                  )}
+                  
+                  {selectedTeam && teamCreated && (
+                    <div className="mt-6">
+                      <h3 className="text-lg font-medium mb-2">Convide sua equipe</h3>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        Customize e envie a mensagem abaixo para sua equipe nos seus canais.
+                      </p>
+                      <Textarea 
+                        value={inviteMessage} 
+                        onChange={(e) => setInviteMessage(e.target.value)}
+                        className="min-h-[100px] mb-2"
+                      />
+                      <Button onClick={copyInviteMessage}>Copiar Mensagem</Button>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          )}
+          
+          <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full max-w-3xl mx-auto">
+            <TabsList className="grid w-full grid-cols-2 mb-6">
+              <TabsTrigger value="create">Criar Equipe</TabsTrigger>
+              <TabsTrigger value="join">Entrar em Equipe</TabsTrigger>
+            </TabsList>
+            
+            {/* Exibir mensagens de erro */}
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            
+            {/* Formulário de Criação de Equipe */}
+            <TabsContent value="create">
+              <Card className="shadow-md border-0">
+                <CardHeader>
+                  <CardTitle>Criar Nova Equipe</CardTitle>
+                  <CardDescription>
+                    Preencha os dados abaixo para criar sua equipe
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={createTeamForm.handleSubmit(handleCreateTeamSubmit)} className="space-y-4 max-w-md mx-auto">
                     <div className="space-y-2">
-                      <Label htmlFor="user-email">Meu email</Label>
+                      <Label htmlFor="name">Nome da equipe</Label>
                       <Input
-                        id="user-email"
-                        type="email"
-                        value={userEmail}
-                        onChange={(e) => setUserEmail(e.target.value)}
-                        required
+                        id="name"
+                        placeholder="Ex: Equipe de Desenvolvimento"
+                        {...createTeamForm.register('name')}
+                      />
+                      {createTeamForm.formState.errors.name && (
+                        <p className="text-sm text-red-500">{createTeamForm.formState.errors.name.message}</p>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label>Meu email</Label>
+                      <Input
+                        value={user?.email || ''}
+                        disabled
                       />
                     </div>
-
+                    
                     <div className="space-y-2">
-                      <Label htmlFor="user-role">Meu papel é de:</Label>
-                      <RadioGroup
-                        id="user-role"
-                        value={userRole}
-                        onValueChange={setUserRole}
-                        className="flex flex-col space-y-1"
-                        required
+                      <Label>Meu papel é de</Label>
+                      <RadioGroup 
+                        defaultValue={createTeamForm.getValues('role')}
+                        onValueChange={(value) => createTeamForm.setValue('role', value as 'leader' | 'member')}
                       >
                         <div className="flex items-center space-x-2">
                           <RadioGroupItem value="leader" id="leader" />
                           <Label htmlFor="leader">Líder da equipe</Label>
                         </div>
                         <div className="flex items-center space-x-2">
-                          <RadioGroupItem value="collaborator" id="collaborator" />
-                          <Label htmlFor="collaborator">Colaborador na equipe</Label>
+                          <RadioGroupItem value="member" id="member" />
+                          <Label htmlFor="member">Colaborador na equipe</Label>
                         </div>
                       </RadioGroup>
+                      {createTeamForm.formState.errors.role && (
+                        <p className="text-sm text-red-500">{createTeamForm.formState.errors.role.message}</p>
+                      )}
                     </div>
-
+                    
                     <div className="space-y-2">
-                      <Label htmlFor="team-size">Número de pessoas na equipe</Label>
+                      <Label htmlFor="team_size">Número de pessoas na equipe</Label>
                       <Input
-                        id="team-size"
+                        id="team_size"
                         type="number"
                         min="1"
-                        value={teamSize}
-                        onChange={(e) => setTeamSize(e.target.value)}
-                        required
+                        {...createTeamForm.register('team_size', { valueAsNumber: true })}
                       />
+                      {createTeamForm.formState.errors.team_size && (
+                        <p className="text-sm text-red-500">{createTeamForm.formState.errors.team_size.message}</p>
+                      )}
                     </div>
-                  </div>
-
-                  <div className="space-y-4">
-                    <h3 className="text-lg font-semibold">Convidar Equipe</h3>
-                    <div className="space-y-2">
-                      <Label htmlFor="invitation-message">Mensagem de convite</Label>
-                      <Textarea
-                        id="invitation-message"
-                        ref={messageRef}
-                        value={invitationMessage}
-                        onChange={(e) => setInvitationMessage(e.target.value)}
-                        rows={4}
-                      />
-                      <Button type="button" variant="outline" onClick={copyMessage} className="flex items-center gap-2">
-                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                        {copied ? "Mensagem Copiada" : "Copiar Mensagem"}
-                      </Button>
-                    </div>
-
-                    <div className="space-y-4">
-                      <div className="flex items-center justify-between">
-                        <h4 className="font-medium">Membros da Equipe</h4>
-                        <Button type="button" variant="outline" size="sm" onClick={addMember} className="h-8 px-2">
-                          <Plus className="h-4 w-4 mr-1" /> Adicionar
-                        </Button>
-                      </div>
-
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Status do convite</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {members.map((member, index) => (
-                            <TableRow key={index}>
-                              <TableCell>
-                                {index === 0 ? (
-                                  member.email
-                                ) : (
-                                  <Input
-                                    value={member.email}
-                                    onChange={(e) => updateMember(index, e.target.value)}
-                                    placeholder="email@exemplo.com"
-                                    className="h-8"
-                                  />
-                                )}
-                              </TableCell>
-                              <TableCell>{member.status}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </div>
-
-                  <Button type="submit" className="w-full">
-                    Criar Equipe e Continuar
-                  </Button>
-                </form>
-              </CardContent>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="join">
-            <Card>
-              <CardHeader>
-                <CardTitle>Entrar em uma Equipe Existente</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {!hasJoinedTeam ? (
-                  <form onSubmit={handleJoinTeam} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="join-team-name">Nome da equipe</Label>
-                      <Input
-                        id="join-team-name"
-                        value={teamName}
-                        onChange={(e) => setTeamName(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <div className="space-y-2">
-                      <Label htmlFor="join-user-email">Meu email</Label>
-                      <Input
-                        id="join-user-email"
-                        type="email"
-                        value={userEmail}
-                        onChange={(e) => setUserEmail(e.target.value)}
-                        required
-                      />
-                    </div>
-
-                    <Button type="submit" className="w-full">
-                      Entrar na Equipe
+                    
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
+                      {isSubmitting ? 'Criando...' : 'Criar Equipe'}
                     </Button>
                   </form>
-                ) : (
-                  <div className="space-y-8">
-                    <div className="space-y-4">
-                      <h3 className="text-lg font-semibold">Equipe {teamName}</h3>
-                      <p>Você entrou com sucesso na equipe. Aqui estão os detalhes da equipe:</p>
-                    </div>
-
-                    <div className="space-y-4">
-                      <h4 className="font-medium">Membros da Equipe</h4>
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Status</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {members.map((member, index) => (
-                            <TableRow key={index}>
-                              <TableCell>{member.email}</TableCell>
-                              <TableCell>{member.status}</TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-
-                    <div className="space-y-4">
-                      <h4 className="font-medium">Mensagem de Convite</h4>
-                      <Textarea
-                        value={invitationMessage}
-                        onChange={(e) => setInvitationMessage(e.target.value)}
-                        rows={4}
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            {/* Formulário para Entrar em Equipe */}
+            <TabsContent value="join">
+              <Card className="shadow-md border-0">
+                <CardHeader>
+                  <CardTitle>Entrar em uma Equipe</CardTitle>
+                  <CardDescription>
+                    Preencha os dados abaixo para entrar em uma equipe existente
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <form onSubmit={joinTeamForm.handleSubmit(handleJoinTeamSubmit)} className="space-y-4 max-w-md mx-auto">
+                    <div className="space-y-2">
+                      <Label htmlFor="team_name">Nome da equipe</Label>
+                      <Input
+                        id="team_name"
+                        placeholder="Ex: Equipe de Desenvolvimento"
+                        {...joinTeamForm.register('team_name')}
                       />
-                      <Button type="button" variant="outline" onClick={copyMessage} className="flex items-center gap-2">
-                        {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
-                        {copied ? "Mensagem Copiada" : "Copiar Mensagem"}
-                      </Button>
+                      {joinTeamForm.formState.errors.team_name && (
+                        <p className="text-sm text-red-500">{joinTeamForm.formState.errors.team_name.message}</p>
+                      )}
                     </div>
-
-                    <Button onClick={() => router.push("/profile")} className="w-full">
-                      Continuar para Meu Perfil
+                    
+                    <div className="space-y-2">
+                      <Label htmlFor="owner_email">Email da pessoa que criou a equipe</Label>
+                      <Input
+                        id="owner_email"
+                        type="email"
+                        placeholder="Ex: lider@empresa.com"
+                        {...joinTeamForm.register('owner_email')}
+                      />
+                      {joinTeamForm.formState.errors.owner_email && (
+                        <p className="text-sm text-red-500">{joinTeamForm.formState.errors.owner_email.message}</p>
+                      )}
+                    </div>
+                    
+                    <div className="space-y-2">
+                      <Label>Meu email</Label>
+                      <Input
+                        value={user?.email || ''}
+                        disabled
+                      />
+                    </div>
+                    
+                    <Button type="submit" className="w-full" disabled={isSubmitting}>
+                      {isSubmitting ? 'Entrando...' : 'Entrar na Equipe'}
                     </Button>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </TabsContent>
-        </Tabs>
-      </div>
-    </Layout>
-  )
+                  </form>
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
+        </div>
+      </main>
+    </div>
+  );
 }
 
