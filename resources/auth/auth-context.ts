@@ -1,24 +1,48 @@
 import { createContext, useContext } from 'react';
-import { AuthContextType, AuthState } from './auth-model';
+import { AuthState, InviteUserParams, User } from './auth-model';
 
-// Estado inicial de autenticação
-export const initialAuthState: AuthState = {
-  session: null,
+interface AuthContextType extends AuthState {
+  setUser: (user: User | null) => void;
+  setSession: (session: any | null) => void;
+  setIsLoading: (isLoading: boolean) => void;
+  setIsAuthenticated: (isAuthenticated: boolean) => void;
+  setError: (error: string | null) => void;
+  signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  clearError: () => void;
+  inviteUser: (params: InviteUserParams) => Promise<{ success: boolean; userId?: string; error?: string }>;
+  updateFormProgress: (page: string, isComplete?: boolean) => Promise<{ success: boolean; error?: string }>;
+  getNextFormPage: () => string;
+  hasCompletedForm: () => boolean;
+}
+
+export const initialState: AuthState = {
   user: null,
+  session: null,
   isLoading: true,
   isAuthenticated: false,
+  error: null,
 };
 
-// Criação do contexto de autenticação
-export const AuthContext = createContext<AuthContextType>({
-  ...initialAuthState,
+// Criando o contexto com valores padrão
+const AuthContext = createContext<AuthContextType>({
+  ...initialState,
   signInWithGoogle: async () => {},
   signInWithEmail: async () => {},
   signUpWithEmail: async () => {},
   signOut: async () => {},
-  error: null,
   clearError: () => {},
+  inviteUser: async () => ({ success: false, error: 'Não implementado' }),
+  updateFormProgress: async () => ({ success: false, error: 'Não implementado' }),
+  getNextFormPage: () => '/login',
+  hasCompletedForm: () => false,
+  setUser: () => {},
+  setSession: () => {},
+  setIsLoading: () => {},
+  setIsAuthenticated: () => {},
+  setError: () => {},
 });
 
-// Hook para usar o contexto de autenticação
-export const useAuth = () => useContext(AuthContext);
+export default AuthContext;

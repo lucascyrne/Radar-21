@@ -1,11 +1,56 @@
-import { Session, User } from '@supabase/supabase-js';
 import { z } from 'zod';
 
+// Tipos para autenticação e gerenciamento de usuários
+export interface User {
+  id: string;
+  email: string;
+  name?: string;
+  avatar_url?: string;
+  created_at?: string;
+  updated_at?: string;
+  team_id?: string;
+  role?: UserRole;
+  status?: UserStatus;
+  last_form_page?: string; // Última página do formulário que o usuário visitou
+  has_completed_form?: boolean; // Indica se o usuário completou o formulário
+}
+
+export enum UserRole {
+  ADMIN = 'admin',
+  MEMBER = 'member',
+  GUEST = 'guest'
+}
+
+export enum UserStatus {
+  INVITED = 'Convidado',
+  RESPONDED = 'Respondido'
+}
+
 export interface AuthState {
-  session: Session | null;
   user: User | null;
+  session: any | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  error: string | null;
+}
+
+export interface InviteUserParams {
+  email: string;
+  teamId: string;
+  message?: string; // Mensagem personalizada para o convite
+}
+
+export interface FormProgressState {
+  currentPage: string;
+  completedPages: string[];
+  isComplete: boolean;
+}
+
+// Resposta da API para operações de autenticação
+export interface AuthResponse {
+  user: User | null;
+  session: any | null;
+  error?: string;
 }
 
 export interface AuthContextType extends AuthState {
@@ -15,6 +60,10 @@ export interface AuthContextType extends AuthState {
   signOut: () => Promise<void>;
   error: string | null;
   clearError: () => void;
+  inviteUser: (params: InviteUserParams) => Promise<{ success: boolean; userId?: string; error?: string }>;
+  updateFormProgress: (page: string, isComplete?: boolean) => Promise<{ success: boolean; error?: string }>;
+  getNextFormPage: () => string;
+  hasCompletedForm: () => boolean;
 }
 
 // Esquemas de validação Zod
