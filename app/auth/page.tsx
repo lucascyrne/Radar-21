@@ -1,11 +1,12 @@
 "use client"
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/resources/auth/auth-context';
+import { useState, useEffect, useCallback, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useAuth } from '@/resources/auth/auth-hook';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { LoginFormValues, RegisterFormValues, loginSchema, registerSchema } from '@/resources/auth/auth-model';
+import { TeamService } from '@/resources/team/team.service';
 
 // Componentes shadcn/ui
 import { Button } from '@/components/ui/button';
@@ -16,18 +17,61 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Separator } from '@/components/ui/separator';
+import { useToast } from '@/hooks/use-toast';
 
-export default function AuthPage() {
+// Componente interno que usa useSearchParams
+function AuthContent() {
   const router = useRouter();
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, isLoading, isAuthenticated, error, clearError } = useAuth();
+  const searchParams = useSearchParams();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, isLoading, isAuthenticated, user, error, clearError } = useAuth();
   const [activeTab, setActiveTab] = useState<string>("login");
+  const { toast } = useToast();
+  
+  // Obter o ID da equipe do convite, se houver
+  const inviteTeamId = searchParams.get('invite');
+  const inviteEmail = searchParams.get('email');
+
+  // Processar convite após autenticação
+  const processInvite = useCallback(async (email: string) => {
+    if (inviteTeamId && user) {
+      try {
+        // Atualizar o membro da equipe com o ID do usuário
+        await TeamService.addTeamMember(
+          inviteTeamId,
+          user.id,
+          email,
+          'member',
+          'registered'
+        );
+        
+        toast({
+          title: "Convite aceito",
+          description: "Você foi adicionado à equipe com sucesso!",
+        });
+      } catch (error: any) {
+        console.error('Erro ao processar convite:', error);
+        toast({
+          title: "Erro ao processar convite",
+          description: error.message || "Ocorreu um erro ao processar o convite.",
+          variant: "destructive"
+        });
+      }
+    }
+  }, [inviteTeamId, user, toast]);
 
   // Redirecionar se já estiver autenticado
   useEffect(() => {
-    if (isAuthenticated) {
-      router.push('/team-setup');
+    if (isAuthenticated && user) {
+      // Se houver um convite, processar antes de redirecionar
+      if (inviteTeamId) {
+        processInvite(user.email).then(() => {
+          router.push('/team-setup');
+        });
+      } else {
+        router.push('/team-setup');
+      }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user, router, inviteTeamId, processInvite]);
 
   // Configuração do formulário de login
   const loginForm = useForm<LoginFormValues>({
@@ -48,21 +92,37 @@ export default function AuthPage() {
     },
   });
 
+  // Preencher o email do convite no formulário, se disponível
+  useEffect(() => {
+    if (inviteEmail) {
+      loginForm.setValue('email', inviteEmail);
+      registerForm.setValue('email', inviteEmail);
+    }
+  }, [inviteEmail, loginForm, registerForm]);
+
   // Manipuladores de envio de formulário
   const handleLoginSubmit = async (data: LoginFormValues) => {
     await signInWithEmail(data.email, data.password);
+    // O processamento do convite é feito no useEffect quando isAuthenticated muda
   };
 
   const handleRegisterSubmit = async (data: RegisterFormValues) => {
     await signUpWithEmail(data.email, data.password);
+    // O processamento do convite é feito no useEffect quando isAuthenticated muda
+  };
+
+  // Manipulador para login com Google
+  const handleGoogleSignIn = async () => {
+    await signInWithGoogle();
+    // O processamento do convite é feito no useEffect quando isAuthenticated muda
   };
 
   // Limpar erros ao mudar de aba
   const handleTabChange = (value: string) => {
     setActiveTab(value);
     clearError();
-    loginForm.reset();
-    registerForm.reset();
+    loginForm.reset({ email: inviteEmail || '' });
+    registerForm.reset({ email: inviteEmail || '' });
   };
 
   return (
@@ -74,7 +134,9 @@ export default function AuthPage() {
               Radar das Competências 4.0
             </CardTitle>
             <CardDescription>
-              Avalie e desenvolva suas competências para a Indústria 4.0
+              {inviteTeamId 
+                ? "Você foi convidado para participar de uma equipe. Entre ou crie uma conta para continuar."
+                : "Avalie e desenvolva suas competências para a Indústria 4.0"}
             </CardDescription>
           </CardHeader>
           <CardContent className="pt-0">
@@ -200,7 +262,7 @@ export default function AuthPage() {
               variant="outline"
               type="button"
               className="w-full"
-              onClick={signInWithGoogle}
+              onClick={handleGoogleSignIn}
               disabled={isLoading}
             >
               <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
@@ -242,6 +304,19 @@ export default function AuthPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+// Componente principal com Suspense
+export default function AuthPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    }>
+      <AuthContent />
+    </Suspense>
   );
 }
 

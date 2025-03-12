@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/resources/auth/auth-context';
+import { useAuth } from '@/resources/auth/auth-hook';
 
 export default function LogoutPage() {
   const router = useRouter();

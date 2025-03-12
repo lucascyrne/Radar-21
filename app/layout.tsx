@@ -3,13 +3,16 @@ import "@/app/globals.css"
 import { Inter } from "next/font/google"
 import type { Metadata } from "next"
 import { AuthProvider } from '@/resources/auth/auth-provider'
+import { SurveyProvider } from "@/resources/survey/survey-provider"
+import { TeamProvider } from "@/resources/team/team-provider"
+import { Toaster } from "@/components/ui/toaster"
 
 const inter = Inter({ subsets: ["latin"] })
 
 export const metadata: Metadata = {
-  title: "Radar 4.0 - Competências para a Indústria 4.0",
-  description: "Descubra se você e sua equipe estão preparados para a era da Indústria 4.0",
-    generator: 'v0.dev'
+  title: "Radar21 - Avaliação de Competências de Liderança 4.0",
+  description: "Plataforma para avaliação de competências de liderança 4.0 em equipes",
+  generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -21,13 +24,16 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={inter.className}>
         <AuthProvider>
-          {children}
+          <TeamProvider>
+            <SurveyProvider>
+              {children}
+              <Toaster />
+            </SurveyProvider>
+          </TeamProvider>
         </AuthProvider>
       </body>
     </html>
   )
 }
-
-
 
 import './globals.css'

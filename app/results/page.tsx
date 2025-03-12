@@ -1,171 +1,336 @@
 "use client"
 
-import { useEffect, useState } from "react"
-import { useRouter } from "next/navigation"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Progress } from "@/components/ui/progress"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, Legend, ResponsiveContainer } from "recharts"
-import { Download, Share2, FileDown } from "lucide-react"
+import { useEffect, useState, useCallback } from 'react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { RadarChart } from '@/components/radar-chart';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/resources/auth/auth-hook';
+import { useTeam } from '@/resources/team/team-hook';
+import { useSurvey } from '@/resources/survey/survey-hook';
+import { SurveyResponses } from '@/resources/survey/survey-model';
+import { RadarService, CompetencyDetail } from '@/resources/survey/radar.service';
+import { Badge } from '@/components/ui/badge';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { AlertCircle, Info, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Layout } from '@/components/layout';
+import { Progress } from '@/components/ui/progress';
 
-// Mock data for the radar chart and analysis
-const competencies = [
-  { name: "Abertura", description: "Capacidade de receber e dar feedback", user: 4, team: 3.5 },
-  { name: "Agilidade", description: "Rapidez na ação e reação", user: 3, team: 3.2 },
-  { name: "Confiança", description: "Relação profissional baseada em confiança mútua", user: 5, team: 4.5 },
-  { name: "Empatia", description: "Compreensão e consideração pelos outros", user: 4, team: 3.8 },
-  { name: "Articulação", description: "Conexão e utilização de competências", user: 3, team: 3.3 },
-  { name: "Adaptabilidade", description: "Capacidade de se adaptar a mudanças", user: 4, team: 3.7 },
-  { name: "Inovação", description: "Busca por novas ideias e soluções", user: 5, team: 4.2 },
-  { name: "Comunicação", description: "Fluidez na troca de informações", user: 4, team: 3.9 },
-  { name: "Descentralização", description: "Tomada de decisão participativa", user: 3, team: 3.1 },
-  { name: "Auto-organização", description: "Capacidade de se organizar coletivamente", user: 4, team: 3.6 },
-  { name: "Colaboração", description: "Trabalho em equipe efetivo", user: 5, team: 4.3 },
-  { name: "Resiliência", description: "Atitude positiva diante de desafios", user: 4, team: 3.8 },
-]
+// Mapeamento de status para exibição em português
+const statusLabels: Record<string, string> = {
+  'invited': 'Convidado',
+  'registered': 'Cadastrado',
+  'completed': 'Respondido',
+  'enviado': 'Convidado',
+  'cadastrado': 'Cadastrado',
+  'respondido': 'Respondido'
+};
 
-export default function Results() {
-  const router = useRouter()
-  const [teamName, setTeamName] = useState("")
-  const [teamMembers, setTeamMembers] = useState<Array<{ email: string; status: string }>>([])
+// Mapeamento de status para cores
+const statusColors: Record<string, string> = {
+  'invited': 'bg-yellow-100 text-yellow-800',
+  'registered': 'bg-blue-100 text-blue-800',
+  'completed': 'bg-green-100 text-green-800',
+  'enviado': 'bg-yellow-100 text-yellow-800',
+  'cadastrado': 'bg-blue-100 text-blue-800',
+  'respondido': 'bg-green-100 text-green-800'
+};
 
+export default function ResultsPage() {
+  const { user } = useAuth();
+  const { selectedTeam, teamMembers, loadTeamMembers } = useTeam();
+  const { teamMemberId, loadSurveyResponses, surveyResponses } = useSurvey();
+  
+  const [userResponses, setUserResponses] = useState<SurveyResponses | null>(null);
+  const [teamResponses, setTeamResponses] = useState<SurveyResponses[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [memberResponses, setMemberResponses] = useState<Record<string, SurveyResponses | null>>({});
+  const [loadingStatus, setLoadingStatus] = useState<Record<string, string>>({});
+  
+  // Carregar dados do radar
   useEffect(() => {
-    // Load team data
-    const savedTeamName = localStorage.getItem("teamName")
-    const savedTeamMembers = localStorage.getItem("teamMembers")
-
-    if (savedTeamName) {
-      setTeamName(savedTeamName)
-    }
-
-    if (savedTeamMembers) {
-      setTeamMembers(JSON.parse(savedTeamMembers))
-    }
-
-    // In a real app, we would load the actual survey results here
-  }, [])
-
-  const handleDownload = () => {
-    // In a real app, this would generate and download a PDF or image of the radar chart
-    alert("Em uma aplicação real, isso geraria um download do gráfico radar em formato PDF ou imagem.")
-  }
-
-  const handleShare = () => {
-    // In a real app, this would generate a unique URL for sharing
-    alert("Em uma aplicação real, isso geraria um URL único para compartilhar os resultados.")
-  }
-
-  const handleDownloadPDF = () => {
-    // In a real app, this would generate and download a PDF with the complete analysis
-    alert("Em uma aplicação real, isso geraria um download do PDF com a análise completa.")
-  }
+    const loadData = async () => {
+      try {
+        setIsLoading(true);
+        setError(null);
+        
+        // Verificar se temos o ID da equipe
+        const teamId = selectedTeam?.id || localStorage.getItem("teamId");
+        if (!teamId) {
+          throw new Error("ID da equipe não encontrado");
+        }
+        
+        // Carregar membros da equipe se necessário
+        if (teamMembers.length === 0) {
+          await loadTeamMembers(teamId);
+        }
+        
+        // Carregar respostas do usuário atual
+        let userSurveyResponses = surveyResponses;
+        if (!userSurveyResponses && teamMemberId) {
+          userSurveyResponses = await loadSurveyResponses();
+        }
+        setUserResponses(userSurveyResponses);
+        
+        // Carregar respostas de todos os membros da equipe
+        const allMemberResponses = await RadarService.loadTeamResponses(teamId, teamMembers);
+        setMemberResponses(allMemberResponses);
+        
+        // Filtrar apenas respostas válidas para o cálculo da média
+        const validResponses = Object.values(allMemberResponses).filter(Boolean) as SurveyResponses[];
+        setTeamResponses(validResponses);
+        
+        setIsLoading(false);
+      } catch (error: any) {
+        console.error('Erro ao carregar dados do radar:', error);
+        setError(error.message || 'Erro ao carregar dados do radar');
+        setIsLoading(false);
+      }
+    };
+    
+    loadData();
+  }, [user, selectedTeam, teamMembers, teamMemberId, loadTeamMembers, loadSurveyResponses, surveyResponses]);
+  
+  // Transformar dados para o formato do radar
+  const userRadarData = RadarService.transformResponsesToRadarData(userResponses);
+  const teamAverageData = RadarService.calculateTeamAverage(teamResponses);
+  
+  // Obter detalhes por competência
+  const competencyDetails = RadarService.getCompetencyDetails(userResponses, teamAverageData);
+  
+  // Verificar se há dados suficientes
+  const hasUserData = userRadarData.length > 0;
+  const hasTeamData = teamAverageData.length > 0;
 
   return (
-    <div className="container max-w-4xl py-12">
-      <div className="mb-8">
-        <div className="flex justify-between mb-2 text-sm font-medium">
-          <span className="text-muted-foreground">Minha Equipe</span>
-          <span className="text-muted-foreground">Meu Perfil</span>
-          <span className="text-muted-foreground">Questionário das Competências de Liderança 4.0</span>
-          <span className="font-bold">Resultados</span>
-        </div>
-        <Progress value={100} className="h-2" />
-      </div>
-
-      <h1 className="text-3xl font-bold mb-8 text-center">Resultados</h1>
-
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Equipe {teamName}</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Email</TableHead>
-                <TableHead>Status do convite</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {teamMembers.map((member, index) => (
-                <TableRow key={index}>
-                  <TableCell>{member.email}</TableCell>
-                  <TableCell>{member.status}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Radar das Competências de Liderança 4.0</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="w-full h-[400px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <RadarChart cx="50%" cy="50%" outerRadius="80%" data={competencies}>
-                <PolarGrid />
-                <PolarAngleAxis dataKey="name" />
-                <PolarRadiusAxis angle={30} domain={[0, 5]} />
-                <Radar name="Você" dataKey="user" stroke="#8884d8" fill="#8884d8" fillOpacity={0.2} />
-                <Radar name="Equipe" dataKey="team" stroke="#82ca9d" fill="#82ca9d" fillOpacity={0.2} />
-                <Legend />
-              </RadarChart>
-            </ResponsiveContainer>
+    <Layout>
+      <div className="w-full max-w-5xl mx-auto px-4 sm:px-6">
+        <div className="mb-8">
+          <div className="flex justify-between mb-2 text-sm font-medium">
+            <span className="text-muted-foreground">Minha Equipe</span>
+            <span className="text-muted-foreground">Meu Perfil</span>
+            <span className="text-muted-foreground">Radar das Competências de Liderança 4.0</span>
+            <span className="font-bold">Resultados</span>
           </div>
-        </CardContent>
-      </Card>
+          <Progress value={100} className="h-2" />
+        </div>
 
-      <Card className="mb-8">
-        <CardHeader>
-          <CardTitle>Análise</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Competência</TableHead>
-                <TableHead>Descrição</TableHead>
-                <TableHead>Sua Resposta</TableHead>
-                <TableHead>Média da Equipe</TableHead>
-                <TableHead>Diferença</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {competencies.map((competency, index) => (
-                <TableRow key={index}>
-                  <TableCell>{competency.name}</TableCell>
-                  <TableCell>{competency.description}</TableCell>
-                  <TableCell>{competency.user}</TableCell>
-                  <TableCell>{competency.team.toFixed(1)}</TableCell>
-                  <TableCell className={competency.user - competency.team > 0 ? "text-green-600" : "text-red-600"}>
-                    {(competency.user - competency.team).toFixed(1)}
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
-
-      <div className="flex justify-center space-x-4 mb-8">
-        <Button onClick={handleDownload} className="flex items-center">
-          <Download className="mr-2 h-4 w-4" /> Baixar gráfico
-        </Button>
-        <Button onClick={handleShare} variant="outline" className="flex items-center">
-          <Share2 className="mr-2 h-4 w-4" /> Compartilhar URL único
-        </Button>
+        <h1 className="text-3xl font-bold mb-6 text-center">Resultados da Avaliação</h1>
+      
+        {error && (
+          <Alert variant="destructive" className="mb-4">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Erro</AlertTitle>
+            <AlertDescription>{error}</AlertDescription>
+          </Alert>
+        )}
+        
+        {!hasUserData && !isLoading && (
+          <Alert className="mb-4">
+            <Info className="h-4 w-4" />
+            <AlertTitle>Atenção</AlertTitle>
+            <AlertDescription>
+              Você ainda não respondeu ao questionário de competências. 
+              Por favor, complete o questionário para visualizar seu radar.
+            </AlertDescription>
+          </Alert>
+        )}
+        
+        <Tabs defaultValue="individual" className="w-full">
+          <TabsList className="mb-4 w-full flex flex-wrap justify-between">
+            <TabsTrigger value="individual" className="flex-1 min-w-0 text-xs sm:text-sm">Individual</TabsTrigger>
+            <TabsTrigger value="team" className="flex-1 min-w-0 text-xs sm:text-sm">Comparativo</TabsTrigger>
+            <TabsTrigger value="details" className="flex-1 min-w-0 text-xs sm:text-sm">Detalhes</TabsTrigger>
+            <TabsTrigger value="members" className="flex-1 min-w-0 text-xs sm:text-sm">Membros</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="individual">
+            <Card>
+              <CardHeader>
+                <CardTitle>Seu Radar de Competências</CardTitle>
+                <CardDescription>
+                  Visualização das suas competências baseada nas respostas do questionário
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="h-[500px]">
+                {isLoading ? (
+                  <div className="flex flex-col space-y-4">
+                    <Skeleton className="h-[450px] w-full rounded-lg" />
+                  </div>
+                ) : hasUserData ? (
+                  <RadarChart data={userRadarData} />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-muted-foreground">
+                      Você ainda não respondeu ao questionário de competências.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="team">
+            <Card>
+              <CardHeader>
+                <CardTitle>Comparativo com a Equipe</CardTitle>
+                <CardDescription>
+                  Comparação entre suas competências e a média da equipe
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="h-[500px]">
+                {isLoading ? (
+                  <div className="flex flex-col space-y-4">
+                    <Skeleton className="h-[450px] w-full rounded-lg" />
+                  </div>
+                ) : hasUserData && hasTeamData ? (
+                  <RadarChart 
+                    data={userRadarData} 
+                    compareData={teamAverageData} 
+                    compareLabel="Média da Equipe" 
+                  />
+                ) : (
+                  <div className="flex items-center justify-center h-full">
+                    <p className="text-muted-foreground">
+                      {!hasUserData 
+                        ? "Você ainda não respondeu ao questionário de competências."
+                        : "Não há dados suficientes da equipe para comparação."}
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="details">
+            <Card>
+              <CardHeader>
+                <CardTitle>Detalhes por Tópico</CardTitle>
+                <CardDescription>
+                  Análise detalhada de cada tópico comparado com a média da equipe
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {isLoading ? (
+                  <div className="flex flex-col space-y-4">
+                    <Skeleton className="h-12 w-full rounded-lg" />
+                    <Skeleton className="h-12 w-full rounded-lg" />
+                    <Skeleton className="h-12 w-full rounded-lg" />
+                  </div>
+                ) : competencyDetails.length > 0 ? (
+                  <div className="space-y-6">
+                    {competencyDetails.map((item) => (
+                      <div key={item.topic} className="space-y-2">
+                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
+                          <h3 className="font-medium">{item.topic}</h3>
+                          <div className="flex flex-wrap gap-2 sm:gap-4">
+                            <span className="text-blue-600 font-medium text-sm sm:text-base">Você: {item.userScore}</span>
+                            <span className="text-green-600 font-medium text-sm sm:text-base">Equipe: {item.teamAverage.toFixed(1)}</span>
+                            <span className={`font-medium text-sm sm:text-base ${item.difference > 0 ? 'text-green-600' : item.difference < 0 ? 'text-red-600' : 'text-gray-600'}`}>
+                              {item.difference > 0 ? '+' : ''}{item.difference.toFixed(1)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex space-x-2 items-center">
+                          <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${(item.userScore / 5) * 100}%` }}></div>
+                          </div>
+                          <span className="text-sm text-gray-500 w-10 text-right">{item.userScore}/5</span>
+                        </div>
+                        <div className="flex space-x-2 items-center">
+                          <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div className="bg-green-600 h-2.5 rounded-full" style={{ width: `${(item.teamAverage / 5) * 100}%` }}></div>
+                          </div>
+                          <span className="text-sm text-gray-500 w-10 text-right">{item.teamAverage.toFixed(1)}/5</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center py-8">
+                    <p className="text-muted-foreground">
+                      Não há dados suficientes para exibir detalhes por tópico.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="members">
+            <Card>
+              <CardHeader>
+                <CardTitle>Membros da Equipe</CardTitle>
+                <CardDescription>
+                  Status de resposta ao questionário de todos os membros da equipe
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="overflow-x-auto">
+                {isLoading ? (
+                  <div className="flex flex-col space-y-4">
+                    <Skeleton className="h-12 w-full rounded-lg" />
+                    <Skeleton className="h-12 w-full rounded-lg" />
+                    <Skeleton className="h-12 w-full rounded-lg" />
+                  </div>
+                ) : teamMembers.length > 0 ? (
+                  <div className="min-w-full">
+                    <Table>
+                      <TableHeader>
+                        <TableRow>
+                          <TableHead>Nome/Email</TableHead>
+                          <TableHead>Status</TableHead>
+                          <TableHead>Respostas</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {teamMembers.map((member) => {
+                          const hasResponses = member.id && memberResponses[member.id] !== null && memberResponses[member.id] !== undefined;
+                          const isCurrentUser = member.email === user?.email;
+                          const displayName = member.email?.split('@')[0] || 'Usuário';
+                          
+                          return (
+                            <TableRow key={member.id} className={isCurrentUser ? 'bg-blue-50' : ''}>
+                              <TableCell className="max-w-[200px] break-words">
+                                <div className="font-medium">{displayName}</div>
+                                <div className="text-sm text-gray-500 truncate">{member.email}</div>
+                                {isCurrentUser && <Badge className="mt-1 bg-blue-100 text-blue-800">Você</Badge>}
+                              </TableCell>
+                              <TableCell>
+                                <Badge className={statusColors[member.status || 'invited']}>
+                                  {statusLabels[member.status || 'invited']}
+                                </Badge>
+                              </TableCell>
+                              <TableCell>
+                                {member.id && loadingStatus[member.id] === 'loading' ? (
+                                  <Skeleton className="h-6 w-20" />
+                                ) : hasResponses ? (
+                                  <Badge className="bg-green-100 text-green-800">Respondido</Badge>
+                                ) : (
+                                  <Badge className="bg-gray-100 text-gray-800">Pendente</Badge>
+                                )}
+                              </TableCell>
+                            </TableRow>
+                          );
+                        })}
+                      </TableBody>
+                    </Table>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-center py-8">
+                    <p className="text-muted-foreground">
+                      Não há membros na equipe.
+                    </p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
-
-      <div className="flex justify-center">
-        <Button onClick={handleDownloadPDF} className="flex items-center" variant="secondary">
-          <FileDown className="mr-2 h-4 w-4" /> Baixar PDF com análise completa
-        </Button>
-      </div>
-    </div>
-  )
+    </Layout>
+  );
 }
 
