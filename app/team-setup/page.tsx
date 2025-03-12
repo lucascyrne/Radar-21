@@ -63,9 +63,9 @@ export default function TeamSetupPage() {
   const [inviteEmail, setInviteEmail] = useState('');
   const [messageCopied, setMessageCopied] = useState(false);
   
-  // Mapa para rastrear equipes em que o usuário já completou o questionário
-  const [completedTeams, setCompletedTeams] = useState<Record<string, boolean>>({});
-  
+  // Estado único para controlar o status da pesquisa
+  const [surveyStatus, setSurveyStatus] = useState<Record<string, boolean>>({});
+
   // Refs para controlar se as requisições já foram feitas
   const teamsLoadedRef = useRef(false);
   const membersLoadedRef = useRef<Record<string, boolean>>({});
@@ -79,11 +79,11 @@ export default function TeamSetupPage() {
 
   // Carregar equipes do usuário apenas uma vez
   useEffect(() => {
-    if (user && isAuthenticated && !teamsLoadedRef.current && teams.length === 0) {
+    if (user && isAuthenticated && !teamsLoadedRef.current) {
       loadUserTeams(user.id);
       teamsLoadedRef.current = true;
     }
-  }, [user, isAuthenticated, loadUserTeams, teams.length]);
+  }, [user, isAuthenticated, loadUserTeams]);
 
   // Carregar membros da equipe selecionada apenas uma vez por equipe
   useEffect(() => {
@@ -107,54 +107,58 @@ export default function TeamSetupPage() {
     }
   }, [selectedTeam, user, generateInviteMessage]);
   
-  // Verificar se o usuário já completou o questionário para cada equipe
+  // Novo useEffect para verificar o status da pesquisa no banco de dados
   useEffect(() => {
-    if (teamMembers.length > 0 && user && selectedTeam) {
-      const userMembership = teamMembers.find(m => m.email === user.email);
-      
-      if (userMembership) {
-        // Verificar se o status indica que o questionário foi respondido
-        const completedStatuses = ['respondido', 'completed'];
-        const isCompleted = userMembership.status && completedStatuses.includes(userMembership.status);
-        
-        if (isCompleted) {
-          // Atualizar o mapa de equipes completadas
-          setCompletedTeams(prev => ({
-            ...prev,
-            [selectedTeam.id]: true
-          }));
-          
-          // Também salvar no localStorage para persistência
-          localStorage.setItem(`surveyCompleted_${selectedTeam.id}`, "true");
-        }
-      }
-    }
-  }, [selectedTeam, user, teamMembers]);
+    const checkSurveyStatus = async () => {
+      if (!selectedTeam || !user) return;
 
-  // Verificar dados salvos no localStorage
-  useEffect(() => {
-    // Verificar para todas as equipes se o questionário foi respondido
-    teams.forEach(team => {
-      // Verificar no formato novo
-      const teamCompleted = localStorage.getItem(`surveyCompleted_${team.id}`) === "true";
-      
-      // Verificar também no formato antigo
-      const oldFormatCompleted = localStorage.getItem("surveyCompleted") === "true" && 
-                                localStorage.getItem("teamId") === team.id;
-      
-      if (teamCompleted || oldFormatCompleted) {
-        setCompletedTeams(prev => ({
-          ...prev,
-          [team.id]: true
-        }));
-        
-        // Migrar para o novo formato se necessário
-        if (oldFormatCompleted && !teamCompleted) {
-          localStorage.setItem(`surveyCompleted_${team.id}`, "true");
+      try {
+        const { data: memberData, error: memberError } = await supabase
+          .from('team_members')
+          .select(`
+            id,
+            status,
+            user_profiles!inner(id),
+            survey_responses!inner(id),
+            open_question_responses!inner(id)
+          `)
+          .eq('team_id', selectedTeam.id)
+          .eq('email', user.email)
+          .single();
+
+        if (memberError) {
+          if (memberError.code === 'PGRST116') {
+            // Não encontrou resultados, significa que a pesquisa não está completa
+            setSurveyStatus(prev => ({
+              ...prev,
+              [selectedTeam.id]: false
+            }));
+          } else {
+            console.error('Erro ao verificar status da pesquisa:', memberError);
+          }
+          return;
         }
+
+        // Se chegou aqui, significa que encontrou todos os dados necessários
+        setSurveyStatus(prev => ({
+          ...prev,
+          [selectedTeam.id]: true
+        }));
+
+        // Atualizar status no banco se necessário
+        if (memberData.status !== 'respondido') {
+          await supabase
+            .from('team_members')
+            .update({ status: 'respondido' })
+            .eq('id', memberData.id);
+        }
+      } catch (error) {
+        console.error('Erro ao verificar status da pesquisa:', error);
       }
-    });
-  }, [teams]);
+    };
+
+    checkSurveyStatus();
+  }, [selectedTeam, user]);
 
   // Configuração do formulário de criação de equipe
   const createTeamForm = useForm<CreateTeamFormValues>({
@@ -318,21 +322,6 @@ export default function TeamSetupPage() {
 
   // Mudar equipe selecionada
   const handleTeamChange = useCallback((teamId: string) => {
-    // Primeiro atualizar o estado de completedTeams antes de mudar a equipe selecionada
-    const teamCompleted = localStorage.getItem(`surveyCompleted_${teamId}`) === "true";
-    
-    // Verificar também o formato antigo para compatibilidade
-    const oldFormatCompleted = localStorage.getItem("surveyCompleted") === "true" && 
-                              localStorage.getItem("teamId") === teamId;
-    
-    if (teamCompleted || oldFormatCompleted) {
-      setCompletedTeams(prev => ({
-        ...prev,
-        [teamId]: true
-      }));
-    }
-    
-    // Depois selecionar a equipe
     selectTeam(teamId);
   }, [selectTeam]);
 
@@ -347,57 +336,75 @@ export default function TeamSetupPage() {
 
   // Continuar para a próxima etapa
   const handleContinue = useCallback(() => {
-    // Salvar informações da equipe no localStorage para uso nas próximas páginas
     if (selectedTeam) {
-      localStorage.setItem("teamName", selectedTeam.name);
+      // Armazenar apenas o ID da equipe atual para referência
       localStorage.setItem("teamId", selectedTeam.id);
       
-      // Se o usuário já completou o questionário para esta equipe, ir para os resultados
-      if (completedTeams[selectedTeam.id]) {
+      if (surveyStatus[selectedTeam.id]) {
         router.push('/results');
       } else {
-        // Caso contrário, ir para a próxima etapa (perfil)
         router.push('/profile');
       }
     }
-  }, [selectedTeam, completedTeams, router]);
+  }, [selectedTeam, surveyStatus, router]);
 
   // Responder novamente ao questionário
   const handleResetSurvey = useCallback(() => {
-    if (selectedTeam) {
-      localStorage.removeItem("userProfile");
-      localStorage.removeItem("surveyResponses");
-      localStorage.removeItem("openQuestionsResponses");
-      localStorage.removeItem("radarData");
-      localStorage.removeItem("surveyCompleted");
-      localStorage.removeItem(`surveyCompleted_${selectedTeam.id}`);
-      
-      // Atualizar o estado para refletir que o usuário não completou o questionário
-      setCompletedTeams(prev => ({
-        ...prev,
-        [selectedTeam.id]: false
-      }));
-    }
-  }, [selectedTeam]);
+    if (!selectedTeam || !user) return;
 
-  // Efeito para verificar o status de conclusão quando a equipe selecionada muda
-  useEffect(() => {
-    if (selectedTeam) {
-      // Verificar no formato novo
-      const teamCompleted = localStorage.getItem(`surveyCompleted_${selectedTeam.id}`) === "true";
-      
-      // Verificar também no formato antigo
-      const oldFormatCompleted = localStorage.getItem("surveyCompleted") === "true" && 
-                                localStorage.getItem("teamId") === selectedTeam.id;
-      
-      if (teamCompleted || oldFormatCompleted) {
-        setCompletedTeams(prev => ({
+    const confirmReset = window.confirm(
+      'Tem certeza que deseja responder a pesquisa novamente? Isso irá apagar todas as suas respostas anteriores.'
+    );
+
+    if (!confirmReset) return;
+
+    const resetSurvey = async () => {
+      try {
+        const { data: memberData } = await supabase
+          .from('team_members')
+          .select('id')
+          .eq('team_id', selectedTeam.id)
+          .eq('email', user.email)
+          .single();
+
+        if (!memberData) return;
+
+        // Deletar dados existentes
+        await Promise.all([
+          supabase.from('user_profiles').delete().eq('team_member_id', memberData.id),
+          supabase.from('survey_responses').delete().eq('team_member_id', memberData.id),
+          supabase.from('open_question_responses').delete().eq('team_member_id', memberData.id)
+        ]);
+
+        // Atualizar status
+        await supabase
+          .from('team_members')
+          .update({ status: 'cadastrado' })
+          .eq('id', memberData.id);
+
+        // Atualizar estado local
+        setSurveyStatus(prev => ({
           ...prev,
-          [selectedTeam.id]: true
+          [selectedTeam.id]: false
         }));
+
+        toast({
+          title: "Pesquisa resetada com sucesso",
+          description: "Você pode responder a pesquisa novamente agora.",
+        });
+
+      } catch (error) {
+        console.error('Erro ao resetar pesquisa:', error);
+        toast({
+          title: "Erro ao resetar pesquisa",
+          description: "Ocorreu um erro ao tentar resetar suas respostas.",
+          variant: "destructive"
+        });
       }
-    }
-  }, [selectedTeam]);
+    };
+
+    resetSurvey();
+  }, [selectedTeam, user, toast]);
 
   if (authLoading || teamLoading) {
     return (
@@ -406,9 +413,6 @@ export default function TeamSetupPage() {
       </div>
     );
   }
-
-  // Verificar se o usuário já completou o questionário para a equipe selecionada
-  const hasCompletedCurrentTeam = selectedTeam ? completedTeams[selectedTeam.id] : false;
 
   return (
     <Layout>
@@ -487,7 +491,7 @@ export default function TeamSetupPage() {
                             <div className="text-sm text-muted-foreground">
                               {team.owner_email === user?.email ? 'Você é o líder' : 'Você é membro'}
                             </div>
-                            {completedTeams[team.id] && (
+                            {surveyStatus[team.id] && (
                               <div className="text-xs text-green-600 mt-1">
                                 Questionário respondido
                               </div>
@@ -506,7 +510,7 @@ export default function TeamSetupPage() {
                 {selectedTeam && (
                   <>
                     {/* Mostrar card "Você já completou o questionário" apenas para a equipe selecionada */}
-                    {hasCompletedCurrentTeam && (
+                    {surveyStatus[selectedTeam.id] && (
                       <Card className="mb-6">
             <CardHeader>
               <CardTitle>Você já completou o questionário</CardTitle>
@@ -622,18 +626,12 @@ export default function TeamSetupPage() {
                               </TableHeader>
                               <TableBody>
                                 {teamMembers.map((member, index) => {
-                                  // Determinar o status a ser exibido
-                                  let statusInfo = { display: 'Desconhecido', class: 'bg-gray-100 text-gray-800' };
-                                  
-                                  // Se for o líder da equipe
-                                  if (member.role === 'leader') {
-                                    statusInfo = STATUS_MAP['leader'];
-                                  } 
-                                  // Para outros status, usar o mapeamento
-                                  else if (member.status && STATUS_MAP[member.status]) {
-                                    statusInfo = STATUS_MAP[member.status];
-                                  }
-                                  
+                                  const memberStatus = member.email === user?.email 
+                                    ? surveyStatus[selectedTeam.id] ? 'respondido' : member.status
+                                    : member.status;
+
+                                  const statusInfo = STATUS_MAP[memberStatus as keyof typeof STATUS_MAP] || { display: 'Desconhecido', class: 'bg-gray-100 text-gray-800' };
+
                                   return (
                                     <TableRow key={index}>
                                       <TableCell className="flex items-center">
@@ -663,7 +661,7 @@ export default function TeamSetupPage() {
                           onClick={handleContinue} 
                           className="w-full flex items-center justify-center"
                         >
-                          {hasCompletedCurrentTeam ? 'Ver Resultados' : 'Continuar para Perfil'}
+                          {surveyStatus[selectedTeam.id] ? 'Ver Resultados' : 'Continuar para Perfil'}
                           <ArrowRightIcon className="ml-2 h-4 w-4" />
                         </Button>
                       </CardFooter>
