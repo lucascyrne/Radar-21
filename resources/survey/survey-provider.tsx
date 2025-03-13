@@ -188,7 +188,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
   // Salvar respostas do questionário
   const saveSurveyResponses = useCallback(async (data: SurveyFormValues) => {
     try {
-      updateLoading(true);
+      updateLoading(true, null);
       
       // Garantir que temos o ID do membro da equipe
       const teamMemberId = state.teamMemberId || await fetchTeamMemberId();
@@ -206,7 +206,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
     } catch (error: any) {
       console.error('Erro ao salvar respostas do questionário:', error);
       updateLoading(false, error.message || 'Erro ao salvar respostas do questionário');
-      return null;
+      throw error;
     }
   }, [state.teamMemberId, fetchTeamMemberId, updateLoading]);
 
@@ -238,7 +238,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
   // Salvar respostas das perguntas abertas
   const saveOpenQuestionResponses = useCallback(async (data: OpenQuestionResponses) => {
     try {
-      updateLoading(true);
+      updateLoading(true, null);
       
       // Garantir que temos o ID do membro da equipe
       const teamMemberId = state.teamMemberId || await fetchTeamMemberId();
@@ -249,42 +249,54 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       
       const responses = await SurveyService.saveOpenQuestionResponses(teamMemberId, data);
       
-      // Atualizar o status do membro para "respondido"
-      try {
-        await SurveyService.updateMemberStatus(teamMemberId, 'respondido');
-        console.log("Status do membro atualizado para 'respondido'");
-      } catch (statusError: any) {
-        console.error("Erro ao atualizar status do membro:", statusError);
-        
-        // Tentar uma abordagem alternativa
+      setState(prev => ({ ...prev, openQuestionResponses: responses }));
+      
+      // Após salvar as perguntas abertas, verificamos se todas as etapas estão completas
+      const isComplete = await SurveyService.checkSurveyCompletion(teamMemberId);
+      
+      // Se estiver completo, atualizamos o status para completed
+      if (isComplete) {
         try {
-          // Atualizar diretamente no banco de dados usando o valor em inglês
-          const { error } = await supabase
+          // Obter dados do membro da equipe
+          const { data: memberData, error: memberError } = await supabase
             .from('team_members')
-            .update({ 
-              status: 'completed', // Usar 'completed' em vez de 'respondido'
-              updated_at: new Date().toISOString() 
-            })
-            .eq('id', teamMemberId);
-          
-          if (error) {
-            console.error("Erro na abordagem alternativa:", error);
-          } else {
-            console.log("Status atualizado com abordagem alternativa");
+            .select('team_id, email, status')
+            .eq('id', teamMemberId)
+            .single();
+            
+          if (memberError) {
+            console.error('Erro ao buscar dados do membro:', memberError);
+          } else if (memberData && memberData.status !== 'completed') {
+            // Atualizar o status para completed
+            const { error: updateError } = await supabase
+              .from('team_members')
+              .update({ status: 'completed' })
+              .eq('id', teamMemberId);
+              
+            if (updateError) {
+              console.error('Erro ao atualizar status do membro:', updateError);
+              
+              // Tentar uma abordagem alternativa
+              try {
+                await SurveyService.updateMemberStatus(teamMemberId, 'respondido');
+              } catch (statusError) {
+                console.error('Erro ao atualizar status via service:', statusError);
+              }
+            }
+            
+            console.log(`Status do membro ${teamMemberId} atualizado para 'completed'`);
           }
-        } catch (alternativeError) {
-          console.error("Erro na abordagem alternativa:", alternativeError);
+        } catch (statusError) {
+          console.error('Erro ao atualizar status:', statusError);
         }
       }
       
-      setState(prev => ({ ...prev, openQuestionResponses: responses }));
       updateLoading(false);
-      
       return responses;
     } catch (error: any) {
       console.error('Erro ao salvar respostas das perguntas abertas:', error);
       updateLoading(false, error.message || 'Erro ao salvar respostas das perguntas abertas');
-      return null;
+      throw error;
     }
   }, [state.teamMemberId, fetchTeamMemberId, updateLoading]);
   
@@ -365,26 +377,6 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
           setState(prevState => ({
             ...prevState,
             profile
-          }));
-        }
-
-        // Carregar respostas do questionário
-        const responsesStr = localStorage.getItem('surveyResponses');
-        if (responsesStr) {
-          const responses = JSON.parse(responsesStr);
-          setState(prevState => ({
-            ...prevState,
-            surveyResponses: responses
-          }));
-        }
-
-        // Carregar respostas das perguntas abertas
-        const openQuestionsStr = localStorage.getItem('openQuestionsResponses');
-        if (openQuestionsStr) {
-          const openQuestions = JSON.parse(openQuestionsStr);
-          setState(prevState => ({
-            ...prevState,
-            openQuestionResponses: openQuestions
           }));
         }
       } catch (error) {

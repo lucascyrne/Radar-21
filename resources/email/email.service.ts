@@ -39,44 +39,4 @@ export class EmailService {
       throw new Error(`Falha ao verificar status do email: ${error.message}`);
     }
   }
-
-  /**
-   * Registra um log de email enviado
-   * @param toEmail Email do destinatário
-   * @param fromEmail Email do remetente
-   * @param teamName Nome da equipe
-   * @param type Tipo de email
-   * @param status Status do envio
-   * @returns ID do registro de log
-   */
-  static async logEmailSent(
-    toEmail: string,
-    fromEmail: string,
-    teamName: string,
-    type: string = 'invite',
-    status: string = 'sent'
-  ): Promise<string> {
-    try {
-      const { data, error } = await supabase
-        .from('email_logs')
-        .insert({
-          to_email: toEmail,
-          from_email: fromEmail,
-          team_name: teamName,
-          type,
-          status,
-        })
-        .select('id')
-        .single();
-
-      if (error) {
-        throw new Error(`Erro ao registrar log de email: ${error.message}`);
-      }
-
-      return data?.id;
-    } catch (error: any) {
-      console.error('Erro ao registrar log de email:', error);
-      throw new Error(`Falha ao registrar log de email: ${error.message}`);
-    }
-  }
 } 

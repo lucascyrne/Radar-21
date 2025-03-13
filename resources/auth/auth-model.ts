@@ -13,6 +13,9 @@ export interface User {
   status?: UserStatus;
   last_form_page?: string; // Última página do formulário que o usuário visitou
   has_completed_form?: boolean; // Indica se o usuário completou o formulário
+  raw_app_meta_data?: {
+    is_temp?: boolean;
+  };
 }
 
 export enum UserRole {

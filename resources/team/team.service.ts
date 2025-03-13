@@ -114,7 +114,7 @@ export class TeamService {
     userId: string | null,
     email: string,
     role: 'leader' | 'member',
-    status: 'invited' | 'registered' | 'respondido'
+    status: 'invited' | 'registered' | 'respondido' | 'completed'
   ): Promise<void> {
     try {
       // Se não foi fornecido um userId, tentar buscar pelo email
@@ -152,15 +152,22 @@ export class TeamService {
         }
       } else {
         // Se o membro não existe, inserir novo registro
+        // Para usuários que ainda não existem, não incluir o user_id para evitar violação de chave estrangeira
+        const memberData: any = {
+          team_id: teamId,
+          email,
+          role,
+          status,
+        };
+        
+        // Apenas incluir user_id se o usuário existir
+        if (userId) {
+          memberData.user_id = userId;
+        }
+
         const { error: insertError } = await supabase
           .from('team_members')
-          .insert({
-            team_id: teamId,
-            user_id: userId, // Pode ser null se o usuário ainda não existir
-            email,
-            role,
-            status,
-          });
+          .insert(memberData);
 
         if (insertError) {
           throw new Error(`Erro ao adicionar membro: ${insertError.message}`);
