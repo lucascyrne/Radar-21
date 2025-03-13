@@ -200,6 +200,30 @@ export class SurveyService {
         result = newResponses;
       }
 
+      // Verificar se todas as etapas estão completas
+      const isComplete = await this.checkSurveyCompletion(teamMemberId);
+      
+      if (isComplete) {
+        // Obter o team_id e email do membro
+        const { data: memberData, error: memberError } = await supabase
+          .from('team_members')
+          .select('team_id, email, status')
+          .eq('id', teamMemberId)
+          .single();
+          
+        if (memberError) {
+          console.error('Erro ao buscar dados do membro:', memberError);
+        } else if (memberData && memberData.status !== 'completed') {
+          // Atualizar o status para completed
+          await supabase
+            .from('team_members')
+            .update({ status: 'completed' })
+            .eq('id', teamMemberId);
+            
+          console.log(`Status do membro ${teamMemberId} atualizado para 'completed'`);
+        }
+      }
+
       return result as SurveyResponses;
     } catch (error: any) {
       console.error('Erro ao salvar respostas do questionário:', error);

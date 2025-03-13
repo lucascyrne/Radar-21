@@ -308,7 +308,7 @@ export class TeamService {
   static async updateMemberStatus(
     teamId: string,
     email: string,
-    status: 'invited' | 'registered' | 'respondido'
+    status: 'invited' | 'registered' | 'respondido' | 'completed'
   ): Promise<void> {
     try {
       const { error } = await supabase
