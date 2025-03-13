@@ -42,7 +42,7 @@ export async function POST(request: Request) {
 
     // Enviar email usando Resend com o template React
     const { data, error } = await resend.emails.send({
-      from: 'Radar21 <onboarding@resend.dev>',
+      from: 'Radar21 <no-reply@radar21.com.br>',
       to: [email],
       subject: `Convite para participar da equipe ${teamData.name} no Radar21`,
       react: InviteEmailTemplate({
