@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -92,7 +92,7 @@ export default function Survey() {
   const router = useRouter()
   const { toast } = useToast()
   const { user } = useAuth()
-  const { saveSurveyResponses, surveyResponses, error } = useSurvey()
+  const surveyContext = useSurvey()
   const [currentStep, setCurrentStep] = useState(1)
   const [progress, setProgress] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -116,65 +116,40 @@ export default function Survey() {
     },
   })
 
-  // Verificar se o usuário completou as etapas anteriores
-  useEffect(() => {
-    const userProfile = localStorage.getItem("userProfile")
-    
-    if (!userProfile) {
-      router.push("/profile")
-      return
-    }
-  }, [router])
-
   // Carregar respostas salvas, se existirem
   useEffect(() => {
-    if (surveyResponses) {
+    if (surveyContext.surveyResponses) {
       form.reset({
-        q1: surveyResponses.q1?.toString() || "",
-        q2: surveyResponses.q2?.toString() || "",
-        q3: surveyResponses.q3?.toString() || "",
-        q4: surveyResponses.q4?.toString() || "",
-        q5: surveyResponses.q5?.toString() || "",
-        q6: surveyResponses.q6?.toString() || "",
-        q7: surveyResponses.q7?.toString() || "",
-        q8: surveyResponses.q8?.toString() || "",
-        q9: surveyResponses.q9?.toString() || "",
-        q10: surveyResponses.q10?.toString() || "",
-        q11: surveyResponses.q11?.toString() || "",
-        q12: surveyResponses.q12?.toString() || "",
+        q1: surveyContext.surveyResponses.q1?.toString() || "",
+        q2: surveyContext.surveyResponses.q2?.toString() || "",
+        q3: surveyContext.surveyResponses.q3?.toString() || "",
+        q4: surveyContext.surveyResponses.q4?.toString() || "",
+        q5: surveyContext.surveyResponses.q5?.toString() || "",
+        q6: surveyContext.surveyResponses.q6?.toString() || "",
+        q7: surveyContext.surveyResponses.q7?.toString() || "",
+        q8: surveyContext.surveyResponses.q8?.toString() || "",
+        q9: surveyContext.surveyResponses.q9?.toString() || "",
+        q10: surveyContext.surveyResponses.q10?.toString() || "",
+        q11: surveyContext.surveyResponses.q11?.toString() || "",
+        q12: surveyContext.surveyResponses.q12?.toString() || "",
       })
       
       // Calcular o progresso com base nas respostas carregadas
-      const answeredQuestions = Object.values(surveyResponses).filter(val => val !== null && val !== undefined).length
+      const answeredQuestions = Object.values(surveyContext.surveyResponses).filter(val => val !== null && val !== undefined).length
       setProgress((answeredQuestions / questions.length) * 100)
-    } else {
-      // Tentar carregar do localStorage para compatibilidade com código existente
-      const savedResponses = localStorage.getItem("surveyResponses")
-      if (savedResponses) {
-        try {
-          const parsedResponses = JSON.parse(savedResponses)
-          form.reset(parsedResponses)
-          
-          // Calcular o progresso com base nas respostas salvas
-          const answeredQuestions = Object.values(parsedResponses).filter(val => val !== "").length
-          setProgress((answeredQuestions / questions.length) * 100)
-        } catch (e) {
-          console.error("Erro ao carregar respostas salvas:", e)
-        }
-      }
     }
-  }, [surveyResponses, form])
+  }, [surveyContext.surveyResponses, form])
 
   // Exibir mensagem de erro se houver
   useEffect(() => {
-    if (error) {
+    if (surveyContext.error) {
       toast({
         title: "Erro",
-        description: error,
+        description: surveyContext.error,
         variant: "destructive",
       })
     }
-  }, [error, toast])
+  }, [surveyContext.error, toast])
 
   // Atualizar o progresso quando uma resposta é alterada
   useEffect(() => {
@@ -187,45 +162,37 @@ export default function Survey() {
   }, [form])
 
   // Função para lidar com o envio do formulário
-  const onSubmit = async (data: SurveyFormValues) => {
+  const handleSubmit = useCallback(async (data: SurveyFormValues) => {
+    setIsSubmitting(true);
+
     try {
-      setIsSubmitting(true)
-      
-      console.log("Enviando dados do formulário:", data);
-      
-      // Salvar no banco de dados
-      const result = await saveSurveyResponses(data)
-      
-      if (result) {
-        // Salvar no localStorage para compatibilidade com o código existente
-        localStorage.setItem("surveyResponses", JSON.stringify(data))
-        
-        // Converter para o formato necessário para o gráfico radar
-        const radarData = questions.map((q) => ({
-          category: q.competence,
-          value: parseInt(data[q.id as keyof SurveyFormValues], 10),
-        }))
-        
-        localStorage.setItem("radarData", JSON.stringify(radarData))
-        
-        toast({
-          title: "Respostas salvas",
-          description: "Suas respostas foram salvas com sucesso!",
-        })
-        
-        // Redirecionar para a próxima página
-        router.push("/open-questions")
-      }
-    } catch (error: any) {
+      // Salvar respostas - agora passando apenas os dados
+      await surveyContext.saveSurveyResponses(data);
+
+      // Atualizar progresso
+      setProgress(66);
+
       toast({
-        title: "Erro ao salvar respostas",
-        description: error.message || "Ocorreu um erro ao salvar suas respostas.",
-        variant: "destructive",
-      })
+        title: "Respostas salvas com sucesso!",
+        description: "Suas respostas foram salvas. Agora vamos para as perguntas abertas.",
+      });
+
+      // Forçar um pequeno atraso antes do redirecionamento para garantir que o estado seja atualizado
+      setTimeout(() => {
+        // Redirecionar para a página de perguntas abertas
+        router.push('/open-questions');
+      }, 500);
+    } catch (error: any) {
+      console.error('Erro ao enviar respostas:', error);
+      toast({
+        title: "Erro ao enviar respostas",
+        description: error.message || "Ocorreu um erro ao enviar suas respostas. Por favor, tente novamente.",
+        variant: "destructive"
+      });
     } finally {
-      setIsSubmitting(false)
+      setIsSubmitting(false);
     }
-  }
+  }, [surveyContext, toast, router]);
 
   // Função para navegar entre as etapas
   const handleStepChange = (step: number) => {
@@ -265,7 +232,7 @@ export default function Survey() {
             <Progress value={progress} className="mb-6 h-2" />
             
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+              <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
                 {currentQuestions.map((question) => (
                   <FormField
                     key={question.id}
@@ -314,8 +281,8 @@ export default function Survey() {
               </Button>
             ) : (
               <Button 
-                onClick={form.handleSubmit(onSubmit)}
-                disabled={isSubmitting}
+                onClick={form.handleSubmit(handleSubmit)}
+                disabled={isSubmitting || surveyContext.loading}
               >
                 {isSubmitting ? "Salvando..." : "Finalizar e Continuar"}
               </Button>

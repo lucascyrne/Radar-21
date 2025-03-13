@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import { useRouter } from "next/navigation"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useForm } from "react-hook-form"
@@ -34,9 +34,11 @@ export default function OpenQuestions() {
   const { toast } = useToast()
   const { user } = useAuth()
   
-  // Usar o hook sem desestruturação para evitar problemas de tipo
+  // Usar o hook de survey
   const surveyContext = useSurvey()
+  
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [progress, setProgress] = useState(90)
 
   // Inicializar o formulário com react-hook-form
   const form = useForm<OpenQuestionsFormValues>({
@@ -46,49 +48,6 @@ export default function OpenQuestions() {
       q14: "",
     },
   })
-
-  // Verificar se o usuário completou as etapas anteriores
-  useEffect(() => {
-    const teamName = localStorage.getItem("teamName")
-    const userProfile = localStorage.getItem("userProfile")
-    const surveyResponses = localStorage.getItem("surveyResponses")
-    
-    if (!teamName) {
-      router.push("/team-setup")
-      return
-    }
-    
-    if (!userProfile) {
-      router.push("/profile")
-      return
-    }
-    
-    if (!surveyResponses) {
-      router.push("/survey")
-      return
-    }
-  }, [router])
-
-  // Carregar respostas salvas, se existirem
-  useEffect(() => {
-    if (surveyContext.openQuestionResponses) {
-      form.reset({
-        q13: surveyContext.openQuestionResponses.q13,
-        q14: surveyContext.openQuestionResponses.q14,
-      })
-    } else {
-      // Tentar carregar do localStorage para compatibilidade com código existente
-      const savedOpenResponses = localStorage.getItem("openQuestionsResponses")
-      if (savedOpenResponses) {
-        try {
-          const parsedResponses = JSON.parse(savedOpenResponses)
-          form.reset(parsedResponses)
-        } catch (e) {
-          console.error("Erro ao carregar respostas salvas:", e)
-        }
-      }
-    }
-  }, [surveyContext.openQuestionResponses, form])
 
   // Exibir mensagem de erro se houver
   useEffect(() => {
@@ -102,45 +61,49 @@ export default function OpenQuestions() {
   }, [surveyContext.error, toast])
 
   // Função para lidar com o envio do formulário
-  const onSubmit = async (data: OpenQuestionsFormValues) => {
-    try {
-      setIsSubmitting(true)
-      
-      // Salvar no banco de dados
-      const result = await surveyContext.saveOpenQuestionResponses(data)
-      
-      if (result) {
-        // Salvar no localStorage para compatibilidade com o código existente
-        localStorage.setItem("openQuestionsResponses", JSON.stringify(data))
-        
-        // Marcar como completo no banco de dados e atualizar status do membro
-        const completed = await surveyContext.completeAllSteps()
-        
-        // Marcar como respondido no localStorage
-        const teamId = localStorage.getItem("teamId")
-        if (teamId) {
-          localStorage.setItem(`surveyCompleted_${teamId}`, "true")
-        }
-        localStorage.setItem("surveyCompleted", "true")
-        
-        toast({
-          title: "Respostas salvas",
-          description: "Suas respostas foram salvas com sucesso!",
-        })
-        
-        // Redirecionar para a página de resultados
-        router.push("/results")
-      }
-    } catch (error: any) {
+  const handleSubmit = useCallback(async (data: OpenQuestionsFormValues) => {
+    // Obter o ID do membro da equipe do contexto ou do localStorage
+    const memberId = surveyContext.teamMemberId || localStorage.getItem("teamMemberId");
+    
+    if (!memberId) {
       toast({
-        title: "Erro ao salvar respostas",
-        description: error.message || "Ocorreu um erro ao salvar suas respostas.",
-        variant: "destructive",
-      })
-    } finally {
-      setIsSubmitting(false)
+        title: "Erro ao enviar respostas",
+        description: "ID do membro da equipe não encontrado. Por favor, tente novamente.",
+        variant: "destructive"
+      });
+      return;
     }
-  }
+
+    setIsSubmitting(true);
+
+    try {
+      // Salvar respostas - agora passando apenas os dados
+      await surveyContext.saveOpenQuestionResponses(data);
+      
+      // Atualizar progresso
+      setProgress(100);
+
+      toast({
+        title: "Respostas salvas com sucesso!",
+        description: "Todas as suas respostas foram salvas. Agora você pode ver os resultados.",
+      });
+      
+      // Forçar um pequeno atraso antes do redirecionamento para garantir que o estado seja atualizado
+      setTimeout(() => {
+        // Redirecionar para a página de resultados
+        router.push('/results');
+      }, 500);
+    } catch (error: any) {
+      console.error('Erro ao enviar respostas:', error);
+      toast({
+        title: "Erro ao enviar respostas",
+        description: error.message || "Ocorreu um erro ao enviar suas respostas. Por favor, tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [surveyContext, toast, router]);
 
   return (
     <Layout>
@@ -152,7 +115,7 @@ export default function OpenQuestions() {
             <span className="font-bold">Radar das Competências de Liderança 4.0</span>
             <span className="text-muted-foreground">Resultados</span>
           </div>
-          <Progress value={90} className="h-2" />
+          <Progress value={progress} className="h-2" />
         </div>
 
         <h1 className="text-3xl font-bold mb-8 text-center">Perguntas Abertas</h1>
@@ -163,7 +126,7 @@ export default function OpenQuestions() {
           </CardHeader>
           <CardContent>
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+              <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-8">
                 {questions.map((question) => (
                   <FormField
                     key={question.id}
@@ -193,7 +156,7 @@ export default function OpenQuestions() {
               Voltar
             </Button>
             <Button 
-              onClick={form.handleSubmit(onSubmit)}
+              onClick={form.handleSubmit(handleSubmit)}
               disabled={isSubmitting || surveyContext.loading}
             >
               {isSubmitting ? "Salvando..." : "Finalizar e Ver Resultados"}

@@ -279,9 +279,10 @@ export default function TeamSetupPage() {
       }
       
       // Adicionar membro à equipe com status 'invited'
+      // Para usuários que ainda não existem, passamos null como userId
       await addTeamMember(
         selectedTeam.id,
-        userId, // Usar o ID do usuário se existir
+        userId, // Pode ser null se o usuário não existir
         inviteEmail,
         'member',
         'invited'

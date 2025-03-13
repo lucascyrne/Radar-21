@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { RadarChart } from '@/components/radar-chart';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -9,14 +9,14 @@ import { useAuth } from '@/resources/auth/auth-hook';
 import { useTeam } from '@/resources/team/team-hook';
 import { useSurvey } from '@/resources/survey/survey-hook';
 import { SurveyResponses } from '@/resources/survey/survey-model';
-import { RadarService, CompetencyDetail } from '@/resources/survey/radar.service';
+import { RadarService } from '@/resources/survey/radar.service';
 import { Badge } from '@/components/ui/badge';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { AlertCircle, Info, Download } from 'lucide-react';
-import { Button } from '@/components/ui/button';
 import { Layout } from '@/components/layout';
 import { Progress } from '@/components/ui/progress';
+import { useRouter } from 'next/navigation';
 
 // Mapeamento de status para exibição em português
 const statusLabels: Record<string, string> = {

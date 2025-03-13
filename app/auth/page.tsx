@@ -6,7 +6,8 @@ import { useAuth } from '@/resources/auth/auth-hook';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { LoginFormValues, RegisterFormValues, loginSchema, registerSchema } from '@/resources/auth/auth-model';
-import { TeamService } from '@/resources/team/team.service';
+import { useTeam } from '@/resources/team/team-hook';
+import { supabase } from '@/resources/auth/auth.service';
 
 // Componentes shadcn/ui
 import { Button } from '@/components/ui/button';
@@ -15,65 +16,22 @@ import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { Layout } from '@/components/layout';
 
-// Componente interno que usa useSearchParams
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { signInWithGoogle, signInWithEmail, signUpWithEmail, isLoading, isAuthenticated, user, error, clearError } = useAuth();
-  const [activeTab, setActiveTab] = useState<string>("login");
   const { toast } = useToast();
+  const { signInWithGoogle, signInWithEmail, signUpWithEmail, isLoading, isAuthenticated, user, error, clearError } = useAuth();
+  const { addTeamMember } = useTeam();
+
+  const [activeTab, setActiveTab] = useState<string>("login");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [inviteTeamId, setInviteTeamId] = useState<string | null>(null);
+  const [processingInvite, setProcessingInvite] = useState(false);
   
-  // Obter o ID da equipe do convite, se houver
-  const inviteTeamId = searchParams.get('invite');
-  const inviteEmail = searchParams.get('email');
-
-  // Processar convite após autenticação
-  const processInvite = useCallback(async (email: string) => {
-    if (inviteTeamId && user) {
-      try {
-        // Atualizar o membro da equipe com o ID do usuário
-        await TeamService.addTeamMember(
-          inviteTeamId,
-          user.id,
-          email,
-          'member',
-          'registered'
-        );
-        
-        toast({
-          title: "Convite aceito",
-          description: "Você foi adicionado à equipe com sucesso!",
-        });
-      } catch (error: any) {
-        console.error('Erro ao processar convite:', error);
-        toast({
-          title: "Erro ao processar convite",
-          description: error.message || "Ocorreu um erro ao processar o convite.",
-          variant: "destructive"
-        });
-      }
-    }
-  }, [inviteTeamId, user, toast]);
-
-  // Redirecionar se já estiver autenticado
-  useEffect(() => {
-    if (isAuthenticated && user) {
-      // Se houver um convite, processar antes de redirecionar
-      if (inviteTeamId) {
-        processInvite(user.email).then(() => {
-          router.push('/team-setup');
-        });
-      } else {
-        router.push('/team-setup');
-      }
-    }
-  }, [isAuthenticated, user, router, inviteTeamId, processInvite]);
-
-  // Configuração do formulário de login
+  // Configurar formulário de login
   const loginForm = useForm<LoginFormValues>({
     resolver: zodResolver(loginSchema),
     defaultValues: {
@@ -81,8 +39,8 @@ function AuthContent() {
       password: '',
     },
   });
-
-  // Configuração do formulário de registro
+  
+  // Configurar formulário de cadastro
   const registerForm = useForm<RegisterFormValues>({
     resolver: zodResolver(registerSchema),
     defaultValues: {
@@ -91,75 +49,229 @@ function AuthContent() {
       confirmPassword: '',
     },
   });
-
-  // Preencher o email do convite no formulário, se disponível
+  
+  // Verificar se há um convite na URL
   useEffect(() => {
-    if (inviteEmail) {
-      loginForm.setValue('email', inviteEmail);
-      registerForm.setValue('email', inviteEmail);
+    const invite = searchParams.get('invite');
+    if (invite) {
+      setInviteTeamId(invite);
+      // Se for um convite, mostrar a aba de cadastro por padrão
+      setActiveTab('signup');
+      
+      // Preencher o email do formulário se estiver na URL
+      const email = searchParams.get('email');
+      if (email) {
+        loginForm.setValue('email', email);
+        registerForm.setValue('email', email);
+      }
     }
-  }, [inviteEmail, loginForm, registerForm]);
-
-  // Manipuladores de envio de formulário
-  const handleLoginSubmit = async (data: LoginFormValues) => {
-    await signInWithEmail(data.email, data.password);
-    // O processamento do convite é feito no useEffect quando isAuthenticated muda
-  };
-
-  const handleRegisterSubmit = async (data: RegisterFormValues) => {
-    await signUpWithEmail(data.email, data.password);
-    // O processamento do convite é feito no useEffect quando isAuthenticated muda
-  };
-
-  // Manipulador para login com Google
-  const handleGoogleSignIn = async () => {
-    await signInWithGoogle();
-    // O processamento do convite é feito no useEffect quando isAuthenticated muda
-  };
-
-  // Limpar erros ao mudar de aba
-  const handleTabChange = (value: string) => {
+  }, [searchParams, loginForm, registerForm]);
+  
+  // Redirecionar se já estiver autenticado
+  useEffect(() => {
+    if (!isLoading && isAuthenticated) {
+      if (inviteTeamId) {
+        processInvite();
+      } else {
+        router.push('/team-setup');
+      }
+    }
+  }, [isLoading, isAuthenticated, router, inviteTeamId]);
+  
+  // Processar convite após autenticação
+  const processInvite = useCallback(async () => {
+    if (!inviteTeamId || processingInvite) return;
+    
+    setProcessingInvite(true);
+    
+    try {
+      // Obter o usuário atual
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        throw new Error('Usuário não encontrado');
+      }
+      
+      // Verificar se o usuário já é membro da equipe
+      const { data: existingMember, error: memberError } = await supabase
+        .from('team_members')
+        .select('id, status')
+        .eq('team_id', inviteTeamId)
+        .eq('email', user.email)
+        .maybeSingle();
+      
+      if (memberError && memberError.code !== 'PGRST116') {
+        console.error('Erro ao verificar membro:', memberError);
+      }
+      
+      if (existingMember) {
+        // Se o usuário já é membro, apenas atualizar o status e o user_id
+        const { error: updateError } = await supabase
+          .from('team_members')
+          .update({ 
+            user_id: user.id,
+            status: 'registered'
+          })
+          .eq('id', existingMember.id);
+        
+        if (updateError) {
+          console.error('Erro ao atualizar membro:', updateError);
+        }
+      } else {
+        // Se o usuário não é membro, adicionar à equipe
+        try {
+          // Primeiro, verificar se a equipe existe
+          const { data: team, error: teamError } = await supabase
+            .from('teams')
+            .select('id, name')
+            .eq('id', inviteTeamId)
+            .single();
+          
+          if (teamError) {
+            throw new Error(`Equipe não encontrada: ${teamError.message}`);
+          }
+          
+          // Adicionar o usuário à equipe
+          await addTeamMember(
+            inviteTeamId,
+            user.id,
+            user.email || '',
+            'member',
+            'registered'
+          );
+          
+          toast({
+            title: "Convite aceito com sucesso!",
+            description: `Você agora é membro da equipe ${team.name}.`,
+          });
+        } catch (error: any) {
+          console.error('Erro ao adicionar membro à equipe:', error);
+          // Não mostrar toast de erro para não confundir o usuário
+        }
+      }
+      
+      // Redirecionar para a página de configuração da equipe
+      router.push('/team-setup');
+    } catch (error: any) {
+      console.error('Erro ao processar convite:', error);
+      // Não mostrar toast de erro para não confundir o usuário
+    } finally {
+      setProcessingInvite(false);
+    }
+  }, [inviteTeamId, processingInvite, router, addTeamMember, toast]);
+  
+  // Manipulador de envio do formulário de login
+  const handleLoginSubmit = useCallback(async (data: LoginFormValues) => {
+    setIsSubmitting(true);
+    
+    try {
+      await signInWithEmail(data.email, data.password);
+      
+      // Se houver um convite, o redirecionamento será tratado pelo useEffect
+      if (!inviteTeamId) {
+        router.push('/team-setup');
+      }
+    } catch (error: any) {
+      console.error('Erro ao fazer login:', error);
+      toast({
+        title: "Erro ao fazer login",
+        description: error.message || "Ocorreu um erro ao fazer login. Verifique suas credenciais e tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [signInWithEmail, router, inviteTeamId, toast]);
+  
+  // Manipulador de envio do formulário de cadastro
+  const handleSignupSubmit = useCallback(async (data: RegisterFormValues) => {
+    setIsSubmitting(true);
+    
+    try {
+      await signUpWithEmail(data.email, data.password);
+      
+      toast({
+        title: "Cadastro realizado com sucesso!",
+        description: "Sua conta foi criada. Você será redirecionado em instantes.",
+      });
+      
+      // Se houver um convite, o redirecionamento será tratado pelo useEffect
+      if (!inviteTeamId) {
+        router.push('/team-setup');
+      }
+    } catch (error: any) {
+      console.error('Erro ao criar conta:', error);
+      toast({
+        title: "Erro ao criar conta",
+        description: error.message || "Ocorreu um erro ao criar sua conta. Tente novamente.",
+        variant: "destructive"
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [signUpWithEmail, router, inviteTeamId, toast]);
+  
+  // Manipulador de mudança de aba
+  const handleTabChange = useCallback((value: string) => {
     setActiveTab(value);
-    clearError();
-    loginForm.reset({ email: inviteEmail || '' });
-    registerForm.reset({ email: inviteEmail || '' });
-  };
-
+    
+    // Limpar formulários ao mudar de aba
+    if (value === "login") {
+      registerForm.reset();
+    } else {
+      loginForm.reset();
+    }
+    
+    // Preencher o email se houver um convite
+    const email = searchParams.get('email');
+    if (email) {
+      if (value === "login") {
+        loginForm.setValue('email', email);
+      } else {
+        registerForm.setValue('email', email);
+      }
+    }
+  }, [loginForm, registerForm, searchParams]);
+  
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+  
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-md">
-        <Card className="w-full shadow-lg border-0">
-          <CardHeader className="space-y-1 text-center pb-6">
-            <CardTitle className="text-2xl font-bold">
-              Radar das Competências 4.0
-            </CardTitle>
+    <Layout>
+      <div className="container max-w-md mx-auto py-10">
+        <Card>
+          <CardHeader className="space-y-1">
+            <CardTitle className="text-2xl font-bold">Radar21</CardTitle>
             <CardDescription>
               {inviteTeamId 
-                ? "Você foi convidado para participar de uma equipe. Entre ou crie uma conta para continuar."
-                : "Avalie e desenvolva suas competências para a Indústria 4.0"}
+                ? "Você recebeu um convite para participar de uma equipe. Entre ou crie uma conta para continuar."
+                : "Entre com sua conta ou crie uma nova para acessar a plataforma."}
             </CardDescription>
           </CardHeader>
-          <CardContent className="pt-0">
-            <Tabs value={activeTab} onValueChange={handleTabChange} className="w-full">
-              <TabsList className="grid w-full grid-cols-2 mb-6">
-                <TabsTrigger value="login">Entrar</TabsTrigger>
-                <TabsTrigger value="register">Registrar</TabsTrigger>
+          <CardContent>
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            
+            <Tabs value={activeTab} onValueChange={handleTabChange}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="login">Login</TabsTrigger>
+                <TabsTrigger value="signup">Cadastro</TabsTrigger>
               </TabsList>
-
-              {/* Exibir mensagens de erro */}
-              {error && (
-                <Alert variant="destructive" className="mb-4">
-                  <AlertDescription>{error}</AlertDescription>
-                </Alert>
-              )}
-
-              {/* Formulário de Login */}
+              
               <TabsContent value="login">
-                <form onSubmit={loginForm.handleSubmit(handleLoginSubmit)} className="space-y-4">
+                <form onSubmit={loginForm.handleSubmit(handleLoginSubmit)} className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="login-email">Email</Label>
                     <Input
-                      id="email"
+                      id="login-email"
                       type="email"
                       placeholder="seu@email.com"
                       {...loginForm.register('email')}
@@ -170,41 +282,69 @@ function AuthContent() {
                   </div>
                   
                   <div className="space-y-2">
-                    <div className="flex items-center justify-between">
-                      <Label htmlFor="password">Senha</Label>
-                      <Button variant="link" className="p-0 h-auto text-xs" type="button">
-                        Esqueceu a senha?
-                      </Button>
-                    </div>
+                    <Label htmlFor="login-password">Senha</Label>
                     <Input
-                      id="password"
+                      id="login-password"
                       type="password"
-                      placeholder="********"
+                      placeholder="••••••••"
                       {...loginForm.register('password')}
                     />
                     {loginForm.formState.errors.password && (
                       <p className="text-sm text-red-500">{loginForm.formState.errors.password.message}</p>
                     )}
                   </div>
-
-                  <div className="flex items-center space-x-2">
-                    <Checkbox id="remember" />
-                    <Label htmlFor="remember" className="text-sm">Lembrar-me</Label>
+                  
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? "Entrando..." : "Entrar"}
+                  </Button>
+                  
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">
+                        Ou continue com
+                      </span>
+                    </div>
                   </div>
-
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? 'Entrando...' : 'Entrar'}
+                  
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    className="w-full" 
+                    onClick={() => signInWithGoogle()}
+                    disabled={isSubmitting}
+                  >
+                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+                      <path
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        fill="#4285F4"
+                      />
+                      <path
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        fill="#34A853"
+                      />
+                      <path
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                        fill="#FBBC05"
+                      />
+                      <path
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        fill="#EA4335"
+                      />
+                    </svg>
+                    Google
                   </Button>
                 </form>
               </TabsContent>
-
-              {/* Formulário de Registro */}
-              <TabsContent value="register">
-                <form onSubmit={registerForm.handleSubmit(handleRegisterSubmit)} className="space-y-4">
+              
+              <TabsContent value="signup">
+                <form onSubmit={registerForm.handleSubmit(handleSignupSubmit)} className="space-y-4 mt-4">
                   <div className="space-y-2">
-                    <Label htmlFor="email">Email</Label>
+                    <Label htmlFor="signup-email">Email</Label>
                     <Input
-                      id="email"
+                      id="signup-email"
                       type="email"
                       placeholder="seu@email.com"
                       {...registerForm.register('email')}
@@ -215,97 +355,88 @@ function AuthContent() {
                   </div>
                   
                   <div className="space-y-2">
-                    <Label htmlFor="password">Senha</Label>
+                    <Label htmlFor="signup-password">Senha</Label>
                     <Input
-                      id="password"
+                      id="signup-password"
                       type="password"
-                      placeholder="********"
+                      placeholder="••••••••"
                       {...registerForm.register('password')}
                     />
                     {registerForm.formState.errors.password && (
                       <p className="text-sm text-red-500">{registerForm.formState.errors.password.message}</p>
                     )}
                   </div>
-
+                  
                   <div className="space-y-2">
-                    <Label htmlFor="confirmPassword">Confirmar Senha</Label>
+                    <Label htmlFor="signup-confirm-password">Confirmar Senha</Label>
                     <Input
-                      id="confirmPassword"
+                      id="signup-confirm-password"
                       type="password"
-                      placeholder="********"
+                      placeholder="••••••••"
                       {...registerForm.register('confirmPassword')}
                     />
                     {registerForm.formState.errors.confirmPassword && (
                       <p className="text-sm text-red-500">{registerForm.formState.errors.confirmPassword.message}</p>
                     )}
                   </div>
-
-                  <Button type="submit" className="w-full" disabled={isLoading}>
-                    {isLoading ? 'Registrando...' : 'Criar Conta'}
+                  
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? "Criando conta..." : "Criar conta"}
+                  </Button>
+                  
+                  <div className="relative">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-background px-2 text-muted-foreground">
+                        Ou continue com
+                      </span>
+                    </div>
+                  </div>
+                  
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    className="w-full" 
+                    onClick={() => signInWithGoogle()}
+                    disabled={isSubmitting}
+                  >
+                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+                      <path
+                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                        fill="#4285F4"
+                      />
+                      <path
+                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                        fill="#34A853"
+                      />
+                      <path
+                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                        fill="#FBBC05"
+                      />
+                      <path
+                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                        fill="#EA4335"
+                      />
+                    </svg>
+                    Google
                   </Button>
                 </form>
               </TabsContent>
             </Tabs>
-
-            <div className="relative my-6">
-              <div className="absolute inset-0 flex items-center">
-                <Separator className="w-full" />
-              </div>
-              <div className="relative flex justify-center text-xs uppercase">
-                <span className="bg-white px-2 text-muted-foreground">
-                  Ou continue com
-                </span>
-              </div>
-            </div>
-
-            <Button
-              variant="outline"
-              type="button"
-              className="w-full"
-              onClick={handleGoogleSignIn}
-              disabled={isLoading}
-            >
-              <svg className="h-5 w-5 mr-2" viewBox="0 0 24 24">
-                <g transform="matrix(1, 0, 0, 1, 27.009001, -39.238998)">
-                  <path
-                    fill="#4285F4"
-                    d="M -3.264 51.509 C -3.264 50.719 -3.334 49.969 -3.454 49.239 L -14.754 49.239 L -14.754 53.749 L -8.284 53.749 C -8.574 55.229 -9.424 56.479 -10.684 57.329 L -10.684 60.329 L -6.824 60.329 C -4.564 58.239 -3.264 55.159 -3.264 51.509 Z"
-                  />
-                  <path
-                    fill="#34A853"
-                    d="M -14.754 63.239 C -11.514 63.239 -8.804 62.159 -6.824 60.329 L -10.684 57.329 C -11.764 58.049 -13.134 58.489 -14.754 58.489 C -17.884 58.489 -20.534 56.379 -21.484 53.529 L -25.464 53.529 L -25.464 56.619 C -23.494 60.539 -19.444 63.239 -14.754 63.239 Z"
-                  />
-                  <path
-                    fill="#FBBC05"
-                    d="M -21.484 53.529 C -21.734 52.809 -21.864 52.039 -21.864 51.239 C -21.864 50.439 -21.724 49.669 -21.484 48.949 L -21.484 45.859 L -25.464 45.859 C -26.284 47.479 -26.754 49.299 -26.754 51.239 C -26.754 53.179 -26.284 54.999 -25.464 56.619 L -21.484 53.529 Z"
-                  />
-                  <path
-                    fill="#EA4335"
-                    d="M -14.754 43.989 C -12.984 43.989 -11.404 44.599 -10.154 45.789 L -6.734 42.369 C -8.804 40.429 -11.514 39.239 -14.754 39.239 C -19.444 39.239 -23.494 41.939 -25.464 45.859 L -21.484 48.949 C -20.534 46.099 -17.884 43.989 -14.754 43.989 Z"
-                  />
-                </g>
-              </svg>
-              {isLoading ? 'Processando...' : 'Continuar com Google'}
-            </Button>
           </CardContent>
-          <CardFooter className="flex justify-center px-8 pb-6 pt-0">
-            <p className="text-xs text-center text-muted-foreground">
-              Ao continuar, você concorda com nossos{' '}
-              <a href="#" className="underline underline-offset-4 hover:text-primary">
-                Termos de Serviço
-              </a>{' '}
-              e{' '}
-              <a href="#" className="underline underline-offset-4 hover:text-primary">
-                Política de Privacidade
-              </a>
-              .
+          <CardFooter>
+            <p className="text-sm text-center w-full text-muted-foreground">
+              Ao entrar, você concorda com nossos termos de serviço e política de privacidade.
             </p>
           </CardFooter>
         </Card>
       </div>
-    </div>
+    </Layout>
   );
 }
+
 
 // Componente principal com Suspense
 export default function AuthPage() {
@@ -319,4 +450,3 @@ export default function AuthPage() {
     </Suspense>
   );
 }
-
