@@ -10,15 +10,28 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 export const AuthService = {
   // Login com Google
   signInWithGoogle: async () => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-    
-    if (error) throw error;
-    return data;
+    try {
+      // Determinar a URL base com base no ambiente atual
+      const baseUrl = typeof window !== 'undefined' 
+        ? window.location.origin 
+        : 'https://radar21.com.br';
+      
+      // Construir a URL de redirecionamento completa
+      const redirectUrl = `${baseUrl}/auth/callback`;
+      
+      // Iniciar o fluxo de autenticação com a URL de redirecionamento correta
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl
+        }
+      });
+      
+      if (error) throw error;
+    } catch (error) {
+      console.error('Erro ao fazer login com Google:', error);
+      // Tratamento de erro...
+    }
   },
   
   // Verificar sessão atual
