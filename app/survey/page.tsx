@@ -14,6 +14,7 @@ import { useToast } from "@/hooks/use-toast"
 import { useSurvey } from "@/resources/survey/survey-hook"
 import { surveySchema, SurveyFormValues } from "@/resources/survey/survey-model"
 import { useAuth } from "@/resources/auth/auth-hook"
+import { SetupProgress } from '@/components/team/setup-progress'
 
 // Definição das perguntas do questionário
 const questions = [
@@ -212,16 +213,7 @@ export default function Survey() {
   return (
     <Layout>
       <div className="max-w-3xl mx-auto">
-        <div className="mb-8">
-          <div className="flex justify-between mb-2 text-sm font-medium">
-            <span className="text-muted-foreground">Minha Equipe</span>
-            <span className="text-muted-foreground">Meu Perfil</span>
-            <span className="font-bold">Radar das Competências de Liderança 4.0</span>
-            <span className="text-muted-foreground">Resultados</span>
-          </div>
-          <Progress value={75} className="h-2" />
-        </div>
-
+        <SetupProgress currentPhase="survey" />
         <h1 className="text-3xl font-bold mb-8 text-center">Questionário de Competências da Liderança 4.0</h1>
         
         <Card>

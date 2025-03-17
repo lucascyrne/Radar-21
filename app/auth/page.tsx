@@ -64,8 +64,24 @@ function AuthContent() {
         loginForm.setValue('email', email);
         registerForm.setValue('email', email);
       }
+      
+      // Armazenar dados do convite no localStorage para persistir durante autenticação OAuth
+      localStorage.setItem('pendingInvite', invite);
+      if (email) {
+        localStorage.setItem('pendingInviteEmail', email);
+      }
     }
   }, [searchParams, loginForm, registerForm]);
+  
+  // Verificar se há convite pendente no localStorage
+  useEffect(() => {
+    if (!isLoading && isAuthenticated && !inviteTeamId) {
+      const pendingInvite = localStorage.getItem('pendingInvite');
+      if (pendingInvite) {
+        setInviteTeamId(pendingInvite);
+      }
+    }
+  }, [isLoading, isAuthenticated, inviteTeamId]);
   
   // Redirecionar se já estiver autenticado
   useEffect(() => {
@@ -73,7 +89,12 @@ function AuthContent() {
       if (inviteTeamId) {
         processInvite();
       } else {
-        router.push('/team-setup');
+        const pendingInvite = localStorage.getItem('pendingInvite');
+        if (pendingInvite) {
+          setInviteTeamId(pendingInvite);
+        } else {
+          router.push('/team-setup');
+        }
       }
     }
   }, [isLoading, isAuthenticated, router, inviteTeamId]);
@@ -92,12 +113,20 @@ function AuthContent() {
         throw new Error('Usuário não encontrado');
       }
       
+      // Usar o email do usuário ou o email do convite armazenado no localStorage
+      const inviteEmail = localStorage.getItem('pendingInviteEmail');
+      const userEmail = user.email || inviteEmail;
+      
+      if (!userEmail) {
+        throw new Error('Email não disponível');
+      }
+      
       // Verificar se o usuário já é membro da equipe
       const { data: existingMember, error: memberError } = await supabase
         .from('team_members')
-        .select('id, status')
+        .select('*')
         .eq('team_id', inviteTeamId)
-        .eq('email', user.email)
+        .eq('email', userEmail)
         .maybeSingle();
       
       if (memberError && memberError.code !== 'PGRST116') {
@@ -105,60 +134,108 @@ function AuthContent() {
       }
       
       if (existingMember) {
-        // Se o usuário já é membro, apenas atualizar o status e o user_id
+        // Se o usuário já é membro, atualizar o status e o user_id
         const { error: updateError } = await supabase
           .from('team_members')
           .update({ 
             user_id: user.id,
-            status: 'registered'
+            status: 'invited'
           })
           .eq('id', existingMember.id);
         
         if (updateError) {
           console.error('Erro ao atualizar membro:', updateError);
+          throw updateError;
         }
+        
+        console.log('Membro atualizado com sucesso:', existingMember.id);
       } else {
-        // Se o usuário não é membro, adicionar à equipe
-        try {
-          // Primeiro, verificar se a equipe existe
-          const { data: team, error: teamError } = await supabase
-            .from('teams')
-            .select('id, name')
-            .eq('id', inviteTeamId)
-            .single();
-          
-          if (teamError) {
-            throw new Error(`Equipe não encontrada: ${teamError.message}`);
+        // Se não encontrou pelo email do usuário, tentar pelo email do convite
+        if (userEmail !== inviteEmail && inviteEmail) {
+          const { data: invitedMember, error: invitedError } = await supabase
+            .from('team_members')
+            .select('*')
+            .eq('team_id', inviteTeamId)
+            .eq('email', inviteEmail)
+            .maybeSingle();
+            
+          if (!invitedError && invitedMember) {
+            // Atualizar o membro convidado com o ID do usuário e o novo email
+            const { error: updateError } = await supabase
+              .from('team_members')
+              .update({ 
+                user_id: user.id,
+                email: userEmail,
+                status: 'invited'
+              })
+              .eq('id', invitedMember.id);
+              
+            if (updateError) {
+              console.error('Erro ao atualizar membro:', updateError);
+              throw updateError;
+            }
+            
+            console.log('Membro atualizado com sucesso:', invitedMember.id);
+          } else {
+            // Se o usuário não é membro, adicionar à equipe
+            await adicionarUsuarioEquipe(user, inviteTeamId);
           }
-          
-          // Adicionar o usuário à equipe
-          await addTeamMember(
-            inviteTeamId,
-            user.id,
-            user.email || '',
-            'member',
-            'registered'
-          );
-          
-          toast({
-            title: "Convite aceito com sucesso!",
-            description: `Você agora é membro da equipe ${team.name}.`,
-          });
-        } catch (error: any) {
-          console.error('Erro ao adicionar membro à equipe:', error);
-          // Não mostrar toast de erro para não confundir o usuário
+        } else {
+          // Se o usuário não é membro, adicionar à equipe
+          await adicionarUsuarioEquipe(user, inviteTeamId);
         }
       }
+      
+      // Limpar os dados do convite do localStorage
+      localStorage.removeItem('pendingInvite');
+      localStorage.removeItem('pendingInviteEmail');
       
       // Redirecionar para a página de configuração da equipe
       router.push('/team-setup');
     } catch (error: any) {
       console.error('Erro ao processar convite:', error);
-      // Não mostrar toast de erro para não confundir o usuário
+      toast({
+        title: "Erro ao processar convite",
+        description: error.message || "Ocorreu um erro ao processar o convite.",
+        variant: "destructive"
+      });
     } finally {
       setProcessingInvite(false);
     }
-  }, [inviteTeamId, processingInvite, router, addTeamMember, toast]);
+  }, [inviteTeamId, processingInvite, router, toast]);
+  
+  // Função auxiliar para adicionar usuário à equipe
+  const adicionarUsuarioEquipe = async (user: any, teamId: string) => {
+    try {
+      // Primeiro, verificar se a equipe existe
+      const { data: team, error: teamError } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('id', teamId)
+        .single();
+      
+      if (teamError) {
+        throw new Error(`Equipe não encontrada: ${teamError.message}`);
+      }
+      
+      // Adicionar o usuário à equipe
+      await addTeamMember(
+        teamId,
+        user.id,
+        user.email || '',
+        'member',
+        'invited'
+      );
+      
+      toast({
+        title: "Convite aceito com sucesso!",
+        description: `Você agora é membro da equipe ${team.name}.`,
+      });
+    } catch (error: any) {
+      console.error('Erro ao adicionar membro à equipe:', error);
+      throw error;
+    }
+  };
   
   // Manipulador de envio do formulário de login
   const handleLoginSubmit = useCallback(async (data: LoginFormValues) => {

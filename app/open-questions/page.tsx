@@ -14,6 +14,8 @@ import { useToast } from "@/hooks/use-toast"
 import { useSurvey } from "@/resources/survey/survey-hook"
 import { openQuestionsSchema, OpenQuestionsFormValues } from "@/resources/survey/survey-model"
 import { useAuth } from "@/resources/auth/auth-hook"
+import { supabase } from "@/resources/auth/auth.service"
+import { SetupProgress } from '@/components/team/setup-progress'
 
 // Definição das perguntas abertas
 const questions = [
@@ -88,6 +90,15 @@ export default function OpenQuestions() {
         description: "Todas as suas respostas foram salvas. Agora você pode ver os resultados.",
       });
       
+      // Atualizar status do membro para "answered"
+      if (user?.email) {
+        await supabase
+          .from('team_members')
+          .update({ status: 'answered' })
+          .eq('team_id', memberId)
+          .eq('email', user.email);
+      }
+      
       // Forçar um pequeno atraso antes do redirecionamento para garantir que o estado seja atualizado
       setTimeout(() => {
         // Redirecionar para a página de resultados
@@ -103,21 +114,12 @@ export default function OpenQuestions() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [surveyContext, toast, router]);
+  }, [surveyContext, toast, router, user?.email]);
 
   return (
     <Layout>
       <div className="max-w-3xl mx-auto">
-        <div className="mb-8">
-          <div className="flex justify-between mb-2 text-sm font-medium">
-            <span className="text-muted-foreground">Minha Equipe</span>
-            <span className="text-muted-foreground">Meu Perfil</span>
-            <span className="font-bold">Radar das Competências de Liderança 4.0</span>
-            <span className="text-muted-foreground">Resultados</span>
-          </div>
-          <Progress value={progress} className="h-2" />
-        </div>
-
+        <SetupProgress currentPhase="survey" />
         <h1 className="text-3xl font-bold mb-8 text-center">Perguntas Abertas</h1>
         
         <Card>

@@ -17,25 +17,18 @@ import { AlertCircle, Info, Download } from 'lucide-react';
 import { Layout } from '@/components/layout';
 import { Progress } from '@/components/ui/progress';
 import { useRouter } from 'next/navigation';
+import { SetupProgress } from '@/components/team/setup-progress';
 
 // Mapeamento de status para exibição em português
 const statusLabels: Record<string, string> = {
   'invited': 'Convidado',
-  'registered': 'Cadastrado',
-  'completed': 'Respondido',
-  'enviado': 'Convidado',
-  'cadastrado': 'Cadastrado',
-  'respondido': 'Respondido'
+  'answered': 'Cadastrado',
 };
 
 // Mapeamento de status para cores
 const statusColors: Record<string, string> = {
   'invited': 'bg-yellow-100 text-yellow-800',
-  'registered': 'bg-blue-100 text-blue-800',
-  'completed': 'bg-green-100 text-green-800',
-  'enviado': 'bg-yellow-100 text-yellow-800',
-  'cadastrado': 'bg-blue-100 text-blue-800',
-  'respondido': 'bg-green-100 text-green-800'
+  'answered': 'bg-blue-100 text-blue-800',
 };
 
 export default function ResultsPage() {
@@ -108,16 +101,7 @@ export default function ResultsPage() {
   return (
     <Layout>
       <div className="w-full max-w-5xl mx-auto px-4 sm:px-6">
-        <div className="mb-8">
-          <div className="flex justify-between mb-2 text-sm font-medium">
-            <span className="text-muted-foreground">Minha Equipe</span>
-            <span className="text-muted-foreground">Meu Perfil</span>
-            <span className="text-muted-foreground">Radar das Competências de Liderança 4.0</span>
-            <span className="font-bold">Resultados</span>
-          </div>
-          <Progress value={100} className="h-2" />
-        </div>
-
+        <SetupProgress currentPhase="results" />
         <h1 className="text-3xl font-bold mb-6 text-center">Resultados da Avaliação</h1>
       
         {error && (
