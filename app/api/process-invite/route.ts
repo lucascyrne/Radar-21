@@ -40,7 +40,7 @@ export async function POST(request: NextRequest) {
         .from('team_members')
         .update({ 
           user_id: userId,
-          status: 'registered' 
+          status: 'invited' 
         })
         .eq('team_id', teamId)
         .eq('email', email);
@@ -61,7 +61,7 @@ export async function POST(request: NextRequest) {
           user_id: userId,
           email,
           role: 'member',
-          status: 'registered',
+          status: 'invited',
         });
 
       if (insertError) {
