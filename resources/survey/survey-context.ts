@@ -47,6 +47,10 @@ export interface SurveyContextType {
   // Métodos para gerenciamento de ID do membro da equipe
   fetchTeamMemberId: () => Promise<string | null>;
   updateTeamMemberId: (id: string | null) => void;
+  
+  // Adicionar ao SurveyContextType
+  teamMemberId: string | null;
+  setTeamMemberId: (id: string) => void;
 }
 
 // Criar o contexto com valor inicial null

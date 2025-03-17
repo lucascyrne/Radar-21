@@ -19,14 +19,9 @@ export type ProfileFormValues = z.infer<typeof profileSchema>;
 
 // Tipo para o status do membro da equipe
 export type TeamMemberStatus = 
-  | 'invited' 
-  | 'registered' 
-  | 'completed' 
-  | 'enviado' 
-  | 'cadastrado' 
-  | 'respondido'
-  | 'leader';
-
+  | 'invited'
+  | 'answered';
+  
 // Tipo para as respostas da pesquisa (genérico)
 export interface SurveyResponses {
   [key: string]: string | number | null | undefined;

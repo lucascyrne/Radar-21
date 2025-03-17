@@ -1,5 +1,7 @@
 import { z } from 'zod';
-import { TeamMemberStatus } from '../survey/survey-model';
+
+// Definir os status possíveis
+export type TeamMemberStatus = 'invited' | 'answered';
 
 // Esquema para criação de equipe
 export const createTeamSchema = z.object({
@@ -38,14 +40,14 @@ export interface Team {
 
 // Membro da equipe
 export interface TeamMember {
-  id?: string;
-  team_id?: string;
-  user_id?: string;
-  email?: string;
-  role?: 'leader' | 'member';
-  status?: TeamMemberStatus;
-  created_at?: string;
-  updated_at?: string;
+  id: string;
+  team_id: string;
+  user_id: string;
+  email: string;
+  role: 'leader' | 'member';
+  status: TeamMemberStatus;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface TeamMembership {
@@ -53,7 +55,7 @@ export interface TeamMembership {
   user_id: string;
   email: string;
   role: 'leader' | 'member';
-  status: 'invited' | 'registered' | 'respondido';
+  status: TeamMemberStatus;
 }
 
 // Estado do contexto de equipes
@@ -61,6 +63,7 @@ export interface TeamState {
   teams: Team[];
   selectedTeam: Team | null;
   teamMembers: TeamMember[];
+  currentMember: TeamMember | null;
   isLoading: boolean;
   error: string | null;
 }

@@ -3,60 +3,59 @@
 import { ReactNode, useCallback, useState, useRef, useEffect } from 'react';
 import { initialTeamState, TeamContext } from './team-context';
 import { TeamService } from './team.service';
-import { CreateTeamFormValues } from './team-model';
-import { usePathname } from 'next/navigation';
+import { CreateTeamFormValues, Team, TeamMember, TeamMemberStatus } from './team-model';
+import { useAuth } from '../auth/auth-hook';
 
 interface TeamProviderProps {
   children: ReactNode;
 }
 
-// Lista de rotas que realmente precisam de dados de equipe
-const TEAM_ROUTES = ['/team-setup', '/profile', '/survey', '/open-questions', '/results'];
-
 export function TeamProvider({ children }: TeamProviderProps) {
   const [state, setState] = useState(initialTeamState);
-  const pathname = usePathname();
-  
-  // Verificar se a rota atual precisa de dados de equipe
-  const needsTeamData = TEAM_ROUTES.some(route => pathname?.startsWith(route));
+  const { user } = useAuth();
   
   // Refs para controlar requisições em andamento
   const loadingTeamsRef = useRef(false);
-  const loadingMembersRef = useRef<Record<string, boolean>>({});
-  const teamsLoadedRef = useRef(false);
-  const membersLoadedRef = useRef<Record<string, boolean>>({});
+  const loadingMembersRef = useRef(false);
+  const loadedMembersRef = useRef<Set<string>>(new Set());
+
+  // Efeito para carregar o membro atual quando o usuário ou a equipe selecionada mudar
+  useEffect(() => {
+    const loadCurrentMember = async () => {
+      if (user?.email && state.selectedTeam) {
+        const currentMember = await getCurrentMember(state.selectedTeam.id, user.email);
+        if (currentMember) {
+          setState(prev => ({ ...prev, currentMember }));
+        }
+      }
+    };
+
+    loadCurrentMember();
+  }, [user?.email, state.selectedTeam?.id]);
 
   // Carregar equipes do usuário
   const loadUserTeams = useCallback(async (userId: string) => {
-    // Se não estiver em uma rota que precisa de dados de equipe, não fazer requisição
-    if (!needsTeamData || !userId) return;
-    
-    // Evitar múltiplas requisições simultâneas
-    if (loadingTeamsRef.current || teamsLoadedRef.current) return;
+    if (!userId || loadingTeamsRef.current || state.teams.length > 0) return;
     
     loadingTeamsRef.current = true;
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     
     try {
-      const { teams, memberships } = await TeamService.getUserTeams(userId);
+      const { teams } = await TeamService.getUserTeams(userId);
+      const safeTeams = Array.isArray(teams) ? teams : [];
       
       setState(prev => ({ 
         ...prev, 
-        teams,
-        isLoading: false,
-        // Se já tiver uma equipe selecionada, manter. Caso contrário, selecionar a primeira
-        selectedTeam: prev.selectedTeam || (teams.length > 0 ? teams[0] : null)
+        teams: safeTeams,
+        selectedTeam: safeTeams[0] || null,
+        isLoading: false 
       }));
-      
+
       // Se tiver uma equipe selecionada, carregar seus membros
-      if (teams.length > 0 && !state.selectedTeam) {
-        loadTeamMembers(teams[0].id);
+      if (safeTeams[0]?.id) {
+        loadTeamMembers(safeTeams[0].id);
       }
-      
-      // Marcar que as equipes foram carregadas
-      teamsLoadedRef.current = true;
     } catch (error: any) {
-      console.error('Erro ao carregar equipes:', error);
       setState(prev => ({ 
         ...prev, 
         isLoading: false, 
@@ -65,45 +64,66 @@ export function TeamProvider({ children }: TeamProviderProps) {
     } finally {
       loadingTeamsRef.current = false;
     }
-  }, [needsTeamData]);
+  }, []);
 
   // Carregar membros da equipe
   const loadTeamMembers = useCallback(async (teamId: string) => {
-    // Se não estiver em uma rota que precisa de dados de equipe, não fazer requisição
-    if (!needsTeamData || !teamId) return;
+    if (!teamId || loadingMembersRef.current) return;
     
-    // Evitar múltiplas requisições simultâneas para a mesma equipe
-    if (loadingMembersRef.current[teamId] || membersLoadedRef.current[teamId]) return;
+    // Verificar se já carregou esta equipe
+    if (loadedMembersRef.current.has(teamId)) return;
     
-    loadingMembersRef.current[teamId] = true;
+    loadingMembersRef.current = true;
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     
     try {
       const members = await TeamService.getTeamMembers(teamId);
+      
+      // Atualizar o estado com os membros
       setState(prev => ({ ...prev, teamMembers: members, isLoading: false }));
       
-      // Marcar que os membros desta equipe foram carregados
-      membersLoadedRef.current[teamId] = true;
+      // Marcar esta equipe como carregada
+      loadedMembersRef.current.add(teamId);
+      
+      // Se o usuário atual estiver logado, encontrar e definir o membro atual
+      if (user?.email) {
+        const currentMember = members.find(m => m.email === user.email) || null;
+        setState(prev => ({ ...prev, currentMember }));
+      }
     } catch (error: any) {
-      console.error('Erro ao carregar membros da equipe:', error);
       setState(prev => ({ 
         ...prev, 
         isLoading: false, 
         error: error.message || 'Erro ao carregar membros da equipe' 
       }));
     } finally {
-      loadingMembersRef.current[teamId] = false;
+      loadingMembersRef.current = false;
     }
-  }, [needsTeamData]);
+  }, [user?.email]);
 
-  // Resetar os refs quando a rota mudar
-  useEffect(() => {
-    if (!needsTeamData) {
-      // Se não estiver em uma rota que precisa de dados de equipe, limpar o estado
-      teamsLoadedRef.current = false;
-      membersLoadedRef.current = {};
+  // Obter o membro atual
+  const getCurrentMember = useCallback(async (teamId: string, userEmail: string): Promise<TeamMember | null> => {
+    if (!teamId || !userEmail) return null;
+    
+    try {
+      // Primeiro, verificar se já temos o membro no estado
+      const memberInState = state.teamMembers.find(m => m.email === userEmail && m.team_id === teamId);
+      if (memberInState) return memberInState;
+      
+      // Se não, buscar do servidor
+      const member = await TeamService.getTeamMember(teamId, userEmail);
+      
+      // Atualizar o estado se encontrou o membro
+      if (member) {
+        setState(prev => ({ ...prev, currentMember: member }));
+      }
+      
+      return member;
+    } catch (error) {
+      console.error('Erro ao obter membro atual:', error);
+      return null;
     }
-  }, [pathname, needsTeamData]);
+  }, [state.teamMembers]);
 
   // Criar uma nova equipe
   const createTeam = useCallback(async (
@@ -114,24 +134,22 @@ export function TeamProvider({ children }: TeamProviderProps) {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     
     try {
-      // Criar a equipe
       const team = await TeamService.createTeam(
         data.name,
         userId,
         userEmail,
         data.team_size
       );
-      
-      // Adicionar o criador como membro/líder
+
+      // O criador da equipe começa como "invited" (não "answered")
       await TeamService.addTeamMember(
         team.id,
         userId,
         userEmail,
         data.role as 'leader' | 'member',
-        'registered'
+        'invited'
       );
       
-      // Atualizar o estado
       setState(prev => ({ 
         ...prev, 
         teams: [...prev.teams, team],
@@ -139,15 +157,11 @@ export function TeamProvider({ children }: TeamProviderProps) {
         isLoading: false 
       }));
       
-      // Resetar os refs para permitir carregar membros da nova equipe
-      membersLoadedRef.current[team.id] = false;
-      
       // Carregar membros da nova equipe
       loadTeamMembers(team.id);
       
       return team;
     } catch (error: any) {
-      console.error('Erro ao criar equipe:', error);
       setState(prev => ({ 
         ...prev, 
         isLoading: false, 
@@ -163,22 +177,22 @@ export function TeamProvider({ children }: TeamProviderProps) {
     userId: string | null,
     email: string,
     role: 'leader' | 'member',
-    status: 'invited' | 'registered' | 'respondido'
+    status: TeamMemberStatus
   ) => {
     setState(prev => ({ ...prev, isLoading: true, error: null }));
     
     try {
-      await TeamService.addTeamMember(teamId, userId, email, role, status);
+      // Membros convidados sempre começam com status "invited"
+      const memberStatus = userId ? status : 'invited';
       
-      // Resetar o ref para permitir carregar membros novamente
-      membersLoadedRef.current[teamId] = false;
+      await TeamService.addTeamMember(teamId, userId, email, role, memberStatus);
       
-      // Recarregar membros da equipe
+      // Forçar recarregamento dos membros
+      loadedMembersRef.current.delete(teamId);
       await loadTeamMembers(teamId);
       
       setState(prev => ({ ...prev, isLoading: false }));
     } catch (error: any) {
-      console.error('Erro ao adicionar membro:', error);
       setState(prev => ({ 
         ...prev, 
         isLoading: false, 
@@ -191,32 +205,58 @@ export function TeamProvider({ children }: TeamProviderProps) {
   // Selecionar uma equipe
   const selectTeam = useCallback((teamId: string) => {
     const team = state.teams.find(t => t.id === teamId);
-    
-    if (team) {
+    if (team && team.id !== state.selectedTeam?.id) {
       setState(prev => ({ ...prev, selectedTeam: team }));
-      
-      // Carregar membros apenas se ainda não foram carregados
-      if (!membersLoadedRef.current[teamId]) {
-        loadTeamMembers(teamId);
-      }
+      loadTeamMembers(team.id);
     }
-  }, [state.teams, loadTeamMembers]);
+  }, [state.teams, state.selectedTeam?.id, loadTeamMembers]);
+
+  // Atualizar status do membro
+  const updateMemberStatus = useCallback(async (
+    teamId: string,
+    email: string,
+    status: TeamMemberStatus
+  ) => {
+    try {
+      await TeamService.updateMemberStatus(teamId, email, status);
+      
+      // Atualizar o estado local
+      setState(prev => ({
+        ...prev,
+        teamMembers: prev.teamMembers.map(member => 
+          member.team_id === teamId && member.email === email
+            ? { ...member, status }
+            : member
+        ),
+        currentMember: prev.currentMember && prev.currentMember.team_id === teamId && prev.currentMember.email === email
+          ? { ...prev.currentMember, status }
+          : prev.currentMember
+      }));
+      
+      // Forçar recarregamento dos membros
+      loadedMembersRef.current.delete(teamId);
+    } catch (error) {
+      console.error('Erro ao atualizar status do membro:', error);
+      throw error;
+    }
+  }, []);
 
   // Gerar mensagem de convite
   const generateInviteMessage = useCallback((teamName: string, fromEmail: string) => {
     return TeamService.generateInviteMessage(teamName, fromEmail);
   }, []);
 
-  // Método para resetar o estado de carregamento de equipes
+  // Resetar estado de carregamento de equipes
   const resetTeamsLoaded = useCallback(() => {
-    teamsLoadedRef.current = false;
+    loadingTeamsRef.current = false;
   }, []);
 
-  // Método para resetar o estado de carregamento de membros de uma equipe
+  // Resetar estado de carregamento de membros
   const resetMembersLoaded = useCallback((teamId: string) => {
     if (teamId) {
-      membersLoadedRef.current[teamId] = false;
+      loadedMembersRef.current.delete(teamId);
     }
+    loadingMembersRef.current = false;
   }, []);
 
   return (
@@ -225,12 +265,14 @@ export function TeamProvider({ children }: TeamProviderProps) {
         ...state,
         loadUserTeams,
         loadTeamMembers,
+        getCurrentMember,
         createTeam,
         addTeamMember,
         selectTeam,
         generateInviteMessage,
+        updateMemberStatus,
         resetTeamsLoaded,
-        resetMembersLoaded,
+        resetMembersLoaded
       }}
     >
       {children}

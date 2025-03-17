@@ -25,7 +25,7 @@ export class EmailService {
     try {
       const { data, error } = await supabase
         .from('email_logs')
-        .select('status')
+        .select('*')
         .eq('id', emailId)
         .single();
 

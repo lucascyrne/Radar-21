@@ -90,7 +90,7 @@ export class RadarService {
     try {
       // Filtrar apenas membros que responderam ao questionário
       const completedMembers = teamMembers.filter(
-        member => member.status === 'completed' || member.status === 'respondido'
+        member => member.status === 'answered'
       );
       
       if (completedMembers.length === 0) {

@@ -36,7 +36,7 @@ export class TeamService {
 
       const { data, error } = await supabase
         .from('users')
-        .select('id')
+        .select('*')
         .eq('email', email)
         .maybeSingle();
       
@@ -84,18 +84,16 @@ export class TeamService {
           team_size: teamSize,
         })
         .select('*')
-        .single();
-
+        .single()
+      
       if (error) {
         console.error('Erro ao criar equipe:', error);
         throw new Error(`Erro ao criar equipe: ${error.message}`);
       }
 
-      // Invalidar cache de equipes para este usuário
-      cache.teams.delete(ownerId);
 
       return data as Team;
-    } catch (error: any) {
+    } catch (error: any) {      
       console.error('Erro ao criar equipe:', error);
       throw new Error(`Erro ao criar equipe: ${error.message}`);
     }
@@ -113,15 +111,10 @@ export class TeamService {
     teamId: string,
     userId: string | null,
     email: string,
-    role: 'leader' | 'member',
-    status: 'invited' | 'registered' | 'respondido' | 'completed'
+    role: string,
+    status: string
   ): Promise<void> {
-    try {
-      // Se não foi fornecido um userId, tentar buscar pelo email
-      if (!userId) {
-        userId = await TeamService.getUserByEmail(email);
-      }
-
+    try {      
       // Verificar se o membro já existe
       const { data: existingMember, error: checkError } = await supabase
         .from('team_members')
@@ -129,56 +122,60 @@ export class TeamService {
         .eq('team_id', teamId)
         .eq('email', email)
         .maybeSingle();
-
+      
       if (checkError && checkError.code !== 'PGRST116') {
-        throw new Error(`Erro ao verificar membro: ${checkError.message}`);
+        throw checkError;
       }
-
+      
       if (existingMember) {
-        // Se o membro já existe, atualizar seu status e user_id (se disponível)
-        const updateData: any = { status, role };
-        if (userId && !existingMember.user_id) {
-          updateData.user_id = userId;
+        // Se o membro já existe, não rebaixar seu status
+        // Por exemplo, não mudar de "answered" para "invited"
+        let newStatus = status;
+        
+        // Lógica para não rebaixar status
+        if (existingMember.status === 'answered' && status !== 'answered') {
+          newStatus = 'answered';
+        } else if (existingMember.status === 'invited' && status === 'invited') {
+          newStatus = 'invited';
         }
-
+        
+        const updates: any = { status: newStatus };
+        
+        // Atualizar user_id apenas se for fornecido e diferente do atual
+        if (userId && (!existingMember.user_id || existingMember.user_id !== userId)) {
+          updates.user_id = userId;
+        }
+        
         const { error: updateError } = await supabase
           .from('team_members')
-          .update(updateData)
-          .eq('team_id', teamId)
-          .eq('email', email);
-
+          .update(updates)
+          .eq('id', existingMember.id)
+        
         if (updateError) {
-          throw new Error(`Erro ao atualizar membro: ${updateError.message}`);
+          throw updateError;
         }
       } else {
-        // Se o membro não existe, inserir novo registro
-        // Para usuários que ainda não existem, não incluir o user_id para evitar violação de chave estrangeira
-        const memberData: any = {
-          team_id: teamId,
-          email,
-          role,
-          status,
-        };
+        // Se o membro não existe, criar novo
+        // Membros convidados sempre começam com status "invited"
+        const memberStatus = userId ? status : 'invited';
         
-        // Apenas incluir user_id se o usuário existir
-        if (userId) {
-          memberData.user_id = userId;
-        }
-
-        const { error: insertError } = await supabase
+        const { error } = await supabase
           .from('team_members')
-          .insert(memberData);
-
-        if (insertError) {
-          throw new Error(`Erro ao adicionar membro: ${insertError.message}`);
+          .insert({
+            team_id: teamId,
+            user_id: userId,
+            email,
+            role,
+            status: memberStatus
+          })
+        
+        if (error) {
+          throw error;
         }
       }
-
-      // Invalidar cache de membros para esta equipe
-      cache.members.delete(teamId);
-    } catch (error: any) {
+    } catch (error: any) {      
       console.error('Erro ao adicionar membro à equipe:', error);
-      throw new Error(`Erro ao adicionar membro à equipe: ${error.message}`);
+      throw error;
     }
   }
 
@@ -189,25 +186,6 @@ export class TeamService {
    */
   static async getUserTeams(userId: string) {
     try {
-      // Verificar se há dados em cache e se ainda são válidos
-      const cachedData = cache.teams.get(userId);
-      if (cachedData) {
-        const now = Date.now();
-        if (now - cachedData.timestamp < CACHE_EXPIRATION) {
-          return cachedData.data;
-        }
-      }
-
-      // Buscar equipes que o usuário é proprietário
-      const { data: ownedTeams, error: ownedError } = await supabase
-        .from('teams')
-        .select('*')
-        .eq('owner_id', userId);
-
-      if (ownedError) {
-        throw new Error(`Erro ao buscar equipes próprias: ${ownedError.message}`);
-      }
-
       // Buscar associações de equipe do usuário
       const { data: memberships, error: membershipError } = await supabase
         .from('team_members')
@@ -215,46 +193,35 @@ export class TeamService {
         .eq('user_id', userId);
 
       if (membershipError) {
-        throw new Error(`Erro ao buscar associações de equipe: ${membershipError.message}`);
+        console.error('Erro ao buscar equipes do usuário:', membershipError);
+        throw new Error(membershipError.message);
       }
 
-      // Buscar equipes das quais o usuário é membro
-      const memberTeamIds = memberships.map(m => m.team_id);
-      let memberTeams: any[] = [];
-
-      if (memberTeamIds.length > 0) {
+      // Buscar as equipes completas
+      if (memberships && memberships.length > 0) {
+        const teamIds = memberships.map(m => m.team_id);
         const { data: teams, error: teamsError } = await supabase
           .from('teams')
           .select('*')
-          .in('id', memberTeamIds);
-
+          .in('id', teamIds);
+          
         if (teamsError) {
-          throw new Error(`Erro ao buscar equipes de membro: ${teamsError.message}`);
+          throw teamsError;
         }
-
-        memberTeams = teams || [];
+        
+        return {
+          memberships: memberships || [],
+          teams: teams || []
+        };
       }
 
-      // Combinar equipes próprias e equipes de membro, removendo duplicatas
-      const allTeams = [...ownedTeams];
-      memberTeams.forEach(team => {
-        if (!allTeams.some(t => t.id === team.id)) {
-          allTeams.push(team);
-        }
-      });
-
-      const result = { teams: allTeams, memberships };
-
-      // Armazenar resultado em cache
-      cache.teams.set(userId, {
-        data: result,
-        timestamp: Date.now()
-      });
-
-      return result;
+      return {
+        memberships: memberships || [],
+        teams: []
+      };
     } catch (error: any) {
       console.error('Erro ao buscar equipes do usuário:', error);
-      throw new Error(`Erro ao buscar equipes do usuário: ${error.message}`);
+      throw error;
     }
   }
 
@@ -265,6 +232,10 @@ export class TeamService {
    */
   static async getTeamMembers(teamId: string): Promise<TeamMember[]> {
     try {
+      if (!teamId) {
+        return [];
+      }
+      
       // Verificar se há dados em cache e se ainda são válidos
       const cachedData = cache.members.get(teamId);
       if (cachedData) {
@@ -277,22 +248,24 @@ export class TeamService {
       const { data, error } = await supabase
         .from('team_members')
         .select('*')
-        .eq('team_id', teamId);
+        .eq('team_id', teamId)
 
       if (error) {
         throw new Error(`Erro ao buscar membros da equipe: ${error.message}`);
       }
+      
+      const members = data || [];
 
       // Armazenar resultado em cache
       cache.members.set(teamId, {
-        data: data as TeamMember[],
+        data: members as TeamMember[],
         timestamp: Date.now()
       });
 
-      return data as TeamMember[];
-    } catch (error: any) {
+      return members as TeamMember[];
+    } catch (error: any) {    
       console.error('Erro ao buscar membros da equipe:', error);
-      throw new Error(`Erro ao buscar membros da equipe: ${error.message}`);
+      return [];
     }
   }
 
@@ -315,7 +288,7 @@ export class TeamService {
   static async updateMemberStatus(
     teamId: string,
     email: string,
-    status: 'invited' | 'registered' | 'respondido' | 'completed'
+    status: 'invited' | 'answered'
   ): Promise<void> {
     try {
       const { error } = await supabase
@@ -333,6 +306,39 @@ export class TeamService {
     } catch (error: any) {
       console.error('Erro ao atualizar status do membro:', error);
       throw new Error(`Erro ao atualizar status do membro: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtém um membro específico da equipe
+   * @param teamId ID da equipe
+   * @param email Email do membro
+   * @returns Dados do membro ou null se não encontrado
+   */
+  static async getTeamMember(teamId: string, email: string): Promise<TeamMember | null> {
+    try {
+      if (!teamId || !email) {
+        return null;
+      }
+      
+      const { data, error } = await supabase
+        .from('team_members')
+        .select('*')
+        .eq('team_id', teamId)
+        .eq('email', email)
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') {
+          return null; // Membro não encontrado
+        }
+        throw new Error(`Erro ao buscar membro da equipe: ${error.message}`);
+      }
+      
+      return data as TeamMember;
+    } catch (error: any) {    
+      console.error('Erro ao buscar membro da equipe:', error);
+      return null;
     }
   }
 } 

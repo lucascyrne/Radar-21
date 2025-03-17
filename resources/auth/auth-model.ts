@@ -16,6 +16,9 @@ export interface User {
   raw_app_meta_data?: {
     is_temp?: boolean;
   };
+  app_metadata?: Record<string, any>;
+  user_metadata?: Record<string, any>;
+  aud?: string;
 }
 
 export enum UserRole {

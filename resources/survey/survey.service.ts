@@ -159,7 +159,7 @@ export class SurveyService {
       // Verificar se já existem respostas
       const { data: existingResponses } = await supabase
         .from('survey_responses')
-        .select('id')
+        .select('*')
         .eq('team_member_id', teamMemberId)
         .maybeSingle();
 
@@ -200,7 +200,7 @@ export class SurveyService {
         result = newResponses;
       }
 
-      // Não atualizamos o status para completed aqui, pois isso deve ocorrer apenas após as perguntas abertas
+      // Não atualizamos o status para answered aqui, pois isso deve ocorrer apenas após as perguntas abertas
       // O status será atualizado na página de open-questions após o usuário completar todas as etapas
 
       return result as SurveyResponses;
@@ -245,7 +245,7 @@ export class SurveyService {
       // Verificar se já existem respostas
       const { data: existingResponses } = await supabase
         .from('open_question_responses')
-        .select('id')
+        .select('*')
         .eq('team_member_id', teamMemberId)
         .maybeSingle();
 
@@ -302,7 +302,7 @@ export class SurveyService {
     try {
       const { data, error } = await supabase
         .from('team_members')
-        .select('status')
+        .select('*')
         .eq('id', teamMemberId)
         .single();
       
@@ -323,7 +323,7 @@ export class SurveyService {
    * @param teamMemberId ID do membro da equipe
    * @param status Novo status
    */
-  static async updateMemberStatus(teamMemberId: string, status: 'enviado' | 'cadastrado' | 'respondido'): Promise<void> {
+  static async updateMemberStatus(teamMemberId: string, status: 'invited' | 'answered'): Promise<void> {
     try {
       // Verificar o status atual
       const currentStatus = await this.checkMemberStatus(teamMemberId);
@@ -332,17 +332,14 @@ export class SurveyService {
       // Mapear status em português para inglês (conforme constraint do banco)
       let dbStatus: string;
       switch (status.trim().toLowerCase()) {
-        case 'enviado':
+        case 'invited':
           dbStatus = 'invited'; // 'enviado' corresponde a 'invited'
           break;
-        case 'cadastrado':
-          dbStatus = 'registered'; // 'cadastrado' corresponde a 'registered'
-          break;
-        case 'respondido':
-          dbStatus = 'completed'; // 'respondido' corresponde a 'completed'
+        case 'answered':
+          dbStatus = 'answered'; // 'cadastrado' corresponde a 'answered'
           break;
         default:
-          throw new Error(`Status inválido: ${status}. Deve ser 'enviado', 'cadastrado' ou 'respondido'.`);
+          throw new Error(`Status inválido: ${status}. Deve ser 'invited' ou 'answered'.`);
       }
       
       // Se o status atual for igual ao novo status mapeado, não fazer nada
@@ -412,7 +409,7 @@ export class SurveyService {
       // Verificar perfil
       const { data: profile, error: profileError } = await supabase
         .from('user_profiles')
-        .select('id')
+        .select('*')
         .eq('team_member_id', teamMemberId)
         .single();
       
@@ -421,7 +418,7 @@ export class SurveyService {
       // Verificar respostas do questionário
       const { data: surveyResponses, error: surveyError } = await supabase
         .from('survey_responses')
-        .select('id')
+        .select('*')
         .eq('team_member_id', teamMemberId)
         .single();
       
@@ -430,7 +427,7 @@ export class SurveyService {
       // Verificar respostas das perguntas abertas
       const { data: openQuestions, error: openError } = await supabase
         .from('open_question_responses')
-        .select('id')
+        .select('*')
         .eq('team_member_id', teamMemberId)
         .single();
       

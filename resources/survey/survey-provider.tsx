@@ -23,6 +23,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
   const [state, setState] = useState<SurveyState>(initialSurveyState);
   const { user } = useAuth();
   const { selectedTeam, teamMembers, loadTeamMembers } = useTeam();
+  const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
 
   // Método para atualizar o estado de loading e erro
   const updateLoading = useCallback((isLoading: boolean, error: string | null = null) => {
@@ -62,7 +63,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       if (!member) {
         const { data, error } = await supabase
           .from('team_members')
-          .select('id')
+          .select('*')
           .eq('team_id', teamId)
           .eq('email', user.email)
           .single();
@@ -78,7 +79,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
               status: 'cadastrado', // Marcar como cadastrado
               user_id: user.id
             })
-            .select('id')
+            .select('*')
             .single();
           
           if (insertError) {
@@ -107,7 +108,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       updateLoading(false, error.message || 'Erro ao buscar ID do membro da equipe');
       return null;
     }
-  }, [user, selectedTeam, teamMembers, loadTeamMembers, updateLoading, updateTeamMemberId]);
+  }, [user, selectedTeam, teamMembers, updateLoading, updateTeamMemberId]);
 
   // Carregar dados do perfil do usuário
   const loadProfile = useCallback(async () => {
@@ -132,15 +133,17 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       updateLoading(false, error.message || 'Erro ao carregar perfil');
       return null;
     }
-  }, [state.teamMemberId, fetchTeamMemberId, updateLoading]);
+  }, [state.teamMemberId, updateLoading]);
 
   // Salvar perfil do usuário
   const saveProfile = useCallback(async (data: ProfileFormValues) => {
     try {
       updateLoading(true);
+
+      console.log('state.teamMemberId', state.teamMemberId);
       
       // Garantir que temos o ID do membro da equipe
-      const teamMemberId = state.teamMemberId || await fetchTeamMemberId();
+      const teamMemberId = await fetchTeamMemberId();
       
       if (!teamMemberId) {
         throw new Error("ID do membro da equipe não encontrado");
@@ -158,7 +161,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       updateLoading(false, error.message || 'Erro ao salvar perfil');
       return null;
     }
-  }, [state.teamMemberId, fetchTeamMemberId, updateLoading, updateTeamMemberId]);
+  }, [state.teamMemberId, updateLoading, updateTeamMemberId]);
 
   // Carregar respostas do questionário
   const loadSurveyResponses = useCallback(async () => {
@@ -183,7 +186,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       updateLoading(false, error.message || 'Erro ao carregar respostas do questionário');
       return null;
     }
-  }, [state.teamMemberId, fetchTeamMemberId, updateLoading]);
+  }, [state.teamMemberId, updateLoading]);
 
   // Salvar respostas do questionário
   const saveSurveyResponses = useCallback(async (data: SurveyFormValues) => {
@@ -208,7 +211,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       updateLoading(false, error.message || 'Erro ao salvar respostas do questionário');
       throw error;
     }
-  }, [state.teamMemberId, fetchTeamMemberId, updateLoading]);
+  }, [state.teamMemberId, updateLoading]);
 
   // Carregar respostas das perguntas abertas
   const loadOpenQuestionResponses = useCallback(async () => {
@@ -233,7 +236,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       updateLoading(false, error.message || 'Erro ao carregar respostas das perguntas abertas');
       return null;
     }
-  }, [state.teamMemberId, fetchTeamMemberId, updateLoading]);
+  }, [state.teamMemberId, updateLoading]);
 
   // Salvar respostas das perguntas abertas
   const saveOpenQuestionResponses = useCallback(async (data: OpenQuestionResponses) => {
@@ -254,23 +257,23 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       // Após salvar as perguntas abertas, verificamos se todas as etapas estão completas
       const isComplete = await SurveyService.checkSurveyCompletion(teamMemberId);
       
-      // Se estiver completo, atualizamos o status para completed
+      // Se estiver completo, atualizamos o status para answered
       if (isComplete) {
         try {
           // Obter dados do membro da equipe
           const { data: memberData, error: memberError } = await supabase
             .from('team_members')
-            .select('team_id, email, status')
+            .select('*')
             .eq('id', teamMemberId)
             .single();
             
           if (memberError) {
             console.error('Erro ao buscar dados do membro:', memberError);
-          } else if (memberData && memberData.status !== 'completed') {
-            // Atualizar o status para completed
+          } else if (memberData && memberData.status !== 'answered') {
+            // Atualizar o status para answered
             const { error: updateError } = await supabase
               .from('team_members')
-              .update({ status: 'completed' })
+              .update({ status: 'answered' })
               .eq('id', teamMemberId);
               
             if (updateError) {
@@ -278,13 +281,13 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
               
               // Tentar uma abordagem alternativa
               try {
-                await SurveyService.updateMemberStatus(teamMemberId, 'respondido');
+                await SurveyService.updateMemberStatus(teamMemberId, 'answered');
               } catch (statusError) {
                 console.error('Erro ao atualizar status via service:', statusError);
               }
             }
             
-            console.log(`Status do membro ${teamMemberId} atualizado para 'completed'`);
+            console.log(`Status do membro ${teamMemberId} atualizado para 'answered'`);
           }
         } catch (statusError) {
           console.error('Erro ao atualizar status:', statusError);
@@ -298,7 +301,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       updateLoading(false, error.message || 'Erro ao salvar respostas das perguntas abertas');
       throw error;
     }
-  }, [state.teamMemberId, fetchTeamMemberId, updateLoading]);
+  }, [state.teamMemberId, updateLoading]);
   
   // Alias para compatibilidade com a página de perguntas abertas
   const saveOpenQuestions = useCallback(async (data: OpenQuestionsFormValues) => {
@@ -323,8 +326,8 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       if (isComplete) {
         // Atualizar o status do membro para "respondido"
         try {
-          await SurveyService.updateMemberStatus(teamMemberId, 'respondido');
-          console.log("Status do membro atualizado para 'respondido'");
+          await SurveyService.updateMemberStatus(teamMemberId, 'answered');
+          console.log("Status do membro atualizado para 'answered'");
         } catch (statusError: any) {
           console.error("Erro ao atualizar status do membro:", statusError);
           
@@ -334,7 +337,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
             const { error } = await supabase
               .from('team_members')
               .update({ 
-                status: 'completed', // Usar 'completed' em vez de 'respondido'
+                status: 'answered',
                 updated_at: new Date().toISOString() 
               })
               .eq('id', teamMemberId);
@@ -357,34 +360,20 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       updateLoading(false, error.message || 'Erro ao verificar conclusão das etapas');
       return false;
     }
-  }, [state.teamMemberId, fetchTeamMemberId, updateLoading]);
+  }, [state.teamMemberId, updateLoading]);
 
-  // Inicializar o provider
+  // Efeito para carregar o ID do membro da equipe do localStorage
   useEffect(() => {
-    if (user?.email) {
-      fetchTeamMemberId();
+    const storedMemberId = localStorage.getItem('teamMemberId');
+    if (storedMemberId) {
+      setTeamMemberId(storedMemberId);
     }
-  }, [user, fetchTeamMemberId]);
+  }, []);
 
-  // Carregar dados do localStorage ao inicializar
-  useEffect(() => {
-    const loadFromLocalStorage = () => {
-      try {
-        // Carregar perfil
-        const profileStr = localStorage.getItem('userProfile');
-        if (profileStr) {
-          const profile = JSON.parse(profileStr);
-          setState(prevState => ({
-            ...prevState,
-            profile
-          }));
-        }
-      } catch (error) {
-        console.error('Erro ao carregar dados do localStorage:', error);
-      }
-    };
-
-    loadFromLocalStorage();
+  // Função para definir o ID do membro da equipe
+  const handleSetTeamMemberId = useCallback((id: string) => {
+    setTeamMemberId(id);
+    localStorage.setItem('teamMemberId', id);
   }, []);
 
   // Criar o valor do contexto
@@ -400,7 +389,9 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
     completeAllSteps,
     updateLoading,
     fetchTeamMemberId,
-    updateTeamMemberId
+    updateTeamMemberId,
+    teamMemberId,
+    setTeamMemberId: handleSetTeamMemberId
   };
 
   return (
