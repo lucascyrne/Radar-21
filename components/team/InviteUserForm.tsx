@@ -8,6 +8,7 @@ import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/resources/auth/auth-hook';
 import { useTeam } from '@/resources/team/team-hook';
 import { TeamService } from '@/resources/team/team.service';
+import { supabase } from '@/resources/auth/auth.service';
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,7 +21,7 @@ import {
   FormLabel,
   FormMessage,
 } from '@/components/ui/form';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 
 // Schema para validação do formulário
 const inviteFormSchema = z.object({
@@ -32,14 +33,29 @@ type InviteFormValues = z.infer<typeof inviteFormSchema>;
 
 interface InviteUserFormProps {
   teamId: string;
-  onSuccess?: () => void;
+  teamName: string;
+  ownerEmail: string;
+  onInviteSent: () => void;
+  existingMembers: Array<{
+    id: string;
+    email: string;
+    status: string;
+    created_at: string;
+  }>;
 }
 
-export function InviteUserForm({ teamId, onSuccess }: InviteUserFormProps) {
+export default function InviteUserForm({ 
+  teamId, 
+  teamName, 
+  ownerEmail, 
+  onInviteSent,
+  existingMembers 
+}: InviteUserFormProps) {
   const { user } = useAuth();
   const { addTeamMember, loadTeamMembers, teamMembers, generateInviteMessage } = useTeam();
   const { toast } = useToast();
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [resendingTo, setResendingTo] = useState<string | null>(null);
 
   // Configurar formulário com react-hook-form
   const form = useForm<InviteFormValues>({
@@ -106,6 +122,7 @@ export function InviteUserForm({ teamId, onSuccess }: InviteUserFormProps) {
           inviteUrl,
           message: data.message,
           teamId,
+          teamName,
         }),
       });
 
@@ -133,9 +150,7 @@ export function InviteUserForm({ teamId, onSuccess }: InviteUserFormProps) {
       });
 
       // Chamar callback de sucesso, se fornecido
-      if (onSuccess) {
-        onSuccess();
-      }
+      onInviteSent();
     } catch (error: any) {
       console.error("Erro ao enviar convite:", error);
       toast({
@@ -148,12 +163,105 @@ export function InviteUserForm({ teamId, onSuccess }: InviteUserFormProps) {
     }
   };
 
+  // Função para reenviar convite
+  const handleResendInvite = async (email: string) => {
+    setResendingTo(email);
+    
+    try {
+      // Enviar email de convite novamente
+      const response = await fetch('/api/send-invite', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          teamId,
+          teamName,
+          ownerEmail,
+          recipientEmail: email,
+          message: `Olá! Este é um lembrete para participar da equipe "${teamName}" no Radar21, uma plataforma para avaliação de competências de liderança.`,
+          isResend: true,
+        }),
+      });
+      
+      if (!response.ok) {
+        throw new Error('Falha ao reenviar convite');
+      }
+      
+      // Notificar sucesso
+      toast({
+        title: "Convite reenviado",
+        description: `Um novo convite foi enviado para ${email}`,
+      });
+      
+      // Atualizar a data de envio do convite
+      await supabase
+        .from('team_members')
+        .update({ created_at: new Date().toISOString() })
+        .eq('team_id', teamId)
+        .eq('email', email);
+      
+      onInviteSent(); // Atualizar a lista
+    } catch (error: any) {
+      console.error('Erro ao reenviar convite:', error);
+      toast({
+        title: "Erro ao reenviar convite",
+        description: error.message || "Ocorreu um erro ao reenviar o convite.",
+        variant: "destructive",
+      });
+    } finally {
+      setResendingTo(null);
+    }
+  };
+
+  // Renderizar membros pendentes com opção de reenvio
+  const renderPendingMembers = () => {
+    const pendingMembers = existingMembers.filter(member => 
+      member.status === 'enviado'
+    );
+    
+    if (pendingMembers.length === 0) return null;
+    
+    return (
+      <div className="mt-6">
+        <h3 className="text-sm font-medium mb-2">Convites pendentes:</h3>
+        <div className="space-y-2">
+          {pendingMembers.map(member => {
+            // Calcular tempo desde o envio do convite
+            const sentDate = new Date(member.created_at);
+            const now = new Date();
+            const daysSinceInvite = Math.floor((now.getTime() - sentDate.getTime()) / (1000 * 60 * 60 * 24));
+            
+            return (
+              <div key={member.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+                <div>
+                  <p className="text-sm font-medium">{member.email}</p>
+                  <p className="text-xs text-gray-500">
+                    Enviado {daysSinceInvite === 0 ? 'hoje' : `há ${daysSinceInvite} dia${daysSinceInvite !== 1 ? 's' : ''}`}
+                  </p>
+                </div>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={() => handleResendInvite(member.email)}
+                  disabled={resendingTo === member.email || daysSinceInvite < 1} // Permitir reenvio apenas após 1 dia
+                >
+                  {resendingTo === member.email ? 'Reenviando...' : 'Reenviar'}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
   return (
     <Card>
       <CardHeader>
         <CardTitle>Convidar Membro</CardTitle>
         <CardDescription>
-          Envie um convite por email para adicionar novos membros à sua equipe.
+          Envie um convite para um novo membro participar da sua equipe.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -196,7 +304,12 @@ export function InviteUserForm({ teamId, onSuccess }: InviteUserFormProps) {
             </Button>
           </form>
         </Form>
+        
+        {renderPendingMembers()}
       </CardContent>
+      <CardFooter className="text-xs text-gray-500">
+        Os convites expiram após 7 dias se não forem aceitos.
+      </CardFooter>
     </Card>
   );
 } 

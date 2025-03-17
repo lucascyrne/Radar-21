@@ -6,11 +6,11 @@ import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 
-interface TeamMembersListProps {
+interface TeamMembersDetailProps {
   teamId: string;
 }
 
-export function TeamMembersList({ teamId }: TeamMembersListProps) {
+export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
   const [members, setMembers] = useState<User[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +28,8 @@ export function TeamMembersList({ teamId }: TeamMembersListProps) {
 
   // Função para carregar os membros da equipe
   const loadTeamMembers = async () => {
+    if (!teamId) return;
+    
     setIsLoading(true);
     try {
       const { data, error } = await supabase
@@ -47,11 +49,11 @@ export function TeamMembersList({ teamId }: TeamMembersListProps) {
   };
 
   // Carregar membros da equipe quando o componente for montado
-  useEffect(() => {
-    if (teamId) {
-      loadTeamMembers();
-    }
-  }, [teamId]);
+  // useEffect(() => {
+  //   if (teamId) {
+  //     loadTeamMembers();
+  //   }
+  // }, [teamId]);
 
   // Configurar um listener para atualizações em tempo real
   useEffect(() => {

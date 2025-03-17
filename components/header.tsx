@@ -11,7 +11,7 @@ import { useEffect, useState, memo } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
 
 // Lista de rotas que precisam do link de Team Setup
-const TEAM_ROUTES = ['/team-setup', '/profile', '/survey', '/open-questions', '/results'];
+const TEAM_ROUTES = ['/team-setup', '/profile-survey', '/survey', '/open-questions', '/results'];
 
 // Componente memoizado para evitar renderizações desnecessárias
 export const Header = memo(function Header() {
@@ -42,11 +42,10 @@ export const Header = memo(function Header() {
     return parts[0].substring(0, 2).toUpperCase()
   }
   
-  // Obter o nome de exibição do usuário
-  const getDisplayName = (email: string | null | undefined) => {
-    if (!email) return "Usuário"
-    const parts = email.split('@')
-    return parts[0]
+  // Obter o nome de exibição do usuário caso tenha se não usar o email
+  const getDisplayName = (name: string | null | undefined) => {
+    if (!name) return "Usuário"
+    return name
   }
 
   // Conteúdo de navegação
@@ -80,7 +79,7 @@ export const Header = memo(function Header() {
           {user ? (
             <div className="flex items-center space-x-4">
               <span className="text-sm font-medium">
-                Bem-vindo, {getDisplayName(user.email)}
+                Bem-vindo, {getDisplayName(user.name)}
               </span>
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
