@@ -21,6 +21,7 @@ import { SetupProgress } from '@/components/team/setup-progress';
 import { CreateTeamForm } from '@/components/team/create-team-form';
 import { TeamList } from '@/components/team/team-list';
 import { TeamDetails } from '@/components/team/team-details';
+import InviteUserForm from '@/components/team/invite-user-form';
 
 export default function TeamSetupPage() {
   const router = useRouter();
@@ -36,7 +37,8 @@ export default function TeamSetupPage() {
     selectTeam,
     generateInviteMessage,
     resetTeamsLoaded,
-    resetMembersLoaded
+    resetMembersLoaded,
+    loadTeamMembers
   } = useTeam();
   
   const { toast } = useToast();
@@ -144,46 +146,43 @@ export default function TeamSetupPage() {
   }, [user, createTeam, toast, resetTeamsLoaded]);
 
   const handleSendInvite = useCallback(async (email: string) => {
-    if (!selectedTeam || !inviteMessage) return;
-    
     setIsSendingInvite(true);
-    
     try {
-      const inviteUrl = `${window.location.origin}/auth?invite=${selectedTeam.id}`;
+      if (!selectedTeam || !user?.email) return;
       
-      const response = await fetch('/api/send-invite', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+      const inviteUrl = `${window.location.origin}/auth?invite=${selectedTeam.id}&email=${encodeURIComponent(email)}`;
+      
+      await fetch("/api/send-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email,
           inviteUrl,
           message: inviteMessage,
           teamId: selectedTeam.id,
+          teamName: selectedTeam.name,
+          invitedBy: user.email
         }),
       });
-      
-      if (!response.ok) {
-        throw new Error('Erro ao enviar convite');
-      }
-      
+
+      // Forçar recarregamento dos membros
       resetMembersLoaded(selectedTeam.id);
+      await loadTeamMembers(selectedTeam.id);
       
       toast({
-        title: "Convite enviado com sucesso!",
+        title: "Convite enviado",
         description: "O membro foi adicionado à equipe e recebeu um email de convite.",
       });
     } catch (error: any) {
       toast({
         title: "Erro ao enviar convite",
-        description: error.message || "Ocorreu um erro ao enviar o convite. Tente novamente.",
-        variant: "destructive"
+        description: error.message || "Ocorreu um erro ao enviar o convite.",
+        variant: "destructive",
       });
     } finally {
       setIsSendingInvite(false);
     }
-  }, [selectedTeam, inviteMessage, resetMembersLoaded, toast]);
+  }, [selectedTeam, user?.email, inviteMessage, toast, resetMembersLoaded, loadTeamMembers]);
 
   const handleTabChange = useCallback((value: string) => {
     setActiveTab(value);
@@ -191,10 +190,17 @@ export default function TeamSetupPage() {
 
   const handleContinue = useCallback(() => {
     if (selectedTeam) {
+      // Persistir o ID da equipe
       localStorage.setItem("teamId", selectedTeam.id);
       
       // Encontrar o membro atual
       const currentMember = teamMembers.find(m => m.email === user?.email);
+      
+      // Persistir o ID do membro se disponível
+      if (currentMember?.id) {
+        localStorage.setItem("teamMemberId", currentMember.id);
+      }
+      
       const hasAnswered = currentMember?.status === 'answered';
       
       // Redirecionar com base no status
@@ -259,17 +265,19 @@ export default function TeamSetupPage() {
                 />
 
                 {selectedTeam && (
-                  <TeamDetails
-                    teamId={selectedTeam.id}
-                    members={teamMembers}
-                    currentUserEmail={user?.email || null}
-                    surveyStatus={surveyStatus}
-                    inviteMessage={inviteMessage}
-                    onInviteMessageChange={setInviteMessage}
-                    onSendInvite={handleSendInvite}
-                    isSendingInvite={isSendingInvite}
-                    onContinue={handleContinue}
-                  />
+                  <div className="space-y-6 mt-6">
+                    <TeamDetails
+                      teamId={selectedTeam.id}
+                      members={teamMembers}
+                      currentUserEmail={user?.email || null}
+                      surveyStatus={surveyStatus}
+                      onContinue={handleContinue}
+                      inviteMessage={inviteMessage}
+                      onInviteMessageChange={setInviteMessage}
+                      onSendInvite={handleSendInvite}
+                      isSendingInvite={isSendingInvite}
+                    />
+                  </div>
                 )}
               </>
             )}

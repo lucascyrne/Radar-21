@@ -15,6 +15,7 @@ import { useSurvey } from "@/resources/survey/survey-hook"
 import { surveySchema, SurveyFormValues } from "@/resources/survey/survey-model"
 import { useAuth } from "@/resources/auth/auth-hook"
 import { SetupProgress } from '@/components/team/setup-progress'
+import { useTeam } from "@/resources/team/team-hook"
 
 // Definição das perguntas do questionário
 const questions = [
@@ -93,7 +94,8 @@ export default function Survey() {
   const router = useRouter()
   const { toast } = useToast()
   const { user } = useAuth()
-  const surveyContext = useSurvey()
+  const { selectedTeam, currentMember, loadTeamMembers } = useTeam()
+  const { surveyResponses, error, loading, saveSurveyResponses, updateTeamMemberId } = useSurvey()
   const [currentStep, setCurrentStep] = useState(1)
   const [progress, setProgress] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -117,40 +119,71 @@ export default function Survey() {
     },
   })
 
+  // Verificar se o usuário está em uma equipe e carregar membros
+  useEffect(() => {
+    const teamId = localStorage.getItem("teamId") || selectedTeam?.id;
+    
+    if (!teamId) {
+      router.push("/team-setup");
+      return;
+    }
+    
+    if (teamId && user?.email) {
+      // Carregar membros da equipe para garantir que temos o currentMember
+      loadTeamMembers(teamId);
+    }
+  }, [user?.email, selectedTeam?.id, loadTeamMembers, router]);
+
+  // Definir o ID do membro da equipe quando disponível
+  useEffect(() => {
+    // Verificar primeiro no currentMember
+    if (currentMember?.id &&  updateTeamMemberId) {
+      updateTeamMemberId(currentMember.id);
+      localStorage.setItem("teamMemberId", currentMember.id);
+      return;
+    }
+    
+    // Se não temos currentMember, verificar no localStorage
+    const storedMemberId = localStorage.getItem("teamMemberId");
+    if (storedMemberId && updateTeamMemberId) {
+      updateTeamMemberId(storedMemberId);
+    }
+  }, [currentMember]);
+
   // Carregar respostas salvas, se existirem
   useEffect(() => {
-    if (surveyContext.surveyResponses) {
+    if (surveyResponses) {
       form.reset({
-        q1: surveyContext.surveyResponses.q1?.toString() || "",
-        q2: surveyContext.surveyResponses.q2?.toString() || "",
-        q3: surveyContext.surveyResponses.q3?.toString() || "",
-        q4: surveyContext.surveyResponses.q4?.toString() || "",
-        q5: surveyContext.surveyResponses.q5?.toString() || "",
-        q6: surveyContext.surveyResponses.q6?.toString() || "",
-        q7: surveyContext.surveyResponses.q7?.toString() || "",
-        q8: surveyContext.surveyResponses.q8?.toString() || "",
-        q9: surveyContext.surveyResponses.q9?.toString() || "",
-        q10: surveyContext.surveyResponses.q10?.toString() || "",
-        q11: surveyContext.surveyResponses.q11?.toString() || "",
-        q12: surveyContext.surveyResponses.q12?.toString() || "",
+        q1: surveyResponses.q1?.toString() || "",
+        q2: surveyResponses.q2?.toString() || "",
+        q3: surveyResponses.q3?.toString() || "",
+        q4: surveyResponses.q4?.toString() || "",
+        q5: surveyResponses.q5?.toString() || "",
+        q6: surveyResponses.q6?.toString() || "",
+        q7: surveyResponses.q7?.toString() || "",
+        q8: surveyResponses.q8?.toString() || "",
+        q9: surveyResponses.q9?.toString() || "",
+        q10: surveyResponses.q10?.toString() || "",
+        q11: surveyResponses.q11?.toString() || "",
+        q12: surveyResponses.q12?.toString() || "",
       })
       
       // Calcular o progresso com base nas respostas carregadas
-      const answeredQuestions = Object.values(surveyContext.surveyResponses).filter(val => val !== null && val !== undefined).length
+      const answeredQuestions = Object.values(surveyResponses).filter(val => val !== null && val !== undefined).length
       setProgress((answeredQuestions / questions.length) * 100)
     }
-  }, [surveyContext.surveyResponses, form])
+  }, [])
 
   // Exibir mensagem de erro se houver
   useEffect(() => {
-    if (surveyContext.error) {
+    if (error) {
       toast({
         title: "Erro",
-        description: surveyContext.error,
+        description: error,
         variant: "destructive",
       })
     }
-  }, [surveyContext.error, toast])
+  }, [])
 
   // Atualizar o progresso quando uma resposta é alterada
   useEffect(() => {
@@ -164,11 +197,31 @@ export default function Survey() {
 
   // Função para lidar com o envio do formulário
   const handleSubmit = useCallback(async (data: SurveyFormValues) => {
+    // Verificar se temos o ID do membro da equipe
+    const teamMemberId = currentMember?.id || localStorage.getItem("teamMemberId");
+    
+    if (!teamMemberId) {
+      // Se não temos o ID do membro e temos o currentMember, usar o ID dele
+      if (currentMember?.id) {
+        if (updateTeamMemberId) {
+          updateTeamMemberId(currentMember.id);
+        }
+        localStorage.setItem("teamMemberId", currentMember.id);
+      } else {
+        toast({
+          title: "Erro ao enviar respostas",
+          description: "ID do membro da equipe não encontrado. Por favor, volte à página de perfil e tente novamente.",
+          variant: "destructive"
+        });
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
-      // Salvar respostas - agora passando apenas os dados
-      await surveyContext.saveSurveyResponses(data);
+      // Salvar respostas
+      await saveSurveyResponses(data);
 
       // Atualizar progresso
       setProgress(66);
@@ -178,11 +231,8 @@ export default function Survey() {
         description: "Suas respostas foram salvas. Agora vamos para as perguntas abertas.",
       });
 
-      // Forçar um pequeno atraso antes do redirecionamento para garantir que o estado seja atualizado
-      setTimeout(() => {
-        // Redirecionar para a página de perguntas abertas
-        router.push('/open-questions');
-      }, 500);
+      // Redirecionar para a página de perguntas abertas
+      router.push('/open-questions');
     } catch (error: any) {
       console.error('Erro ao enviar respostas:', error);
       toast({
@@ -193,7 +243,7 @@ export default function Survey() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [surveyContext, toast, router]);
+  }, [currentMember]);
 
   // Função para navegar entre as etapas
   const handleStepChange = (step: number) => {
@@ -274,7 +324,7 @@ export default function Survey() {
             ) : (
               <Button 
                 onClick={form.handleSubmit(handleSubmit)}
-                disabled={isSubmitting || surveyContext.loading}
+                disabled={isSubmitting || loading}
               >
                 {isSubmitting ? "Salvando..." : "Finalizar e Continuar"}
               </Button>

@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { LoginFormValues, RegisterFormValues, loginSchema, registerSchema } from '@/resources/auth/auth-model';
 import { useTeam } from '@/resources/team/team-hook';
 import { supabase } from '@/resources/auth/auth.service';
+import { TeamService } from '@/resources/team/team.service';
 
 // Componentes shadcn/ui
 import { Button } from '@/components/ui/button';
@@ -15,21 +16,25 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 import { Layout } from '@/components/layout';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+import { AlertCircle, Info } from 'lucide-react';
 
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { signInWithGoogle, signInWithEmail, signUpWithEmail, isLoading, isAuthenticated, user, error, clearError } = useAuth();
-  const { addTeamMember } = useTeam();
-
+  const { addTeamMember, loadUserTeams } = useTeam();
   const [activeTab, setActiveTab] = useState<string>("login");
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [localError, setLocalError] = useState<string | null>(null);
+  const [localLoading, setLocalLoading] = useState<boolean>(false);
   const [inviteTeamId, setInviteTeamId] = useState<string | null>(null);
   const [processingInvite, setProcessingInvite] = useState(false);
+  const [inviteDetails, setInviteDetails] = useState<{ teamId: string; teamName: string } | null>(null);
+  const [processedInvite, setProcessedInvite] = useState<boolean>(false);
   
   // Configurar formulário de login
   const loginForm = useForm<LoginFormValues>({
@@ -239,7 +244,8 @@ function AuthContent() {
   
   // Manipulador de envio do formulário de login
   const handleLoginSubmit = useCallback(async (data: LoginFormValues) => {
-    setIsSubmitting(true);
+    setLocalError(null);
+    setLocalLoading(true);
     
     try {
       await signInWithEmail(data.email, data.password);
@@ -250,19 +256,16 @@ function AuthContent() {
       }
     } catch (error: any) {
       console.error('Erro ao fazer login:', error);
-      toast({
-        title: "Erro ao fazer login",
-        description: error.message || "Ocorreu um erro ao fazer login. Verifique suas credenciais e tente novamente.",
-        variant: "destructive"
-      });
+      setLocalError(error.message || "Ocorreu um erro ao fazer login. Verifique suas credenciais e tente novamente.");
     } finally {
-      setIsSubmitting(false);
+      setLocalLoading(false);
     }
   }, [signInWithEmail, router, inviteTeamId, toast]);
   
   // Manipulador de envio do formulário de cadastro
   const handleSignupSubmit = useCallback(async (data: RegisterFormValues) => {
-    setIsSubmitting(true);
+    setLocalError(null);
+    setLocalLoading(true);
     
     try {
       await signUpWithEmail(data.email, data.password);
@@ -278,25 +281,29 @@ function AuthContent() {
       }
     } catch (error: any) {
       console.error('Erro ao criar conta:', error);
-      toast({
-        title: "Erro ao criar conta",
-        description: error.message || "Ocorreu um erro ao criar sua conta. Tente novamente.",
-        variant: "destructive"
-      });
+      setLocalError(error.message || "Ocorreu um erro ao criar sua conta. Tente novamente.");
     } finally {
-      setIsSubmitting(false);
+      setLocalLoading(false);
     }
   }, [signUpWithEmail, router, inviteTeamId, toast]);
   
   // Manipulador de mudança de aba
   const handleTabChange = useCallback((value: string) => {
     setActiveTab(value);
+    setLocalError(null);
     
     // Limpar formulários ao mudar de aba
     if (value === "login") {
-      registerForm.reset();
+      registerForm.reset({
+        email: searchParams.get("email") || "",
+        password: "",
+        confirmPassword: "",
+      });
     } else {
-      loginForm.reset();
+      loginForm.reset({
+        email: searchParams.get("email") || "",
+        password: "",
+      });
     }
     
     // Preencher o email se houver um convite
@@ -310,11 +317,170 @@ function AuthContent() {
     }
   }, [loginForm, registerForm, searchParams]);
   
-  if (isLoading) {
+  // Carregar detalhes do convite se houver
+  useEffect(() => {
+    const loadInviteDetails = async () => {
+      const inviteCode = searchParams.get("invite");
+      
+      if (inviteCode) {
+        try {
+          console.log(`Carregando detalhes do convite: ${inviteCode}`);
+          const team = await TeamService.getTeamByInvite(inviteCode);
+          
+          if (team) {
+            console.log(`Equipe encontrada: ${team.name}`);
+            setInviteDetails({
+              teamId: team.id,
+              teamName: team.name,
+            });
+            
+            // Armazenar informações do convite no localStorage para uso posterior
+            localStorage.setItem("pendingInviteTeamId", team.id);
+            localStorage.setItem("pendingInviteTeamName", team.name);
+          } else {
+            console.log('Convite inválido ou equipe não encontrada');
+            toast({
+              title: "Convite inválido",
+              description: "O convite não é válido ou expirou.",
+              variant: "destructive",
+            });
+          }
+        } catch (error) {
+          console.error("Erro ao carregar detalhes do convite:", error);
+        }
+      } else {
+        // Verificar se há um convite pendente no localStorage
+        const pendingTeamId = localStorage.getItem("pendingInviteTeamId");
+        const pendingTeamName = localStorage.getItem("pendingInviteTeamName");
+        
+        if (pendingTeamId && pendingTeamName) {
+          setInviteDetails({
+            teamId: pendingTeamId,
+            teamName: pendingTeamName,
+          });
+        }
+      }
+    };
+    
+    loadInviteDetails();
+  }, [searchParams]);
+  
+  // Efeito específico para lidar com autenticação Google concluída
+  useEffect(() => {
+    const processGoogleAuth = async () => {
+      // Verificar se o usuário acabou de autenticar e não há processamento em andamento
+      if (isAuthenticated && user && !processedInvite && !localLoading && !isLoading) {
+        // Verificar se há convite nos parâmetros ou nos cookies
+        const params = new URLSearchParams(window.location.search);
+        const inviteFromUrl = params.get('invite');
+        const inviteNameFromUrl = params.get('invite_name');
+        
+        const storedInviteId = localStorage.getItem('pendingInviteTeamId');
+        const storedInviteName = localStorage.getItem('pendingInviteTeamName');
+        
+        // Usar parâmetros da URL ou do localStorage
+        const teamId = inviteFromUrl || storedInviteId;
+        const teamName = inviteNameFromUrl || storedInviteName;
+        
+        if (!teamId) {
+          console.log('Nenhum convite pendente encontrado após autenticação Google');
+          router.push('/team-setup');
+          return;
+        }
+        
+        console.log(`Convite encontrado após autenticação Google: ${teamId}`);
+        
+        try {
+          setLocalLoading(true);
+          
+          // Processar o convite
+          const memberId = await TeamService.processInvite(
+            teamId,
+            user.id,
+            user.email || ''
+          );
+          
+          if (memberId) {
+            // Armazenar IDs importantes
+            localStorage.setItem('teamId', teamId);
+            localStorage.setItem('teamMemberId', memberId);
+            
+            // Sincronizar outras associações de equipe
+            await TeamService.syncUserTeamMemberships(user.id, user.email || '');
+            
+            // Recarregar equipes do usuário
+            await loadUserTeams(user.id);
+            
+            // Limpar dados pendentes
+            localStorage.removeItem('pendingInviteTeamId');
+            localStorage.removeItem('pendingInviteTeamName');
+            
+            // Marcar convite como processado
+            setProcessedInvite(true);
+            
+            toast({
+              title: "Bem-vindo à equipe!",
+              description: `Você agora faz parte da equipe ${teamName || ''}`
+            });
+            
+            // Redirecionar após processamento
+            setTimeout(() => {
+              router.push('/team-setup');
+            }, 500);
+          }
+        } catch (error: any) {
+          console.error('Erro ao processar convite após autenticação Google:', error);
+          toast({
+            title: "Erro ao processar convite",
+            description: error.message || "Ocorreu um erro ao processar seu convite",
+            variant: "destructive"
+          });
+          
+          // Mesmo com erro, tentar redirecionar
+          router.push('/team-setup');
+        } finally {
+          setLocalLoading(false);
+        }
+      }
+    };
+    
+    processGoogleAuth();
+  }, [isAuthenticated, user, processedInvite]);
+  
+  // Limpar erros ao mudar de aba
+  useEffect(() => {
+    if (error) {
+      clearError();
+    }
+    setLocalError(null);
+  }, [activeTab, error, clearError]);
+  
+  // Se estiver carregando, mostrar spinner
+  if ((isLoading || localLoading) && !localError && !error) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
+      <Layout>
+        <div className="container flex items-center justify-center min-h-[70vh]">
+          <div className="flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+            <p className="text-sm text-muted-foreground">Processando sua solicitação...</p>
+          </div>
+        </div>
+      </Layout>
+    );
+  }
+  
+  // Se usuário está autenticado mas sem convite, redirecionar para setup
+  if (isAuthenticated && !inviteDetails && !processedInvite && !isLoading && !localLoading) {
+    router.push("/team-setup");
+    return (
+      <Layout>
+        <div className="container flex items-center justify-center min-h-[70vh]">
+          <div className="flex flex-col items-center gap-4">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+            <p className="text-sm text-muted-foreground">Redirecionando...</p>
+          </div>
+        </div>
+      </Layout>
     );
   }
   
@@ -322,198 +488,160 @@ function AuthContent() {
     <Layout>
       <div className="container max-w-md mx-auto py-10">
         <Card>
-          <CardHeader className="space-y-1">
-            <CardTitle className="text-2xl font-bold">Radar21</CardTitle>
+          <CardHeader>
+            <CardTitle>Acesso ao Sistema</CardTitle>
             <CardDescription>
-              {inviteTeamId 
-                ? "Você recebeu um convite para participar de uma equipe. Entre ou crie uma conta para continuar."
-                : "Entre com sua conta ou crie uma nova para acessar a plataforma."}
+              {inviteDetails 
+                ? `Você foi convidado para a equipe ${inviteDetails.teamName}. Faça login ou registre-se para participar.` 
+                : "Faça login ou crie uma conta para acessar a plataforma."}
             </CardDescription>
           </CardHeader>
           <CardContent>
-            {error && (
+            {(localError || error) && (
               <Alert variant="destructive" className="mb-4">
-                <AlertDescription>{error}</AlertDescription>
+                <AlertCircle className="h-4 w-4" />
+                <AlertTitle>Erro</AlertTitle>
+                <AlertDescription>{localError || error}</AlertDescription>
+              </Alert>
+            )}
+            
+            {inviteDetails && (
+              <Alert className="mb-4">
+                <Info className="h-4 w-4" />
+                <AlertTitle>Convite recebido</AlertTitle>
+                <AlertDescription>
+                  Após fazer login ou se registrar, você será automaticamente adicionado à equipe.
+                </AlertDescription>
               </Alert>
             )}
             
             <Tabs value={activeTab} onValueChange={handleTabChange}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">Login</TabsTrigger>
-                <TabsTrigger value="signup">Cadastro</TabsTrigger>
+                <TabsTrigger value="register">Registro</TabsTrigger>
               </TabsList>
               
               <TabsContent value="login">
-                <form onSubmit={loginForm.handleSubmit(handleLoginSubmit)} className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="login-email">Email</Label>
-                    <Input
-                      id="login-email"
-                      type="email"
-                      placeholder="seu@email.com"
-                      {...loginForm.register('email')}
+                <Form {...loginForm}>
+                  <form onSubmit={loginForm.handleSubmit(handleLoginSubmit)} className="space-y-4">
+                    <FormField
+                      control={loginForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <Input placeholder="seu@email.com" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    {loginForm.formState.errors.email && (
-                      <p className="text-sm text-red-500">{loginForm.formState.errors.email.message}</p>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="login-password">Senha</Label>
-                    <Input
-                      id="login-password"
-                      type="password"
-                      placeholder="••••••••"
-                      {...loginForm.register('password')}
+                    
+                    <FormField
+                      control={loginForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Senha</FormLabel>
+                          <FormControl>
+                            <Input type="password" placeholder="******" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    {loginForm.formState.errors.password && (
-                      <p className="text-sm text-red-500">{loginForm.formState.errors.password.message}</p>
-                    )}
-                  </div>
-                  
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? "Entrando..." : "Entrar"}
-                  </Button>
-                  
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">
-                        Ou continue com
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="w-full" 
-                    onClick={() => signInWithGoogle()}
-                    disabled={isSubmitting}
-                  >
-                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-                      <path
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        fill="#4285F4"
-                      />
-                      <path
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        fill="#34A853"
-                      />
-                      <path
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                        fill="#FBBC05"
-                      />
-                      <path
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                        fill="#EA4335"
-                      />
-                    </svg>
-                    Google
-                  </Button>
-                </form>
+                    
+                    <Button type="submit" className="w-full" disabled={isLoading || localLoading}>
+                      {(isLoading || localLoading) ? "Processando..." : "Entrar"}
+                    </Button>
+                  </form>
+                </Form>
               </TabsContent>
               
-              <TabsContent value="signup">
-                <form onSubmit={registerForm.handleSubmit(handleSignupSubmit)} className="space-y-4 mt-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-email">Email</Label>
-                    <Input
-                      id="signup-email"
-                      type="email"
-                      placeholder="seu@email.com"
-                      {...registerForm.register('email')}
+              <TabsContent value="register">
+                <Form {...registerForm}>
+                  <form onSubmit={registerForm.handleSubmit(handleSignupSubmit)} className="space-y-4">
+                    <FormField
+                      control={registerForm.control}
+                      name="email"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Email</FormLabel>
+                          <FormControl>
+                            <Input placeholder="seu@email.com" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    {registerForm.formState.errors.email && (
-                      <p className="text-sm text-red-500">{registerForm.formState.errors.email.message}</p>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-password">Senha</Label>
-                    <Input
-                      id="signup-password"
-                      type="password"
-                      placeholder="••••••••"
-                      {...registerForm.register('password')}
+                    
+                    <FormField
+                      control={registerForm.control}
+                      name="password"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Senha</FormLabel>
+                          <FormControl>
+                            <Input type="password" placeholder="******" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    {registerForm.formState.errors.password && (
-                      <p className="text-sm text-red-500">{registerForm.formState.errors.password.message}</p>
-                    )}
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <Label htmlFor="signup-confirm-password">Confirmar Senha</Label>
-                    <Input
-                      id="signup-confirm-password"
-                      type="password"
-                      placeholder="••••••••"
-                      {...registerForm.register('confirmPassword')}
+                    
+                    <FormField
+                      control={registerForm.control}
+                      name="confirmPassword"
+                      render={({ field }) => (
+                        <FormItem>
+                          <FormLabel>Confirmar Senha</FormLabel>
+                          <FormControl>
+                            <Input type="password" placeholder="******" {...field} />
+                          </FormControl>
+                          <FormMessage />
+                        </FormItem>
+                      )}
                     />
-                    {registerForm.formState.errors.confirmPassword && (
-                      <p className="text-sm text-red-500">{registerForm.formState.errors.confirmPassword.message}</p>
-                    )}
-                  </div>
-                  
-                  <Button type="submit" className="w-full" disabled={isSubmitting}>
-                    {isSubmitting ? "Criando conta..." : "Criar conta"}
-                  </Button>
-                  
-                  <div className="relative">
-                    <div className="absolute inset-0 flex items-center">
-                      <span className="w-full border-t" />
-                    </div>
-                    <div className="relative flex justify-center text-xs uppercase">
-                      <span className="bg-background px-2 text-muted-foreground">
-                        Ou continue com
-                      </span>
-                    </div>
-                  </div>
-                  
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="w-full" 
-                    onClick={() => signInWithGoogle()}
-                    disabled={isSubmitting}
-                  >
-                    <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
-                      <path
-                        d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                        fill="#4285F4"
-                      />
-                      <path
-                        d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                        fill="#34A853"
-                      />
-                      <path
-                        d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
-                        fill="#FBBC05"
-                      />
-                      <path
-                        d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
-                        fill="#EA4335"
-                      />
-                    </svg>
-                    Google
-                  </Button>
-                </form>
+                    
+                    <Button type="submit" className="w-full" disabled={isLoading || localLoading}>
+                      {(isLoading || localLoading) ? "Processando..." : "Registrar"}
+                    </Button>
+                  </form>
+                </Form>
               </TabsContent>
             </Tabs>
           </CardContent>
-          <CardFooter>
-            <p className="text-sm text-center w-full text-muted-foreground">
-              Ao entrar, você concorda com nossos termos de serviço e política de privacidade.
-            </p>
+          <CardFooter className="flex flex-col">
+            <div className="relative w-full mb-4">
+              <div className="absolute inset-0 flex items-center">
+                <div className="w-full border-t border-gray-300"></div>
+              </div>
+              <div className="relative flex justify-center text-sm">
+                <span className="px-2 bg-background text-muted-foreground">Ou continue com</span>
+              </div>
+            </div>
+            
+            <Button 
+              variant="outline" 
+              className="w-full" 
+              onClick={signInWithGoogle}
+              disabled={isLoading || localLoading}
+            >
+              <svg className="mr-2 h-4 w-4" viewBox="0 0 24 24">
+                <path
+                  d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"
+                  fill="currentColor"
+                />
+              </svg>
+              Google
+            </Button>
           </CardFooter>
         </Card>
       </div>
     </Layout>
   );
 }
-
 
 // Componente principal com Suspense
 export default function AuthPage() {

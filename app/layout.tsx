@@ -24,12 +24,14 @@ export default function RootLayout({
     <html lang="pt-BR">
       <body className={inter.className}>
         <AuthProvider>
-          <TeamProvider>
-            <SurveyProvider>
-              {children}
+          <InviteProvider>
+            <TeamProvider>
+              <SurveyProvider>
+                {children}
               <Toaster />
             </SurveyProvider>
-          </TeamProvider>
+            </TeamProvider>
+          </InviteProvider>
         </AuthProvider>
       </body>
     </html>
@@ -37,3 +39,4 @@ export default function RootLayout({
 }
 
 import './globals.css'
+import { InviteProvider } from "@/resources/invite/invite-provider"

@@ -16,6 +16,7 @@ import { openQuestionsSchema, OpenQuestionsFormValues } from "@/resources/survey
 import { useAuth } from "@/resources/auth/auth-hook"
 import { supabase } from "@/resources/auth/auth.service"
 import { SetupProgress } from '@/components/team/setup-progress'
+import { TeamService } from "@/resources/team/team.service"
 
 // Definição das perguntas abertas
 const questions = [
@@ -64,8 +65,9 @@ export default function OpenQuestions() {
 
   // Função para lidar com o envio do formulário
   const handleSubmit = useCallback(async (data: OpenQuestionsFormValues) => {
-    // Obter o ID do membro da equipe do contexto ou do localStorage
+    // Obter o ID do membro da equipe e da equipe
     const memberId = surveyContext.teamMemberId || localStorage.getItem("teamMemberId");
+    const teamId = localStorage.getItem("teamId");
     
     if (!memberId) {
       toast({
@@ -76,34 +78,36 @@ export default function OpenQuestions() {
       return;
     }
 
+    if (!teamId) {
+      toast({
+        title: "Erro ao enviar respostas",
+        description: "ID da equipe não encontrado. Por favor, tente novamente.",
+        variant: "destructive"
+      });
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
-      // Salvar respostas - agora passando apenas os dados
+      // Salvar respostas
       await surveyContext.saveOpenQuestionResponses(data);
       
       // Atualizar progresso
       setProgress(100);
 
+      // Atualizar status do membro para "answered"
+      if (user?.email) {
+        await TeamService.updateMemberStatus(teamId, user.email, 'answered');
+      }
+      
       toast({
         title: "Respostas salvas com sucesso!",
         description: "Todas as suas respostas foram salvas. Agora você pode ver os resultados.",
       });
       
-      // Atualizar status do membro para "answered"
-      if (user?.email) {
-        await supabase
-          .from('team_members')
-          .update({ status: 'answered' })
-          .eq('team_id', memberId)
-          .eq('email', user.email);
-      }
-      
-      // Forçar um pequeno atraso antes do redirecionamento para garantir que o estado seja atualizado
-      setTimeout(() => {
-        // Redirecionar para a página de resultados
-        router.push('/results');
-      }, 500);
+      // Redirecionar para a página de resultados
+      router.push('/results');
     } catch (error: any) {
       console.error('Erro ao enviar respostas:', error);
       toast({
@@ -114,7 +118,7 @@ export default function OpenQuestions() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [surveyContext, toast, router, user?.email]);
+  }, [surveyContext, user?.email, router, toast]);
 
   return (
     <Layout>
