@@ -1,6 +1,7 @@
 import { supabase } from '@/resources/auth/auth.service';
 import { sendInviteEmail } from '../email/email.service';
 import { InviteData } from './invite-model';
+import { TeamService } from '../team/team.service';
 
 export class InviteService {
   private static readonly STORAGE_KEYS = {
@@ -45,20 +46,12 @@ export class InviteService {
     
     if (pendingInvite.teamId) {
       try {
-        // Atualizar status do membro
-        const { error } = await supabase
-          .from('team_members')
-          .update({ 
-            user_id: userId,
-            status: 'pending_survey' 
-          })
-          .match({ 
-            team_id: pendingInvite.teamId,
-            email: email 
-          });
+        console.log(`Processando convite do localStorage: teamId=${pendingInvite.teamId}, email=${email}`);
 
-        if (error) throw error;
+        // Usar o TeamService para processar o convite de forma consistente
+        await TeamService.processInvite(pendingInvite.teamId, userId, email);
         
+        console.log('Convite processado com sucesso');
         this.clearPendingInvite();
       } catch (error) {
         console.error('Erro ao processar convite pendente:', error);
@@ -74,6 +67,7 @@ export class InviteService {
   }
 
   static storePendingInvite(teamId: string, teamName?: string): void {
+    console.log(`Armazenando convite pendente: teamId=${teamId}, teamName=${teamName || 'não informado'}`);
     this.setCookie(this.STORAGE_KEYS.teamId, teamId);
     if (teamName) {
       this.setCookie(this.STORAGE_KEYS.teamName, teamName);
@@ -81,6 +75,7 @@ export class InviteService {
   }
 
   static clearPendingInvite(): void {
+    console.log('Limpando convite pendente dos cookies');
     this.deleteCookie(this.STORAGE_KEYS.teamId);
     this.deleteCookie(this.STORAGE_KEYS.teamName);
   }

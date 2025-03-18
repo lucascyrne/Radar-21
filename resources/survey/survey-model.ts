@@ -121,3 +121,10 @@ export interface SurveyState {
   isLoading: boolean;
   error: string | null;
 }
+
+export interface CompetencyDetail {
+  topic: string;
+  userScore: number;
+  teamAverage: number;
+  difference: number;
+}

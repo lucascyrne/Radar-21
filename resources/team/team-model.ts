@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
 // Definir os status possíveis
-export type TeamMemberStatus = 'invited' | 'answered';
+export type TeamMemberStatus = 'invited' | 'pending_survey' | 'answered';
 
 // Esquema para criação de equipe
 export const createTeamSchema = z.object({

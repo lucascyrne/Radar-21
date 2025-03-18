@@ -51,21 +51,43 @@ export class RadarService {
     }
     
     try {
-      const { data, error } = await supabase
+      // Primeiro, tentar buscar respostas da pesquisa
+      const { data: surveyData, error: surveyError } = await supabase
         .from('survey_responses')
         .select('*')
         .eq('team_member_id', memberId)
         .single();
         
-      if (error) {
-        console.error('Erro ao carregar respostas do membro:', error);
+      if (surveyError && surveyError.code !== 'PGRST116') {
+        console.error('Erro ao carregar respostas da pesquisa:', surveyError);
         return null;
       }
       
-      // Armazenar no cache
-      responsesCache.set(cacheKey, { data, timestamp: Date.now() });
+      if (surveyData) {
+        // Armazenar no cache e retornar
+        responsesCache.set(cacheKey, { data: surveyData, timestamp: Date.now() });
+        return surveyData;
+      }
       
-      return data;
+      // Se não encontrou respostas da pesquisa, tentar buscar respostas das questões abertas
+      const { data: openData, error: openError } = await supabase
+        .from('open_question_responses')
+        .select('*')
+        .eq('team_member_id', memberId)
+        .single();
+        
+      if (openError && openError.code !== 'PGRST116') {
+        console.error('Erro ao carregar respostas das questões abertas:', openError);
+        return null;
+      }
+      
+      if (openData) {
+        // Armazenar no cache e retornar
+        responsesCache.set(cacheKey, { data: openData, timestamp: Date.now() });
+        return openData;
+      }
+      
+      return null;
     } catch (error) {
       console.error('Erro ao carregar respostas do membro:', error);
       return null;
@@ -78,13 +100,16 @@ export class RadarService {
   static async loadTeamResponses(
     teamId: string, 
     teamMembers: TeamMember[]
-  ): Promise<Record<string, SurveyResponses | null>> {
+  ): Promise<{
+    memberResponses: Record<string, SurveyResponses | null>,
+    leaderResponses: SurveyResponses | null
+  }> {
     // Verificar cache
     const cacheKey = `team_${teamId}`;
     const cachedData = teamResponsesCache.get(cacheKey);
     
     if (cachedData && (Date.now() - cachedData.timestamp) < CACHE_EXPIRATION) {
-      return cachedData.data;
+      return cachedData.data as any;
     }
     
     try {
@@ -94,25 +119,33 @@ export class RadarService {
       );
       
       if (completedMembers.length === 0) {
-        return {};
+        return { memberResponses: {}, leaderResponses: null };
       }
       
       // Buscar respostas para cada membro
       const memberResponses: Record<string, SurveyResponses | null> = {};
+      let leaderResponses: SurveyResponses | null = null;
       
       for (const member of completedMembers) {
         if (member.id) {
-          memberResponses[member.id] = await this.loadMemberResponses(member.id);
+          const responses = await this.loadMemberResponses(member.id);
+          if (member.role === 'leader') {
+            leaderResponses = responses;
+          } else {
+            memberResponses[member.id] = responses;
+          }
         }
       }
       
-      // Armazenar no cache
-      teamResponsesCache.set(cacheKey, { data: memberResponses, timestamp: Date.now() });
+      const result = { memberResponses, leaderResponses };
       
-      return memberResponses;
+      // Armazenar no cache
+      teamResponsesCache.set(cacheKey, { data: result as any, timestamp: Date.now() });
+      
+      return result;
     } catch (error) {
       console.error('Erro ao carregar respostas da equipe:', error);
-      return {};
+      return { memberResponses: {}, leaderResponses: null };
     }
   }
   
@@ -144,10 +177,11 @@ export class RadarService {
   }
   
   /**
-   * Calcula a média da equipe com base nas respostas individuais
+   * Calcula a média da equipe com base nas respostas individuais (excluindo o líder)
    */
-  static calculateTeamAverage(teamResponses: SurveyResponses[]): RadarDataPoint[] {
-    if (!teamResponses || teamResponses.length === 0) return [];
+  static calculateTeamAverage(memberResponses: Record<string, SurveyResponses | null>): RadarDataPoint[] {
+    const responses = Object.values(memberResponses).filter(Boolean) as SurveyResponses[];
+    if (!responses || responses.length === 0) return [];
     
     // Inicializar objeto para armazenar somas e contagens
     const topicSums: Record<string, { sum: number; count: number }> = {};
@@ -158,7 +192,7 @@ export class RadarService {
     });
     
     // Processar respostas de cada membro
-    teamResponses.forEach(responses => {
+    responses.forEach(responses => {
       if (!responses) return;
       
       Object.entries(responses).forEach(([key, value]) => {
@@ -189,26 +223,40 @@ export class RadarService {
   }
   
   /**
-   * Obtém detalhes de competência comparando usuário com média da equipe
+   * Obtém detalhes de competência comparando líder com média da equipe
    */
-  static getCompetencyDetails(
-    userResponses: SurveyResponses | null,
-    teamAverageData: RadarDataPoint[]
-  ): CompetencyDetail[] {
-    if (!userResponses) return [];
-    
-    const userRadarData = this.transformResponsesToRadarData(userResponses);
-    
-    return userRadarData.map(userData => {
-      const teamData = teamAverageData.find(item => item.category === userData.category);
-      const teamAverage = teamData ? teamData.value : 0;
-      
-      return {
-        topic: userData.category,
-        userScore: userData.value,
-        teamAverage,
-        difference: userData.value - teamAverage
-      };
+  static getCompetencyDetails(leaderResponses: SurveyResponses | null, teamAverageData: RadarDataPoint[]): CompetencyDetail[] {
+    if (!leaderResponses || teamAverageData.length === 0) {
+      return [];
+    }
+
+    const details: CompetencyDetail[] = [];
+
+    // Processar cada pergunta do questionário
+    Object.entries(leaderResponses).forEach(([key, value]) => {
+      // Verificar se a chave corresponde a uma pergunta (q1, q2, etc.)
+      if (key.startsWith('q') && typeof value === 'number' && questionTopics[key]) {
+        const topic = questionTopics[key]; // Usar o tópico mapeado em vez da chave
+        const numericValue = typeof value === 'string' ? parseInt(value, 10) : value;
+        
+        // Encontrar a média da equipe para esta competência
+        const teamData = teamAverageData.find(d => d.category === topic);
+        const teamAverage = teamData?.value || 0;
+        
+        // Calcular o delta: Média da equipe - Líder
+        // Um delta positivo indica que a equipe avalia melhor que o líder
+        const difference = teamAverage - numericValue;
+
+        details.push({
+          topic,
+          userScore: numericValue,
+          teamAverage,
+          difference
+        });
+      }
     });
+
+    // Ordenar por nome da competência
+    return details.sort((a, b) => a.topic.localeCompare(b.topic));
   }
 } 

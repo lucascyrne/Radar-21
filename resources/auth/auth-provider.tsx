@@ -1,6 +1,6 @@
 'use client';
 
-import { ReactNode, useEffect, useState, useCallback } from 'react';
+import { ReactNode, useEffect, useState, useCallback, useRef } from 'react';
 import { Session } from '@supabase/supabase-js';
 import AuthContext, { initialState } from './auth-context';
 import { AuthService, supabase } from './auth.service';
@@ -15,12 +15,29 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [authState, setAuthState] = useState<AuthState>(initialState);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  
+  // Referência para armazenar o último estado da sessão
+  const lastSessionRef = useRef<string | null>(null);
 
   // Função para atualizar o estado com base na sessão
-  const updateStateWithSession = (session: Session | null) => {
+  const updateStateWithSession = useCallback((session: Session | null) => {
+    // Verificar se o estado da sessão realmente mudou
+    const currentSessionString = session ? JSON.stringify({
+      id: session.user?.id,
+      email: session.user?.email,
+      role: session.user?.user_metadata?.role
+    }) : null;
+
+    // Se o estado não mudou, não atualizar
+    if (currentSessionString === lastSessionRef.current) {
+      return;
+    }
+
+    // Atualizar a referência do último estado
+    lastSessionRef.current = currentSessionString;
+
     setAuthState({
       session,
-      // Convertendo o tipo User do Supabase para o nosso tipo User
       user: session?.user ? {
         id: session.user.id,
         email: session.user.email || '',
@@ -38,11 +55,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       isAuthenticated: !!session,
       error: null,
     });
-  };
+  }, []);
 
   // Inicializar e verificar a sessão ao carregar
   useEffect(() => {
     let isMounted = true;
+    let authSubscription: { data: { subscription: { unsubscribe: () => void } } };
     
     const initializeAuth = async () => {
       try {
@@ -51,29 +69,44 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         
         if (isMounted) {
           updateStateWithSession(session);
+          
+          // Se o usuário estiver autenticado, processar qualquer convite pendente
+          if (session?.user) {
+            try {
+              console.log('Verificando convites pendentes para usuário autenticado');
+              await AuthService.processAuthenticatedUser(session.user);
+            } catch (error) {
+              console.error('Erro ao processar convites pendentes:', error);
+            }
+          }
         }
         
         // Configurar listener para mudanças na autenticação
-        const { data: { subscription } } = AuthService.onAuthStateChange((event, session) => {
+        authSubscription = AuthService.onAuthStateChange((event, session) => {
           if (!isMounted) return;
           
-          console.log('Auth state changed:', event, session?.user?.email);
-          updateStateWithSession(session);
-          
-          // Redirecionar após login bem-sucedido
-          if (event === 'SIGNED_IN' && window.location.pathname.includes('/auth')) {
-            router.push('/team-setup');
-          }
-          
-          // Redirecionar após logout
-          if (event === 'SIGNED_OUT') {
-            router.push('/auth');
+          // Verificar se é uma mudança real de estado
+          if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
+            console.log('Auth state changed:', event, session?.user?.email);
+            updateStateWithSession(session);
+            
+            // Processar convites pendentes após login bem-sucedido
+            if (event === 'SIGNED_IN' && session?.user) {
+              AuthService.processAuthenticatedUser(session.user)
+                .catch(error => console.error('Erro ao processar convites após login:', error));
+            }
+            
+            // Redirecionar após login bem-sucedido
+            if (event === 'SIGNED_IN' && window.location.pathname.includes('/auth')) {
+              router.push('/team-setup');
+            }
+            
+            // Redirecionar após logout
+            if (event === 'SIGNED_OUT') {
+              router.push('/auth');
+            }
           }
         });
-
-        return () => {
-          subscription.unsubscribe();
-        };
       } catch (error) {
         console.error('Erro ao inicializar autenticação:', error);
         if (isMounted) {
@@ -86,6 +119,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     
     return () => {
       isMounted = false;
+      if (authSubscription?.data?.subscription) {
+        authSubscription.data.subscription.unsubscribe();
+      }
     };
   }, []);
 
@@ -113,26 +149,30 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       setAuthState(prev => ({ ...prev, isLoading: true }));
       
       // Capturar os dados do convite pendente antes de redirecionar
-      const pendingInviteTeamId = localStorage.getItem('pendingInviteTeamId');
-      const pendingInviteTeamName = localStorage.getItem('pendingInviteTeamName');
+      const pendingInviteTeamId = localStorage.getItem('pendingInviteTeamId') || localStorage.getItem('pendingInvite');
+      const pendingInviteEmail = localStorage.getItem('pendingInviteEmail');
       
       // Determinar a URL base para redirecionamento
-      const baseRedirectUrl = `${window.location.origin}/auth/callback`;
+      const baseRedirectUrl = window.location.origin;
       
-      // Se houver um convite pendente, adicionar como state parameter no URL
-      let redirectUrl = baseRedirectUrl;
+      // Se houver um convite pendente, adicionar como parâmetros na URL
+      let redirectUrl = `${baseRedirectUrl}/auth`;
       if (pendingInviteTeamId) {
-        redirectUrl = `${baseRedirectUrl}?invite=${pendingInviteTeamId}`;
-        if (pendingInviteTeamName) {
-          redirectUrl += `&invite_name=${encodeURIComponent(pendingInviteTeamName)}`;
+        redirectUrl = `${redirectUrl}?invite=${pendingInviteTeamId}`;
+        if (pendingInviteEmail) {
+          redirectUrl += `&email=${encodeURIComponent(pendingInviteEmail)}`;
         }
       }
       
       console.log('Iniciando login Google com redirecionamento para:', redirectUrl);
       
-      // Agora passamos as opções corretamente com a URL de redirecionamento
+      // Iniciar autenticação com Google
       await AuthService.signInWithGoogle({
-        redirectTo: redirectUrl
+        redirectTo: redirectUrl,
+        queryParams: {
+          access_type: 'offline',
+          prompt: 'consent'
+        }
       });
     } catch (error: any) {
       console.error('Erro ao fazer login com Google:', error);

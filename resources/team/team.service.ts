@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { Team, TeamMember } from './team-model';
+import { Team, TeamMember, TeamMemberStatus } from './team-model';
 
 // Configuração do cliente Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -149,7 +149,7 @@ export class TeamService {
         const { error: updateError } = await supabase
           .from('team_members')
           .update(updates)
-          .eq('id', existingMember.id)
+          .eq('id', existingMember.id);
         
         if (updateError) {
           throw updateError;
@@ -167,7 +167,7 @@ export class TeamService {
             email,
             role,
             status: memberStatus
-          })
+          });
         
         if (error) {
           throw error;
@@ -291,7 +291,7 @@ export class TeamService {
   static async updateMemberStatus(
     teamId: string,
     email: string,
-    status: 'invited' | 'answered'
+    status: TeamMemberStatus
   ): Promise<void> {
     try {
       const { error } = await supabase
@@ -409,163 +409,49 @@ export class TeamService {
    * @returns ID do membro da equipe processado
    */
   static async processInvite(teamId: string, userId: string, email: string): Promise<string | null> {
-    console.log(`Processando convite: Team=${teamId}, User=${userId}, Email=${email}`);
-    
     try {
-      // 1. Verificar se o membro já existe pelo ID E email
-      const { data: existingByIdAndEmail, error: idEmailError } = await supabase
-        .from('team_members')
-        .select('*')
-        .eq('team_id', teamId)
-        .eq('user_id', userId)
-        .eq('email', email)
-        .maybeSingle();
-        
-      if (existingByIdAndEmail) {
-        console.log('Membro já existe com ID e email correspondentes:', existingByIdAndEmail.id);
-        
-        // Atualizar status se necessário (nunca fazer downgrade de answered -> invited)
-        if (existingByIdAndEmail.status !== 'answered') {
-          await supabase
-            .from('team_members')
-            .update({ status: 'invited' })
-            .eq('id', existingByIdAndEmail.id);
-        }
-        
-        return existingByIdAndEmail.id;
-      }
+      console.log(`Processando convite: teamId=${teamId}, userId=${userId}, email=${email}`);
       
-      // 2. Verificar se existe apenas por email (sem user_id)
-      const { data: existingByEmail, error: emailError } = await supabase
+      // Verificar se o membro já existe (com qualquer status)
+      const { data: existingMember, error: checkError } = await supabase
         .from('team_members')
         .select('*')
         .eq('team_id', teamId)
         .eq('email', email)
-        .is('user_id', null)
         .maybeSingle();
-        
-      if (existingByEmail) {
-        console.log('Membro existe por email, atualizando user_id:', existingByEmail.id);
-        
-        // Atualizar com o user_id correto
-        const { error: updateError } = await supabase
-          .from('team_members')
-          .update({ 
-            user_id: userId,
-            status: existingByEmail.status === 'answered' ? 'answered' : 'invited'
-          })
-          .eq('id', existingByEmail.id);
-          
-        if (updateError) {
-          console.error('Erro ao atualizar membro:', updateError);
-          throw updateError;
-        }
-        
-        return existingByEmail.id;
-      }
-      
-      // 3. Verificar se existe por user_id (email diferente)
-      const { data: existingById, error: idError } = await supabase
-        .from('team_members')
-        .select('*')
-        .eq('team_id', teamId)
-        .eq('user_id', userId)
-        .neq('email', email)
-        .maybeSingle();
-        
-      if (existingById) {
-        console.log('Membro existe por ID mas com email diferente, atualizando:', existingById.id);
-        
-        // Atualizar com o email correto
-        const { error: updateError } = await supabase
-          .from('team_members')
-          .update({ 
-            email: email,
-            status: existingById.status === 'answered' ? 'answered' : 'invited'
-          })
-          .eq('id', existingById.id);
-          
-        if (updateError) {
-          console.error('Erro ao atualizar membro:', updateError);
-          throw updateError;
-        }
-        
-        return existingById.id;
-      }
-      
-      // 4. Nenhum membro existente, criar novo
-      console.log('Membro não existe, criando novo registro');
-      const { data: newMember, error: insertError } = await supabase
-        .from('team_members')
-        .insert({
-          team_id: teamId,
-          user_id: userId,
-          email: email,
-          role: 'member',
-          status: 'invited'
-        })
-        .select()
-        .single();
-        
-      if (insertError) {
-        console.error('Erro ao inserir novo membro:', insertError);
-        throw insertError;
-      }
-      
-      console.log('Novo membro criado com sucesso:', newMember.id);
-      return newMember.id;
-    } catch (error) {
-      console.error('Erro ao processar convite:', error);
-      throw error;
-    }
-  }
 
-  /**
-   * Processa convite diretamente no cliente sem chamar a API (usado como fallback)
-   * @param teamId ID da equipe
-   * @param userId ID do usuário
-   * @param email Email do usuário
-   */
-  static async processInviteDirectly(teamId: string, userId: string, email: string): Promise<string | null> {
-    try {
-      console.log(`Processando convite diretamente: teamId=${teamId}, userId=${userId}, email=${email}`);
-      
-      // Verificar se o membro já existe na equipe
-      const { data: existingMember, error: memberError } = await supabase
-        .from('team_members')
-        .select('*')
-        .eq('team_id', teamId)
-        .eq('email', email)
-        .single();
-      
-      if (memberError && memberError.code !== 'PGRST116') {
-        console.error('Erro ao verificar membro:', memberError);
-        throw memberError;
+      if (checkError && checkError.code !== 'PGRST116') {
+        throw checkError;
       }
-      
-      let memberId;
-      
+
       if (existingMember) {
-        console.log(`Membro existente encontrado com id ${existingMember.id}`);
+        console.log('Membro já existe:', existingMember);
         
-        // Atualizar o userId
-        const { error: updateError } = await supabase
-          .from('team_members')
-          .update({
-            user_id: userId
-          })
-          .eq('id', existingMember.id);
-        
-        if (updateError) {
-          console.error('Erro ao atualizar membro:', updateError);
-          throw updateError;
+        // Se já existir e não estiver com status 'answered', atualizar para 'pending_survey'
+        if (existingMember.status !== 'answered') {
+          const updates: any = { 
+            status: 'pending_survey',
+            user_id: userId 
+          };
+          
+          console.log('Atualizando membro existente:', updates);
+          
+          const { error: updateError } = await supabase
+            .from('team_members')
+            .update(updates)
+            .eq('id', existingMember.id);
+          
+          if (updateError) {
+            console.error('Erro ao atualizar membro:', updateError);
+            throw updateError;
+          }
         }
         
-        memberId = existingMember.id;
+        return existingMember.id;
       } else {
-        console.log('Membro não encontrado. Criando novo membro.');
+        console.log('Criando novo membro da equipe');
         
-        // Adicionar novo membro à equipe
+        // Se não existir, criar um novo membro
         const { data: newMember, error: insertError } = await supabase
           .from('team_members')
           .insert({
@@ -573,28 +459,24 @@ export class TeamService {
             user_id: userId,
             email: email,
             role: 'member',
-            status: 'invited'
+            status: 'pending_survey'
           })
           .select()
           .single();
         
         if (insertError) {
-          console.error('Erro ao adicionar membro:', insertError);
+          console.error('Erro ao inserir novo membro:', insertError);
           throw insertError;
         }
         
-        memberId = newMember.id;
+        return newMember?.id || null;
       }
-      
-      // Limpar o cache para garantir que os dados sejam recarregados
-      cache.members.delete(teamId);
-      
-      console.log(`Processamento direto de convite concluído. MemberId: ${memberId}`);
-      
-      return memberId;
     } catch (error) {
-      console.error('Erro ao processar convite diretamente:', error);
+      console.error('Erro ao processar convite:', error);
       throw error;
+    } finally {
+      // Limpar o cache de membros para esta equipe
+      cache.members.delete(teamId);
     }
   }
 
