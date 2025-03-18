@@ -8,7 +8,9 @@ import {
   SurveyState,
   OpenQuestionsFormValues,
   UserProfile,
-  SurveyFormValues
+  SurveyFormValues,
+  Question,
+  Section
 } from './survey-model';
 
 // Estado inicial do contexto de pesquisa
@@ -24,6 +26,23 @@ export const initialSurveyState: SurveyState = {
 // Tipo do contexto de pesquisa
 export interface SurveyContextType {
   state: SurveyState;
+  
+  // Propriedades do estado
+  profile: UserProfile | null;
+  surveyResponses: SurveyResponses | null;
+  openQuestionResponses: OpenQuestionResponses | null;
+  isLoading: boolean;
+  error: string | null;
+  
+  // Propriedades da pesquisa
+  questions: Question[];
+  sections: Section[];
+  currentSection: string;
+  setCurrentSection: (section: string) => void;
+  answers: Record<string, string | number>;
+  saveAnswers: () => Promise<boolean>;
+  generateRadarData: () => Promise<void>;
+  radarData: any; // TODO: Definir tipo específico para radarData
   
   // Funções para perfil
   loadProfile: () => Promise<UserProfile | null>;
@@ -48,7 +67,7 @@ export interface SurveyContextType {
   fetchTeamMemberId: () => Promise<string | null>;
   updateTeamMemberId: (id: string | null) => void;
   
-  // Adicionar ao SurveyContextType
+  // Propriedades de ID do membro da equipe
   teamMemberId: string | null;
   setTeamMemberId: (id: string) => void;
 }

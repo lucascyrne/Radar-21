@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS team_members (
   team_id UUID REFERENCES teams(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
   role TEXT NOT NULL CHECK (role IN ('leader', 'member')),
-  status TEXT NOT NULL DEFAULT 'enviado' CHECK (status IN ('enviado', 'cadastrado', 'respondido')),
+  status TEXT NOT NULL DEFAULT 'active',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   
   -- Índice para busca por email e equipe
@@ -109,4 +109,14 @@ EXECUTE FUNCTION update_updated_at_column();
 CREATE INDEX IF NOT EXISTS idx_team_members_team_id ON team_members(team_id);
 CREATE INDEX IF NOT EXISTS idx_user_profiles_team_member_id ON user_profiles(team_member_id);
 CREATE INDEX IF NOT EXISTS idx_survey_responses_team_member_id ON survey_responses(team_member_id);
-CREATE INDEX IF NOT EXISTS idx_open_question_responses_team_member_id ON open_question_responses(team_member_id); 
+CREATE INDEX IF NOT EXISTS idx_open_question_responses_team_member_id ON open_question_responses(team_member_id);
+
+-- Atualizar a tabela team_members para incluir campos necessários
+ALTER TABLE team_members ADD COLUMN IF NOT EXISTS status text DEFAULT 'invited';
+ALTER TABLE team_members ADD COLUMN IF NOT EXISTS role text DEFAULT 'member';
+
+-- Criar índices para melhor performance
+CREATE INDEX IF NOT EXISTS idx_team_invites_email ON team_invites(email);
+CREATE INDEX IF NOT EXISTS idx_team_invites_team_id ON team_invites(team_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id);
+CREATE INDEX IF NOT EXISTS idx_team_members_team_id ON team_members(team_id); 

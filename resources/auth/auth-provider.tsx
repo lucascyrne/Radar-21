@@ -1,305 +1,281 @@
 'use client';
 
-import { ReactNode, useEffect, useState, useCallback, useRef } from 'react';
+import { ReactNode, useEffect, useState, useCallback } from 'react';
 import { Session } from '@supabase/supabase-js';
 import AuthContext, { initialState } from './auth-context';
-import { AuthService, supabase } from './auth.service';
-import { AuthState, User } from './auth-model';
+import { AuthService } from './auth.service';
+import { AuthState, User, InviteUserParams } from './auth-model';
 import { useRouter } from 'next/navigation';
+import { supabase } from './auth.service';
+import { TeamService } from '../team/team.service';
+import { InviteService } from '../invite/invite.service';
+import { SurveyResponses } from '../survey/survey-model';
 
 interface AuthProviderProps {
   children: ReactNode;
 }
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
-  const [authState, setAuthState] = useState<AuthState>(initialState);
-  const [error, setError] = useState<string | null>(null);
+  const [state, setState] = useState<AuthState>(initialState);
   const router = useRouter();
-  
-  // Referência para armazenar o último estado da sessão
-  const lastSessionRef = useRef<string | null>(null);
 
-  // Função para atualizar o estado com base na sessão
-  const updateStateWithSession = useCallback((session: Session | null) => {
-    // Verificar se o estado da sessão realmente mudou
-    const currentSessionString = session ? JSON.stringify({
-      id: session.user?.id,
-      email: session.user?.email,
-      role: session.user?.user_metadata?.role
-    }) : null;
+  const updateState = (updates: Partial<AuthState>) => {
+    setState(current => ({ ...current, ...updates }));
+  };
 
-    // Se o estado não mudou, não atualizar
-    if (currentSessionString === lastSessionRef.current) {
-      return;
-    }
+  // Função para atualizar as respostas da pesquisa
+  const setSurveyResponses = useCallback((surveyResponses: SurveyResponses | null) => {
+    updateState({ surveyResponses });
+  }, []);
 
-    // Atualizar a referência do último estado
-    lastSessionRef.current = currentSessionString;
+  const updateStateWithSession = (session: Session | null) => {
+    const user = session?.user ? {
+      id: session.user.id,
+      email: session.user.email || '',
+      name: session.user.user_metadata?.name,
+      avatar_url: session.user.user_metadata?.avatar_url,
+      created_at: session.user.created_at,
+      updated_at: session.user.updated_at,
+      team_id: session.user.user_metadata?.team_id,
+      role: session.user.user_metadata?.role,
+      status: session.user.user_metadata?.status,
+      last_form_page: session.user.user_metadata?.last_form_page,
+      has_completed_form: session.user.user_metadata?.has_completed_form,
+    } : null;
 
-    setAuthState({
+    updateState({
       session,
-      user: session?.user ? {
-        id: session.user.id,
-        email: session.user.email || '',
-        name: session.user.user_metadata?.name,
-        avatar_url: session.user.user_metadata?.avatar_url,
-        created_at: session.user.created_at,
-        updated_at: session.user.updated_at,
-        team_id: session.user.user_metadata?.team_id,
-        role: session.user.user_metadata?.role,
-        status: session.user.user_metadata?.status,
-        last_form_page: session.user.user_metadata?.last_form_page,
-        has_completed_form: session.user.user_metadata?.has_completed_form,
-      } : null,
-      isLoading: false,
+      user,
       isAuthenticated: !!session,
+      isLoading: false,
       error: null,
     });
-  }, []);
+  };
 
-  // Inicializar e verificar a sessão ao carregar
   useEffect(() => {
-    let isMounted = true;
-    let authSubscription: { data: { subscription: { unsubscribe: () => void } } };
-    
-    const initializeAuth = async () => {
+    let mounted = true;
+
+    const initialize = async () => {
       try {
-        // Verificar se há uma sessão ativa
         const session = await AuthService.getSession();
-        
-        if (isMounted) {
+        if (mounted) {
           updateStateWithSession(session);
           
-          // Se o usuário estiver autenticado, processar qualquer convite pendente
           if (session?.user) {
-            try {
-              console.log('Verificando convites pendentes para usuário autenticado');
-              await AuthService.processAuthenticatedUser(session.user);
-            } catch (error) {
-              console.error('Erro ao processar convites pendentes:', error);
-            }
+            await AuthService.processAuthenticatedUser(session.user);
           }
         }
-        
-        // Configurar listener para mudanças na autenticação
-        authSubscription = AuthService.onAuthStateChange((event, session) => {
-          if (!isMounted) return;
-          
-          // Verificar se é uma mudança real de estado
-          if (event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED') {
-            console.log('Auth state changed:', event, session?.user?.email);
-            updateStateWithSession(session);
-            
-            // Processar convites pendentes após login bem-sucedido
-            if (event === 'SIGNED_IN' && session?.user) {
-              AuthService.processAuthenticatedUser(session.user)
-                .catch(error => console.error('Erro ao processar convites após login:', error));
-            }
-            
-            // Redirecionar após login bem-sucedido
-            if (event === 'SIGNED_IN' && window.location.pathname.includes('/auth')) {
-              router.push('/team-setup');
-            }
-            
-            // Redirecionar após logout
-            if (event === 'SIGNED_OUT') {
-              router.push('/auth');
-            }
-          }
-        });
       } catch (error) {
         console.error('Erro ao inicializar autenticação:', error);
-        if (isMounted) {
-          setAuthState(prev => ({ ...prev, isLoading: false }));
+        if (mounted) {
+          updateState({ isLoading: false, error: 'Erro ao inicializar autenticação' });
         }
       }
     };
 
-    initializeAuth();
-    
+    initialize();
+
+    const { data: { subscription } } = AuthService.onAuthStateChange(async (event, session) => {
+      if (!mounted) return;
+
+      console.log('Auth state changed:', event);
+
+      switch (event) {
+        case 'SIGNED_IN':
+          updateStateWithSession(session);
+          if (session?.user) {
+            await AuthService.processAuthenticatedUser(session.user);
+          }
+          router.push('/team-setup');
+          break;
+        case 'SIGNED_OUT':
+          updateStateWithSession(null);
+          router.push('/auth');
+          break;
+        case 'USER_UPDATED':
+          updateStateWithSession(session);
+          break;
+      }
+    });
+
     return () => {
-      isMounted = false;
-      if (authSubscription?.data?.subscription) {
-        authSubscription.data.subscription.unsubscribe();
-      }
+      mounted = false;
+      subscription?.unsubscribe();
     };
   }, []);
 
-  // Efeito para mover dados de convite antigos para novas chaves e limpar
-  useEffect(() => {
-    // Migrar chaves antigas para o novo formato
-    const oldPendingInvite = localStorage.getItem('pendingInvite');
-    const oldPendingInviteEmail = localStorage.getItem('pendingInviteEmail');
-    
-    if (oldPendingInvite) {
-      localStorage.setItem('pendingInviteTeamId', oldPendingInvite);
-      localStorage.removeItem('pendingInvite');
-    }
-    
-    if (oldPendingInviteEmail) {
-      localStorage.setItem('pendingInviteEmail', oldPendingInviteEmail);
-      localStorage.removeItem('pendingInviteEmail');
-    }
-  }, []);
-
-  // Login com Google atualizado
-  const signInWithGoogle = useCallback(async () => {
+  // Auth Methods
+  const signInWithGoogle = async () => {
     try {
-      setError(null);
-      setAuthState(prev => ({ ...prev, isLoading: true }));
-      
-      // Capturar os dados do convite pendente antes de redirecionar
-      const pendingInviteTeamId = localStorage.getItem('pendingInviteTeamId') || localStorage.getItem('pendingInvite');
-      const pendingInviteEmail = localStorage.getItem('pendingInviteEmail');
-      
-      // Determinar a URL base para redirecionamento
-      const baseRedirectUrl = window.location.origin;
-      
-      // Se houver um convite pendente, adicionar como parâmetros na URL
-      let redirectUrl = `${baseRedirectUrl}/auth`;
-      if (pendingInviteTeamId) {
-        redirectUrl = `${redirectUrl}?invite=${pendingInviteTeamId}`;
-        if (pendingInviteEmail) {
-          redirectUrl += `&email=${encodeURIComponent(pendingInviteEmail)}`;
-        }
-      }
-      
-      console.log('Iniciando login Google com redirecionamento para:', redirectUrl);
-      
-      // Iniciar autenticação com Google
+      updateState({ isLoading: true, error: null });
       await AuthService.signInWithGoogle({
-        redirectTo: redirectUrl,
-        queryParams: {
-          access_type: 'offline',
-          prompt: 'consent'
-        }
+        redirectTo: `${window.location.origin}/auth/callback`
       });
     } catch (error: any) {
-      console.error('Erro ao fazer login com Google:', error);
-      setError(error.message || 'Erro ao fazer login com Google');
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-    }
-  }, []);
-
-  // Login com Email/Senha
-  const signInWithEmail = useCallback(async (email: string, password: string) => {
-    try {
-      setError(null);
-      setAuthState(prev => ({ ...prev, isLoading: true }));
-      await AuthService.signInWithEmail(email, password);
-    } catch (error: any) {
-      console.error('Erro ao fazer login com email:', error);
-      setError(error.message || 'Credenciais inválidas');
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-    }
-  }, []);
-
-  // Registro com Email/Senha
-  const signUpWithEmail = useCallback(async (email: string, password: string) => {
-    try {
-      setError(null);
-      setAuthState(prev => ({ ...prev, isLoading: true }));
-      const { user } = await AuthService.signUpWithEmail(email, password);
-      
-      if (user) {
-        // Se o usuário foi criado com sucesso
-        setAuthState(prev => ({ ...prev, isLoading: false }));
-      }
-    } catch (error: any) {
-      console.error('Erro ao registrar com email:', error);
-      setError(error.message || 'Erro ao criar conta');
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-    }
-  }, []);
-
-  // Logout
-  const signOut = useCallback(async () => {
-    try {
-      setError(null);
-      setAuthState(prev => ({ ...prev, isLoading: true }));
-      await AuthService.signOut();
-    } catch (error: any) {
-      console.error('Erro ao fazer logout:', error);
-      router.push('/auth');
-    } finally {
-      setAuthState(prev => ({ ...prev, isLoading: false }));
-    }
-  }, []);
-
-  // Limpar mensagens de erro
-  const clearError = () => setError(null);
-
-  // Implementação das funções adicionais definidas na interface AuthContextType
-  const inviteUser = async (params: { email: string; teamId: string; message?: string }) => {
-    try {
-      const inviteUrl = `${window.location.origin}/auth/accept-invite?team=${params.teamId}`;
-      
-      const response = await fetch('/api/send-invite', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          email: params.email,
-          inviteUrl,
-          message: params.message,
-          teamId: params.teamId,
-        }),
-      });
-      
-      const data = await response.json();
-      
-      if (!response.ok) {
-        throw new Error(data.error || 'Erro ao enviar convite');
-      }
-      
-      return { success: true };
-    } catch (error: any) {
-      console.error('Erro ao enviar convite:', error);
-      return { success: false, error: error.message };
+      updateState({ error: error.message, isLoading: false });
+      throw error;
     }
   };
 
+  const signInWithEmail = async (email: string, password: string) => {
+    try {
+      updateState({ isLoading: true, error: null });
+      const { user: supabaseUser } = await AuthService.signInWithEmail(email, password);
+      
+      if (supabaseUser) {
+        // Converter o usuário do Supabase para nosso modelo User
+        const user: User = {
+          id: supabaseUser.id,
+          email: supabaseUser.email || email,
+          created_at: supabaseUser.created_at,
+          updated_at: supabaseUser.updated_at,
+          ...supabaseUser.user_metadata
+        };
+
+        // Processar convite pendente ao fazer login
+        const inviteProcessed = await processInvite(user);
+        
+        updateState({
+          user,
+          isLoading: false,
+          error: null
+        });
+
+        // Redirecionar com base no processamento do convite
+        if (inviteProcessed) {
+          router.push('/team-setup');
+        }
+      }
+    } catch (error: any) {
+      updateState({ error: error.message, isLoading: false });
+      throw error;
+    }
+  };
+
+  const processInvite = async (user: User) => {
+    try {
+      if (!user.email) return false;
+
+      const teamId = await InviteService.processInvite(user.id, user.email);
+      if (teamId) {
+        // Atualizar o estado do usuário com a nova equipe
+        const updatedUser = { ...user, team_id: teamId };
+        updateState({ user: updatedUser });
+        
+        // Sincronizar associações de equipe
+        await TeamService.syncUserTeamMemberships(user.id, user.email);
+        return true;
+      }
+      return false;
+    } catch (error) {
+      console.error('Erro ao processar convite:', error);
+      updateState({ error: 'Erro ao processar convite' });
+      return false;
+    }
+  };
+
+  const signUpWithEmail = async (email: string, password: string) => {
+    try {
+      updateState({ isLoading: true, error: null });
+      const { user: supabaseUser } = await AuthService.signUpWithEmail(email, password);
+      
+      if (supabaseUser) {
+        // Converter o usuário do Supabase para nosso modelo User
+        const user: User = {
+          id: supabaseUser.id,
+          email: supabaseUser.email || email,
+          created_at: supabaseUser.created_at,
+          updated_at: supabaseUser.updated_at,
+          ...supabaseUser.user_metadata
+        };
+
+        // Processar convite pendente imediatamente após o registro
+        const inviteProcessed = await processInvite(user);
+        
+        if (inviteProcessed) {
+          // Atualizar estado com informações da equipe
+          updateState({
+            user,
+            isLoading: false,
+            error: null
+          });
+          
+          // Redirecionar para team-setup após processamento bem-sucedido
+          router.push('/team-setup');
+        }
+      }
+    } catch (error: any) {
+      updateState({ error: error.message, isLoading: false });
+      throw error;
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      updateState({ isLoading: true, error: null });
+      await AuthService.signOut();
+      updateState({ user: null, session: null, isAuthenticated: false });
+    } catch (error: any) {
+      updateState({ error: error.message, isLoading: false });
+    }
+  };
+
+  // User Management Methods
   const updateFormProgress = async (page: string, isComplete = false) => {
     try {
-      if (!authState.user) {
+      if (!state.user) {
         return { success: false, error: 'Usuário não autenticado' };
       }
-      
+
       const { error } = await supabase
         .from('users')
         .update({
           last_form_page: page,
           has_completed_form: isComplete,
         })
-        .eq('id', authState.user.id);
-      
+        .eq('id', state.user.id);
+
       if (error) throw error;
-      
-      // Atualizar o estado local
-      setAuthState(prev => ({
-        ...prev,
-        user: prev.user ? {
-          ...prev.user,
+
+      updateState({
+        user: state.user ? {
+          ...state.user,
           last_form_page: page,
           has_completed_form: isComplete,
-        } : null,
-      }));
-      
+        } : null
+      });
+
       return { success: true };
     } catch (error: any) {
-      console.error('Erro ao atualizar progresso do formulário:', error);
       return { success: false, error: error.message };
     }
   };
 
-  const getNextFormPage = () => {
-    // Lógica para determinar a próxima página com base no progresso do usuário
-    if (!authState.user?.last_form_page) {
-      return '/form/step1'; // Página inicial do formulário
+  const inviteUser = async (params: InviteUserParams) => {
+    try {
+      const response = await fetch('/api/send-invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email: params.email,
+          inviteUrl: `${window.location.origin}/auth/accept-invite?team=${params.teamId}`,
+          message: params.message,
+          teamId: params.teamId,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      return { success: true };
+    } catch (error: any) {
+      return { success: false, error: error.message };
     }
-    
-    // Mapeamento de páginas do formulário
+  };
+
+  // Utility Methods
+  const getNextFormPage = () => {
+    if (!state.user?.last_form_page) return '/form/step1';
+
     const formPages = [
       '/form/step1',
       '/form/step2',
@@ -308,39 +284,35 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       '/form/step5',
       '/resultados',
     ];
-    
-    const currentIndex = formPages.indexOf(authState.user.last_form_page);
-    
-    if (currentIndex === -1 || currentIndex === formPages.length - 1) {
-      return '/form/step1'; // Voltar ao início se não encontrar ou estiver na última página
-    }
-    
-    return formPages[currentIndex + 1];
+
+    const currentIndex = formPages.indexOf(state.user.last_form_page);
+    return currentIndex === -1 || currentIndex === formPages.length - 1
+      ? '/form/step1'
+      : formPages[currentIndex + 1];
   };
 
-  const hasCompletedForm = () => {
-    return !!authState.user?.has_completed_form;
-  };
+  const hasCompletedForm = () => !!state.user?.has_completed_form;
+  const clearError = () => updateState({ error: null });
 
   return (
     <AuthContext.Provider
       value={{
-        ...authState,
+        ...state,
         signInWithGoogle,
         signInWithEmail,
         signUpWithEmail,
         signOut,
-        error,
         clearError,
         inviteUser,
         updateFormProgress,
         getNextFormPage,
         hasCompletedForm,
-        setUser: (user) => setAuthState(prev => ({ ...prev, user })),
-        setSession: (session) => setAuthState(prev => ({ ...prev, session })),
-        setIsLoading: (isLoading) => setAuthState(prev => ({ ...prev, isLoading })),
-        setIsAuthenticated: (isAuthenticated) => setAuthState(prev => ({ ...prev, isAuthenticated })),
-        setError: (error) => setError(error),
+        setUser: (user) => updateState({ user }),
+        setSession: (session) => updateState({ session }),
+        setIsLoading: (isLoading) => updateState({ isLoading }),
+        setIsAuthenticated: (isAuthenticated) => updateState({ isAuthenticated }),
+        setError: (error) => updateState({ error }),
+        setSurveyResponses
       }}
     >
       {children}

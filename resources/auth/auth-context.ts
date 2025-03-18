@@ -1,22 +1,7 @@
-import { createContext, useContext } from 'react';
+import { createContext } from 'react';
 import { AuthState, InviteUserParams, User } from './auth-model';
-
-interface AuthContextType extends AuthState {
-  setUser: (user: User | null) => void;
-  setSession: (session: any | null) => void;
-  setIsLoading: (isLoading: boolean) => void;
-  setIsAuthenticated: (isAuthenticated: boolean) => void;
-  setError: (error: string | null) => void;
-  signInWithGoogle: () => Promise<void>;
-  signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
-  clearError: () => void;
-  inviteUser: (params: InviteUserParams) => Promise<{ success: boolean; userId?: string; error?: string }>;
-  updateFormProgress: (page: string, isComplete?: boolean) => Promise<{ success: boolean; error?: string }>;
-  getNextFormPage: () => string;
-  hasCompletedForm: () => boolean;
-}
+import { Session } from '@supabase/supabase-js';
+import { SurveyResponses } from '../survey/survey-model';
 
 export const initialState: AuthState = {
   user: null,
@@ -24,9 +9,27 @@ export const initialState: AuthState = {
   isLoading: true,
   isAuthenticated: false,
   error: null,
+  surveyResponses: null,
 };
 
-// Criando o contexto com valores padrão
+export interface AuthContextType extends AuthState {
+  signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  signOut: () => Promise<void>;
+  clearError: () => void;
+  inviteUser: (params: InviteUserParams) => Promise<{ success: boolean; error?: string }>;
+  updateFormProgress: (page: string, isComplete?: boolean) => Promise<{ success: boolean; error?: string }>;
+  getNextFormPage: () => string;
+  hasCompletedForm: () => boolean;
+  setUser: (user: User | null) => void;
+  setSession: (session: Session | null) => void;
+  setIsLoading: (isLoading: boolean) => void;
+  setIsAuthenticated: (isAuthenticated: boolean) => void;
+  setError: (error: string | null) => void;
+  setSurveyResponses: (surveyResponses: SurveyResponses | null) => void;
+}
+
 const AuthContext = createContext<AuthContextType>({
   ...initialState,
   signInWithGoogle: async () => {},
@@ -34,15 +37,19 @@ const AuthContext = createContext<AuthContextType>({
   signUpWithEmail: async () => {},
   signOut: async () => {},
   clearError: () => {},
-  inviteUser: async () => ({ success: false, error: 'Não implementado' }),
-  updateFormProgress: async () => ({ success: false, error: 'Não implementado' }),
-  getNextFormPage: () => '/login',
+  inviteUser: async () => ({ success: false }),
+  updateFormProgress: async () => ({ success: false }),
+  getNextFormPage: () => '/form/step1',
   hasCompletedForm: () => false,
   setUser: () => {},
   setSession: () => {},
   setIsLoading: () => {},
   setIsAuthenticated: () => {},
   setError: () => {},
+  setSurveyResponses: () => {},
+  isLoading: false,
+  isAuthenticated: false,
+  error: null,
 });
 
 export default AuthContext;

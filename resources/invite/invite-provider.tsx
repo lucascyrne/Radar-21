@@ -12,8 +12,13 @@ export const InviteProvider: React.FC<{ children: React.ReactNode }> = ({ childr
 
   // Carregar convite pendente ao inicializar
   React.useEffect(() => {
+    // Primeiro, tentar capturar convite da URL
+    InviteService.captureInviteFromUrl();
+    
+    // Depois, carregar do storage
     const stored = InviteService.getPendingInvite();
-    if (stored.teamId) {
+    if (stored) {
+      console.log('Convite pendente encontrado:', stored);
       setPendingInvite(stored);
     }
   }, []);
@@ -33,19 +38,29 @@ export const InviteProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   }, []);
 
   const processPendingInvite = useCallback(async (userId: string, email: string) => {
+    if (!pendingInvite) {
+      console.log('Nenhum convite pendente para processar');
+      return;
+    }
+    
     setIsProcessing(true);
     setError(null);
     
     try {
-      await InviteService.processInvite(userId, email);
-      setPendingInvite(null);
+      console.log('Processando convite pendente:', { userId, email, pendingInvite });
+      const teamId = await InviteService.processInvite(userId, email);
+      if (teamId) {
+        console.log('Convite processado com sucesso:', teamId);
+        setPendingInvite(null);
+      }
     } catch (err) {
+      console.error('Erro ao processar convite:', err);
       setError(err instanceof Error ? err.message : 'Erro ao processar convite');
       throw err;
     } finally {
       setIsProcessing(false);
     }
-  }, []);
+  }, [pendingInvite]);
 
   const clearPendingInvite = useCallback(() => {
     InviteService.clearPendingInvite();

@@ -16,13 +16,13 @@ const cache = {
 // Tempo de expiração do cache em milissegundos (5 minutos)
 const CACHE_EXPIRATION = 5 * 60 * 1000;
 
-export class TeamService {
+export const TeamService = {
   /**
    * Busca um usuário pelo email
    * @param email Email do usuário
    * @returns ID do usuário ou null se não encontrado
    */
-  static async getUserByEmail(email: string): Promise<string | null> {
+  async getUserByEmail(email: string): Promise<string | null> {
     try {
       // Verificar se há dados em cache e se ainda são válidos
       const cacheKey = `user_${email}`;
@@ -58,7 +58,7 @@ export class TeamService {
       console.error('Erro ao buscar usuário:', error);
       return null;
     }
-  }
+  },
 
   /**
    * Cria uma nova equipe
@@ -68,7 +68,7 @@ export class TeamService {
    * @param teamSize Tamanho da equipe
    * @returns Dados da equipe criada
    */
-  static async createTeam(
+  async createTeam(
     name: string,
     ownerId: string,
     ownerEmail: string,
@@ -97,7 +97,7 @@ export class TeamService {
       console.error('Erro ao criar equipe:', error);
       throw new Error(`Erro ao criar equipe: ${error.message}`);
     }
-  }
+  },
 
   /**
    * Adiciona um membro à equipe
@@ -107,7 +107,7 @@ export class TeamService {
    * @param role Papel do membro na equipe
    * @param status Status do membro na equipe
    */
-  static async addTeamMember(
+  async addTeamMember(
     teamId: string,
     userId: string | null,
     email: string,
@@ -180,60 +180,57 @@ export class TeamService {
       console.error('Erro ao adicionar membro à equipe:', error);
       throw error;
     }
-  }
+  },
 
   /**
    * Obtém as equipes do usuário
    * @param userId ID do usuário
    * @returns Lista de equipes e associações do usuário
    */
-  static async getUserTeams(userId: string) {
+  async getUserTeams(userId: string): Promise<{ teams: Team[] }> {
     try {
-      // Buscar associações de equipe do usuário
-      const { data: memberships, error: membershipError } = await supabase
+      // Primeiro, buscar os IDs dos times do usuário
+      const { data: memberTeams, error: memberError } = await supabase
         .from('team_members')
-        .select('*')
+        .select('team_id')
         .eq('user_id', userId);
 
-      if (membershipError) {
-        console.error('Erro ao buscar equipes do usuário:', membershipError);
-        throw new Error(membershipError.message);
+      if (memberError) {
+        console.error('Erro ao buscar associações de equipe:', memberError);
+        throw memberError;
       }
 
-      // Buscar as equipes completas
-      if (memberships && memberships.length > 0) {
-        const teamIds = memberships.map(m => m.team_id);
-        const { data: teams, error: teamsError } = await supabase
-          .from('teams')
-          .select('*')
-          .in('id', teamIds);
-          
-        if (teamsError) {
-          throw teamsError;
-        }
-        
-        return {
-          memberships: memberships || [],
-          teams: teams || []
-        };
+      // Se não houver times, retornar array vazio
+      if (!memberTeams || memberTeams.length === 0) {
+        return { teams: [] };
       }
 
-      return {
-        memberships: memberships || [],
-        teams: []
-      };
-    } catch (error: any) {
+      // Buscar detalhes dos times usando os IDs encontrados
+      const teamIds = memberTeams.map(mt => mt.team_id);
+      const { data: teams, error } = await supabase
+        .from('teams')
+        .select('id, name, owner_id, owner_email, team_size, created_at')
+        .in('id', teamIds);
+
+      if (error) {
+        console.error('Erro na query:', error);
+        throw error;
+      }
+
+      console.log('Teams encontradas:', teams);
+      return { teams: teams || [] };
+    } catch (error) {
       console.error('Erro ao buscar equipes do usuário:', error);
       throw error;
     }
-  }
+  },
 
   /**
    * Obtém os membros de uma equipe
    * @param teamId ID da equipe
    * @returns Lista de membros da equipe
    */
-  static async getTeamMembers(teamId: string): Promise<TeamMember[]> {
+  async getTeamMembers(teamId: string): Promise<TeamMember[]> {
     try {
       if (!teamId) {
         return [];
@@ -270,7 +267,7 @@ export class TeamService {
       console.error('Erro ao buscar membros da equipe:', error);
       return [];
     }
-  }
+  },
 
   /**
    * Gera uma mensagem de convite padrão
@@ -278,9 +275,9 @@ export class TeamService {
    * @param fromEmail Email do remetente
    * @returns Mensagem de convite formatada
    */
-  static generateInviteMessage(teamName: string, fromEmail: string): string {
+  generateInviteMessage(teamName: string, fromEmail: string): string {
     return `Olá! Estou convidando você para participar da equipe "${teamName}" no Radar21 (www.radar21.com.br) - uma plataforma para avaliação de competências de liderança na era da Indústria 4.0. Sua participação é muito importante para entendermos o perfil de nossa equipe. Por favor, aceite o convite e responda o questionário. Obrigado! - ${fromEmail}`;
-  }
+  },
 
   /**
    * Atualiza o status de um membro da equipe
@@ -288,7 +285,7 @@ export class TeamService {
    * @param email Email do membro
    * @param status Novo status
    */
-  static async updateMemberStatus(
+  async updateMemberStatus(
     teamId: string,
     email: string,
     status: TeamMemberStatus
@@ -310,7 +307,7 @@ export class TeamService {
       console.error('Erro ao atualizar status do membro:', error);
       throw new Error(`Erro ao atualizar status do membro: ${error.message}`);
     }
-  }
+  },
 
   /**
    * Obtém um membro específico da equipe
@@ -318,7 +315,7 @@ export class TeamService {
    * @param email Email do membro
    * @returns Dados do membro ou null se não encontrado
    */
-  static async getTeamMember(teamId: string, email: string): Promise<TeamMember | null> {
+  async getTeamMember(teamId: string, email: string): Promise<TeamMember | null> {
     try {
       if (!teamId || !email) {
         return null;
@@ -343,7 +340,7 @@ export class TeamService {
       console.error('Erro ao buscar membro da equipe:', error);
       return null;
     }
-  }
+  },
 
   /**
    * Verifica se um membro já existe na equipe
@@ -351,7 +348,7 @@ export class TeamService {
    * @param email Email do membro
    * @returns Booleano indicando se o membro existe
    */
-  static async checkTeamMemberExists(teamId: string, email: string): Promise<boolean> {
+  async checkTeamMemberExists(teamId: string, email: string): Promise<boolean> {
     try {
       const { data, error } = await supabase
         .from('team_members')
@@ -372,14 +369,14 @@ export class TeamService {
       console.error('Erro ao verificar existência do membro:', error);
       return false;
     }
-  }
+  },
 
   /**
    * Obtém o ID da equipe para um convite
    * @param inviteCode Código do convite (ID da equipe)
    * @returns Detalhes da equipe ou null se não encontrada
    */
-  static async getTeamByInvite(inviteCode: string): Promise<Team | null> {
+  async getTeamByInvite(inviteCode: string): Promise<Team | null> {
     try {
       const { data, error } = await supabase
         .from('teams')
@@ -399,7 +396,7 @@ export class TeamService {
       console.error('Erro ao buscar equipe por convite:', error);
       return null;
     }
-  }
+  },
 
   /**
    * Processa um convite para um usuário, associando-o a uma equipe
@@ -408,84 +405,70 @@ export class TeamService {
    * @param email Email do usuário
    * @returns ID do membro da equipe processado
    */
-  static async processInvite(teamId: string, userId: string, email: string): Promise<string | null> {
+  async processInvite(teamId: string, userId: string, email: string): Promise<string | null> {
     try {
       console.log(`Processando convite: teamId=${teamId}, userId=${userId}, email=${email}`);
-      
-      // Verificar se o membro já existe (com qualquer status)
+
+      // Verificar se o membro já existe
       const { data: existingMember, error: checkError } = await supabase
         .from('team_members')
         .select('*')
         .eq('team_id', teamId)
         .eq('email', email)
-        .maybeSingle();
+        .single();
 
       if (checkError && checkError.code !== 'PGRST116') {
         throw checkError;
       }
 
       if (existingMember) {
-        console.log('Membro já existe:', existingMember);
-        
-        // Se já existir e não estiver com status 'answered', atualizar para 'pending_survey'
-        if (existingMember.status !== 'answered') {
-          const updates: any = { 
-            status: 'pending_survey',
-            user_id: userId 
-          };
-          
-          console.log('Atualizando membro existente:', updates);
-          
-          const { error: updateError } = await supabase
-            .from('team_members')
-            .update(updates)
-            .eq('id', existingMember.id);
-          
-          if (updateError) {
-            console.error('Erro ao atualizar membro:', updateError);
-            throw updateError;
-          }
-        }
-        
-        return existingMember.id;
-      } else {
-        console.log('Criando novo membro da equipe');
-        
-        // Se não existir, criar um novo membro
-        const { data: newMember, error: insertError } = await supabase
+        console.log('Membro existente encontrado:', existingMember);
+        // Sempre atualizar o user_id e status para garantir associação
+        const { data: updatedMember, error: updateError } = await supabase
           .from('team_members')
-          .insert({
-            team_id: teamId,
+          .update({
             user_id: userId,
-            email: email,
-            role: 'member',
-            status: 'pending_survey'
+            status: existingMember.status === 'answered' ? 'answered' : 'invited',
           })
+          .eq('id', existingMember.id)
           .select()
           .single();
-        
-        if (insertError) {
-          console.error('Erro ao inserir novo membro:', insertError);
-          throw insertError;
-        }
-        
-        return newMember?.id || null;
+
+        if (updateError) throw updateError;
+        console.log('Membro atualizado:', updatedMember);
+        return updatedMember?.id || null;
       }
+
+      // Se não existir, criar novo membro
+      console.log('Criando novo membro da equipe');
+      const { data: newMember, error: insertError } = await supabase
+        .from('team_members')
+        .insert({
+          team_id: teamId,
+          user_id: userId,
+          email: email,
+          role: 'member',
+          status: 'invited',
+          created_at: new Date().toISOString(),
+        })
+        .select()
+        .single();
+
+      if (insertError) throw insertError;
+      console.log('Novo membro criado:', newMember);
+      return newMember?.id || null;
     } catch (error) {
       console.error('Erro ao processar convite:', error);
       throw error;
-    } finally {
-      // Limpar o cache de membros para esta equipe
-      cache.members.delete(teamId);
     }
-  }
+  },
 
   /**
    * Sincroniza associações de equipe para um usuário usando seu email
    * @param userId ID do usuário
    * @param email Email do usuário
    */
-  static async syncUserTeamMemberships(userId: string, email: string): Promise<void> {
+  async syncUserTeamMemberships(userId: string, email: string): Promise<void> {
     try {
       console.log(`Sincronizando associações de equipe para userId=${userId}, email=${email}`);
       
@@ -528,13 +511,13 @@ export class TeamService {
       console.error('Erro ao sincronizar associações de equipe:', error);
       // Não lançar o erro para não interromper o fluxo principal
     }
-  }
+  },
 
   /**
    * Padroniza os status dos membros da equipe
    * @param teamId ID da equipe
    */
-  static async standardizeTeamMemberStatus(teamId: string): Promise<void> {
+  async standardizeTeamMemberStatus(teamId: string): Promise<void> {
     try {
       // Mapear status antigos para os novos status padronizados
       const statusMapping: Record<string, string> = {
@@ -573,4 +556,4 @@ export class TeamService {
       console.error('Erro ao padronizar status dos membros:', error);
     }
   }
-} 
+}; 

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import { Session } from '@supabase/supabase-js';
+import { SurveyResponses } from '../survey/survey-model';
 
 // Tipos para autenticação e gerenciamento de usuários
 export interface User {
@@ -34,10 +36,11 @@ export enum UserStatus {
 
 export interface AuthState {
   user: User | null;
-  session: any | null;
+  session: Session | null;
   isLoading: boolean;
   isAuthenticated: boolean;
   error: string | null;
+  surveyResponses: SurveyResponses | null;
 }
 
 export interface InviteUserParams {
@@ -57,19 +60,6 @@ export interface AuthResponse {
   user: User | null;
   session: any | null;
   error?: string;
-}
-
-export interface AuthContextType extends AuthState {
-  signInWithGoogle: () => Promise<void>;
-  signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<void>;
-  signOut: () => Promise<void>;
-  error: string | null;
-  clearError: () => void;
-  inviteUser: (params: InviteUserParams) => Promise<{ success: boolean; userId?: string; error?: string }>;
-  updateFormProgress: (page: string, isComplete?: boolean) => Promise<{ success: boolean; error?: string }>;
-  getNextFormPage: () => string;
-  hasCompletedForm: () => boolean;
 }
 
 // Esquemas de validação Zod

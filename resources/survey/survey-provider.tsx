@@ -8,7 +8,9 @@ import {
   ProfileFormValues, 
   SurveyFormValues,
   OpenQuestionsFormValues,
-  SurveyState 
+  SurveyState,
+  Question,
+  Section
 } from './survey-model';
 import { useAuth } from '@/resources/auth/auth-hook';
 import { useTeam } from '@/resources/team/team-hook';
@@ -24,6 +26,13 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
   const { user } = useAuth();
   const { selectedTeam, teamMembers, loadTeamMembers } = useTeam();
   const [teamMemberId, setTeamMemberId] = useState<string | null>(null);
+  
+  // Estados adicionais para pesquisa
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [currentSection, setCurrentSection] = useState<string>('');
+  const [answers, setAnswers] = useState<Record<string, string | number>>({});
+  const [radarData, setRadarData] = useState<any>(null);
 
   // Método para atualizar o estado de loading e erro
   const updateLoading = useCallback((isLoading: boolean, error: string | null = null) => {
@@ -376,9 +385,44 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
     localStorage.setItem('teamMemberId', id);
   }, []);
 
+  // Função para salvar respostas
+  const saveAnswers = useCallback(async () => {
+    try {
+      if (!state.teamMemberId) return false;
+      await saveSurveyResponses(answers as SurveyFormValues);
+      return true;
+    } catch (error) {
+      console.error('Erro ao salvar respostas:', error);
+      return false;
+    }
+  }, [answers, state.teamMemberId, saveSurveyResponses]);
+
+  // Função para gerar dados do radar
+  const generateRadarData = useCallback(async () => {
+    try {
+      // Implementar lógica de geração de dados do radar
+      setRadarData({}); // TODO: Implementar geração real dos dados
+    } catch (error) {
+      console.error('Erro ao gerar dados do radar:', error);
+    }
+  }, []);
+
   // Criar o valor do contexto
   const contextValue: SurveyContextType = {
     state,
+    profile: state.profile,
+    surveyResponses: state.surveyResponses,
+    openQuestionResponses: state.openQuestionResponses,
+    isLoading: state.isLoading,
+    error: state.error,
+    questions,
+    sections,
+    currentSection,
+    setCurrentSection,
+    answers,
+    saveAnswers,
+    generateRadarData,
+    radarData,
     loadProfile,
     saveProfile,
     loadSurveyResponses,

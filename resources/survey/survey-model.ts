@@ -128,3 +128,17 @@ export interface CompetencyDetail {
   teamAverage: number;
   difference: number;
 }
+
+// Interfaces para seções e questões
+export interface Section {
+  id: string;
+  title: string;
+  description?: string;
+}
+
+export interface Question {
+  id: string;
+  section_id: string;
+  question: string;
+  competence: string;
+}

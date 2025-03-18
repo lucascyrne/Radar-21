@@ -13,6 +13,7 @@ export interface TeamContextType extends TeamState {
   updateMemberStatus: (teamId: string, email: string, status: TeamMemberStatus) => Promise<void>;
   resetTeamsLoaded: () => void;
   resetMembersLoaded: (teamId: string) => void;
+  refreshTeams: () => Promise<void>;
 }
 
 // Estado inicial do contexto de equipes
@@ -44,4 +45,5 @@ export const TeamContext = createContext<TeamContextType>({
   updateMemberStatus: async () => {},
   resetTeamsLoaded: () => {},
   resetMembersLoaded: () => {},
+  refreshTeams: async () => {},
 }); 

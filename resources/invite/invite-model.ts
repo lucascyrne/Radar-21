@@ -3,13 +3,14 @@ export interface InviteData {
   teamName: string;
   email: string;
   invitedBy: string;
-  message: string;
+  message?: string;
 }
 
 export interface PendingInvite {
-  teamId?: string;
-  teamName?: string;
+  teamId: string;
 }
+
+export type InviteStatus = 'invited' | 'accepted' | 'declined';
 
 export interface InviteContextState {
   pendingInvite: PendingInvite | null;

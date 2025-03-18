@@ -47,7 +47,6 @@ export interface TeamMember {
   role: 'leader' | 'member';
   status: TeamMemberStatus;
   created_at: string;
-  updated_at: string;
 }
 
 export interface TeamMembership {

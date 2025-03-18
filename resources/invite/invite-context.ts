@@ -1,7 +1,16 @@
 import { createContext } from 'react';
-import { InviteContextType } from './invite-model';
+import { InviteData, PendingInvite } from './invite-model';
 
-export const InviteContext = createContext<InviteContextType>({
+export interface InviteContextState {
+  pendingInvite: PendingInvite | null;
+  isProcessing: boolean;
+  error: string | null;
+  sendInvite: (data: InviteData) => Promise<void>;
+  processPendingInvite: (userId: string, email: string) => Promise<void>;
+  clearPendingInvite: () => void;
+}
+
+export const InviteContext = createContext<InviteContextState>({
   pendingInvite: null,
   isProcessing: false,
   error: null,
