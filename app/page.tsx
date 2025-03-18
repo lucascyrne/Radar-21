@@ -1,76 +1,69 @@
 import Link from "next/link"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
-import { ArrowRight, CheckCircle } from "lucide-react"
+import { ArrowRight, BarChart2, Users, Brain, Shield, Lock } from "lucide-react"
 import { Layout } from "@/components/layout"
 
 export default function Home() {
   return (
     <Layout>
-      {/* Hero Section */}
-      <section className="text-center py-20">
-        <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl">
-          A era da Indústria 4.0 requer
-          <br />
-          novas competências
-        </h1>
-        <h3 className="mt-6 text-xl md:text-2xl text-muted-foreground">Você e sua equipe estão preparados?</h3>
-        <div className="mt-10">
-          <Link href="/auth">
-            <Button size="lg" className="text-lg px-8 py-6">
-              Descubra Agora <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
-          </Link>
-        </div>
-      </section>
-
-      {/* Features Section */}
-      <section className="py-20 bg-secondary rounded-lg">
-        <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Entenda o Contexto</h2>
-          <div className="grid gap-8 md:grid-cols-3">
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="text-xl font-bold mb-2">Indústria 4.0</h3>
-                <p className="text-muted-foreground">
-                  A Quarta Revolução Industrial descreve o rápido avanço tecnológico no século XXI.
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="text-xl font-bold mb-2">Competências de Liderança</h3>
-                <p className="text-muted-foreground">
-                  São as habilidades essenciais para se adaptar às mudanças da era digital.
-                </p>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="text-xl font-bold mb-2">Modelo de Referência</h3>
-                <p className="text-muted-foreground">
-                  Desenvolvido por Calado e Souza (2024), mede a adequação às demandas da Indústria 4.0.
-                </p>
-              </CardContent>
-            </Card>
+      {/* Hero Section - Redesenhada com gradiente e animação sutil */}
+      <section className="relative overflow-hidden py-32 px-4">
+        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/20 -z-10" />
+        <div className="max-w-4xl mx-auto text-center">
+          <h1 className="text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/80 animate-fade-in">
+            Lidere na Era da
+            <br />
+            Indústria 4.0
+          </h1>
+          <p className="mt-8 text-xl md:text-2xl text-muted-foreground leading-relaxed">
+            Descubra como suas competências de liderança se alinham com as demandas da nova revolução industrial
+          </p>
+          <div className="mt-12 flex items-center justify-center gap-4">
+            <Link href="/auth">
+              <Button size="lg" className="text-lg px-8 py-6 hover:scale-105 transition-transform">
+                Comece Agora <ArrowRight className="ml-2 h-5 w-5" />
+              </Button>
+            </Link>
           </div>
         </div>
       </section>
 
-      {/* How It Works Section */}
-      <section className="py-20">
+      {/* Features Section - Cards mais visuais */}
+      <section className="py-24">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Como Funciona</h2>
-          <div className="grid gap-6 md:grid-cols-3">
-            {[
-              "Cadastre-se e convide sua equipe",
-              "Responda as 14 perguntas do Radar da Liderança 4.0",
-              "Receba o gráfico das competências de sua equipe",
-              "Entenda seus pontos fortes e áreas de melhoria",
-              "Compare-se com a indústria",
-            ].map((step, index) => (
-              <div key={index} className="flex items-start space-x-3">
-                <CheckCircle className="h-6 w-6 text-primary flex-shrink-0 mt-1" />
+          <h2 className="text-3xl font-bold text-center mb-16">Por que usar o Radar da Liderança?</h2>
+          <div className="grid gap-8 md:grid-cols-3">
+            {features.map((feature, index) => (
+              <Card key={index} className="group hover:shadow-lg transition-all duration-300">
+                <CardContent className="p-8">
+                  <div className="mb-6 text-primary">
+                    {feature.icon}
+                  </div>
+                  <h3 className="text-xl font-bold mb-3 group-hover:text-primary transition-colors">
+                    {feature.title}
+                  </h3>
+                  <p className="text-muted-foreground">
+                    {feature.description}
+                  </p>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Process Section - Visual mais limpo */}
+      <section className="py-24 bg-secondary/30 rounded-3xl">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center mb-16">Como Funciona</h2>
+          <div className="max-w-3xl mx-auto">
+            {steps.map((step, index) => (
+              <div key={index} 
+                   className="flex items-center gap-6 mb-8 p-6 bg-background/50 rounded-xl hover:bg-background/80 transition-colors">
+                <div className="flex-shrink-0 w-12 h-12 flex items-center justify-center rounded-full bg-primary/10">
+                  <span className="text-xl font-bold text-primary">{index + 1}</span>
+                </div>
                 <p className="text-lg">{step}</p>
               </div>
             ))}
@@ -78,42 +71,123 @@ export default function Home() {
         </div>
       </section>
 
-      {/* About Section */}
-      <section className="py-20 bg-secondary rounded-lg">
+      {/* Privacy Section - Nova seção */}
+      <section className="py-24">
         <div className="container mx-auto px-4">
-          <h2 className="text-3xl font-bold text-center mb-12">Sobre os Pesquisadores</h2>
-          <div className="grid gap-6 md:grid-cols-2 max-w-3xl mx-auto">
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="text-xl font-bold mb-2">Edmilson Rodrigues do Nascimento Junior</h3>
-                <p className="text-muted-foreground mb-2">Email: ernj@cin.ufpe.br</p>
-                <div className="flex gap-2">
-                  <Link
-                    href="http://lattes.cnpq.br/2041701030190884"
-                    target="_blank"
-                    className="text-primary hover:underline"
-                  >
-                    Lattes
-                  </Link>
-                  <Link
-                    href="https://www.linkedin.com/in/edmilsonrodrigues/"
-                    target="_blank"
-                    className="text-primary hover:underline"
-                  >
-                    LinkedIn
-                  </Link>
-                </div>
-              </CardContent>
-            </Card>
-            <Card>
-              <CardContent className="p-6">
-                <h3 className="text-xl font-bold mb-2">Orientador: Alex Sandro Gomes, Phd.</h3>
-              </CardContent>
-            </Card>
+          <h2 className="text-3xl font-bold text-center mb-8">Compromisso com a Privacidade</h2>
+          <div className="max-w-3xl mx-auto bg-primary/5 rounded-2xl p-8">
+            <div className="grid gap-8 md:grid-cols-2">
+              <Card className="border-0 shadow-none bg-transparent">
+                <CardContent className="p-6">
+                  <div className="mb-4 text-primary">
+                    <Shield className="w-12 h-12" />
+                  </div>
+                  <h3 className="text-xl font-semibold mb-3">Respostas Anônimas</h3>
+                  <p className="text-muted-foreground">
+                    Todas as respostas são completamente anônimas. Nem a liderança nem a organização podem identificar respostas individuais.
+                  </p>
+                </CardContent>
+              </Card>
+              <Card className="border-0 shadow-none bg-transparent">
+                <CardContent className="p-6">
+                  <div className="mb-4 text-primary">
+                    <Lock className="w-12 h-12" />
+                  </div>
+                  <h3 className="text-xl font-semibold mb-3">Dados Agregados</h3>
+                  <p className="text-muted-foreground">
+                    Os resultados são apresentados apenas de forma agregada, garantindo a confidencialidade das avaliações individuais.
+                  </p>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="mt-8 text-center">
+              <p className="text-sm text-muted-foreground">
+                Saiba mais sobre nossa {" "}
+                <Link href="/privacy" className="text-primary hover:underline">
+                  política de privacidade
+                </Link>
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Researchers Section - Mais profissional */}
+      <section className="py-24">
+        <div className="container mx-auto px-4">
+          <h2 className="text-3xl font-bold text-center mb-16">Pesquisadores</h2>
+          <div className="grid gap-8 md:grid-cols-2 max-w-4xl mx-auto">
+            {researchers.map((researcher, index) => (
+              <Card key={index} className="overflow-hidden">
+                <CardContent className="p-8">
+                  <h3 className="text-xl font-bold mb-3">{researcher.name}</h3>
+                  <p className="text-muted-foreground mb-4">{researcher.role}</p>
+                  {researcher.email && (
+                    <p className="text-muted-foreground mb-4">{researcher.email}</p>
+                  )}
+                  {researcher.links && (
+                    <div className="flex gap-4">
+                      {researcher.links.map((link, i) => (
+                        <Link
+                          key={i}
+                          href={link.url}
+                          target="_blank"
+                          className="text-primary hover:text-primary/80 transition-colors"
+                        >
+                          {link.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            ))}
           </div>
         </div>
       </section>
     </Layout>
   )
 }
+
+const features = [
+  {
+    icon: <BarChart2 className="w-10 h-10" />,
+    title: "Avaliação Precisa",
+    description: "Metodologia baseada em pesquisa científica para medir competências essenciais da Indústria 4.0"
+  },
+  {
+    icon: <Users className="w-10 h-10" />,
+    title: "Análise em Equipe",
+    description: "Compare resultados entre membros e identifique pontos fortes e oportunidades de desenvolvimento"
+  },
+  {
+    icon: <Brain className="w-10 h-10" />,
+    title: "Insights Acionáveis",
+    description: "Receba recomendações personalizadas para desenvolver as competências necessárias"
+  }
+]
+
+const steps = [
+  "Cadastre-se gratuitamente e convide sua equipe para participar",
+  "Responda o questionário do Radar 21",
+  "Visualize os resultados em um gráfico radar interativo",
+  "Compare as competências de sua equipe",
+  "Receba recomendações personalizadas de desenvolvimento"
+]
+
+const researchers = [
+  {
+    name: "Edmilson Rodrigues do Nascimento Junior",
+    role: "Pesquisador Principal",
+    email: "ernj@cin.ufpe.br",
+    links: [
+      { label: "Lattes", url: "http://lattes.cnpq.br/2041701030190884" },
+      { label: "LinkedIn", url: "https://www.linkedin.com/in/edmilsonrodrigues/" }
+    ]
+  },
+  {
+    name: "Alex Sandro Gomes, Phd.",
+    role: "Orientador"
+  }
+]
 
