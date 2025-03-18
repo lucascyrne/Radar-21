@@ -1,9 +1,10 @@
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ArrowRightIcon } from 'lucide-react';
-import { TeamInvite } from './team-invite';
+
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TeamStatusList } from './team-status-list';
+import { ContinueButton } from './continue-button';
 import { TeamMember } from '@/resources/team/team-model';
+import { useTeam } from '@/resources/team/team-hook';
+import InviteUserForm from './invite-user-form';
 
 interface TeamDetailsProps {
   teamId: string;
@@ -21,49 +22,52 @@ export function TeamDetails({
   teamId,
   members,
   currentUserEmail,
-  surveyStatus,
-  inviteMessage,
-  onInviteMessageChange,
-  onSendInvite,
-  isSendingInvite,
   onContinue
 }: TeamDetailsProps) {
-  // Verificar se o usuário atual já respondeu a pesquisa
-  const currentMember = members.find(m => m.email === currentUserEmail);
-  const hasAnswered = currentMember?.status === 'answered';
+  const { selectedTeam } = useTeam();
+  const { loadTeamMembers } = useTeam();
   
+  // Determinar se o usuário atual é líder da equipe
+  const isTeamLeader = members.some(
+    m => m.email === currentUserEmail && m.role === 'leader'
+  );
+  
+  // Determinar se o usuário atual completou a pesquisa
+  const hasCompletedSurvey = currentUserEmail ? 
+    members.some(m => m.email === currentUserEmail && m.status === 'answered') : 
+    false;
+
+
   return (
-    <Card className="mb-6">
-      <CardHeader>
-        <CardTitle>Convidar Equipe</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <TeamInvite
-          inviteMessage={inviteMessage}
-          onInviteMessageChange={onInviteMessageChange}
-          onSendInvite={onSendInvite}
-          isSendingInvite={isSendingInvite}
+    <div className="mt-6 space-y-6">
+      {/* Exibir seção de convite apenas para líderes */}
+      {isTeamLeader && selectedTeam && (
+        <InviteUserForm
+          teamId={teamId}
+          teamName={selectedTeam.name}
+          ownerEmail={currentUserEmail || ''}
+          onInviteSent={() => {
+            // Atualizar a lista de membros após o envio do convite
+            loadTeamMembers(teamId);
+          }}
+          existingMembers={members}
         />
-        
-        <div className="mt-6">
-          <h3 className="text-lg font-medium mb-2">Status da Equipe</h3>
-          <TeamStatusList
-            members={members}
-            currentUserEmail={currentUserEmail}
-            surveyStatus={surveyStatus}
-            selectedTeamId={teamId}
-          />
-        </div>
-      </CardContent>
-      <CardFooter>
-        <Button 
-          onClick={onContinue} 
-          className="w-full flex items-center justify-center"
-        >
-          {hasAnswered ? 'Ver Resultados' : 'Continuar para Perfil'}
-          <ArrowRightIcon className="ml-2 h-4 w-4" />
-        </Button>
-      </CardFooter>
-    </Card>
+      )}
+      {/* Lista de status dos membros */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Membros da Equipe</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <TeamStatusList members={members} currentUserEmail={currentUserEmail} />
+        </CardContent>
+      </Card>
+      
+      {/* Botão para continuar para a próxima etapa */}
+      <ContinueButton 
+        onContinue={onContinue} 
+        hasCompletedSurvey={hasCompletedSurvey}
+      />
+    </div>
   );
 } 

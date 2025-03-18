@@ -1,46 +1,31 @@
-import * as React from 'react';
+import { EmailTemplateProps } from '@/resources/email/email-model';
 
-interface InviteEmailTemplateProps {
-  teamName: string;
-  ownerEmail: string;
-  message: string;
-  inviteUrl: string;
-}
-
-export const InviteEmailTemplate: React.FC<Readonly<InviteEmailTemplateProps>> = ({
-  teamName,
-  ownerEmail,
-  message,
-  inviteUrl,
-}) => (
-  <div style={{ fontFamily: 'Arial, sans-serif', maxWidth: '600px', margin: '0 auto' }}>
-    <h2>Você foi convidado para participar do Radar21</h2>
-    <p>{ownerEmail} convidou você para participar da equipe "{teamName}" no Radar21.</p>
-    
-    <p style={{ margin: '20px 0', padding: '10px', backgroundColor: '#f5f5f5', borderLeft: '4px solid #0070f3' }}>
-      "{message}"
-    </p>
-    
-    <p>O Radar21 é uma plataforma que ajuda equipes a avaliar suas competências de liderança na era da Indústria 4.0.</p>
-    
-    <div style={{ margin: '30px 0' }}>
-      <a 
-        href={inviteUrl} 
-        style={{ 
-          backgroundColor: '#0070f3', 
-          color: 'white', 
-          padding: '12px 24px', 
-          textDecoration: 'none', 
-          borderRadius: '4px', 
-          fontWeight: 'bold' 
-        }}
-      >
-        Aceitar Convite
-      </a>
+export function InviteEmailTemplate({ inviteUrl, message }: Partial<EmailTemplateProps>) {
+  return (
+    <div style={{ fontFamily: 'Arial, sans-serif', maxWidth: '600px', margin: '0 auto' }}>
+      <h1 style={{ color: '#333' }}>Convite para o Radar21</h1>
+      <p dangerouslySetInnerHTML={{ __html: message || '' }} />
+      <div style={{ margin: '30px 0' }}>
+        <a
+          href={inviteUrl}
+          style={{
+            backgroundColor: '#4f46e5',
+            color: 'white',
+            padding: '10px 20px',
+            textDecoration: 'none',
+            borderRadius: '5px',
+            fontWeight: 'bold',
+          }}
+        >
+          Aceitar Convite
+        </a>
+      </div>
+      <p>Se o botão não funcionar, copie e cole o link a seguir no seu navegador:</p>
+      <p style={{ wordBreak: 'break-all', color: '#4f46e5' }}>{inviteUrl}</p>
+      <hr style={{ margin: '30px 0', border: 'none', borderTop: '1px solid #eee' }} />
+      <p style={{ color: '#666', fontSize: '12px' }}>
+        Este é um email automático. Por favor, não responda a este email.
+      </p>
     </div>
-    
-    <p style={{ color: '#666', fontSize: '14px' }}>
-      Se você não esperava este convite, pode ignorar este email.
-    </p>
-  </div>
-); 
+  );
+}
