@@ -132,7 +132,15 @@ export default function Survey() {
       // Carregar membros da equipe para garantir que temos o currentMember
       loadTeamMembers(teamId);
     }
-  }, [user?.email, selectedTeam?.id, loadTeamMembers, router]);
+    
+    // Verificar se as funções de contexto estão disponíveis
+    console.log("Contexto de pesquisa:", {
+      hasUpdateTeamMemberId: !!updateTeamMemberId,
+      hasSaveSurveyResponses: !!saveSurveyResponses,
+      hasCurrentMember: !!currentMember,
+      teamMemberId: currentMember?.id || localStorage.getItem("teamMemberId")
+    });
+  }, [user?.email, selectedTeam?.id, loadTeamMembers, router, updateTeamMemberId, saveSurveyResponses, currentMember]);
 
   // Definir o ID do membro da equipe quando disponível
   useEffect(() => {
@@ -231,8 +239,18 @@ export default function Survey() {
         description: "Suas respostas foram salvas. Agora vamos para as perguntas abertas.",
       });
 
-      // Redirecionar para a página de perguntas abertas
-      router.push('/open-questions');
+      // Adicionar um pequeno atraso para garantir que o estado foi atualizado
+      setTimeout(() => {
+        try {
+          // Redirecionar para a página de perguntas abertas
+          console.log('Redirecionando para /open-questions');
+          router.push('/open-questions');
+        } catch (routeError) {
+          console.error('Erro ao redirecionar:', routeError);
+          // Tentar uma abordagem alternativa de redirecionamento
+          window.location.href = '/open-questions';
+        }
+      }, 500);
     } catch (error: any) {
       console.error('Erro ao enviar respostas:', error);
       toast({

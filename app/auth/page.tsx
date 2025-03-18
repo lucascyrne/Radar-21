@@ -58,23 +58,37 @@ function AuthContent() {
   // Verificar se há um convite na URL
   useEffect(() => {
     const invite = searchParams.get('invite');
+    const inviteName = searchParams.get('invite_name');
+    
     if (invite) {
+      console.log(`Convite detectado na URL: teamId=${invite}, teamName=${inviteName || 'não informado'}`);
       setInviteTeamId(invite);
+      
       // Se for um convite, mostrar a aba de cadastro por padrão
       setActiveTab('signup');
       
       // Preencher o email do formulário se estiver na URL
       const email = searchParams.get('email');
       if (email) {
+        console.log(`Email detectado na URL: ${email}`);
         loginForm.setValue('email', email);
         registerForm.setValue('email', email);
       }
       
       // Armazenar dados do convite no localStorage para persistir durante autenticação OAuth
-      localStorage.setItem('pendingInvite', invite);
+      localStorage.setItem('pendingInviteTeamId', invite);
+      if (inviteName) {
+        localStorage.setItem('pendingInviteTeamName', inviteName);
+      }
       if (email) {
         localStorage.setItem('pendingInviteEmail', email);
       }
+      
+      // Limpar chaves antigas para garantir consistência
+      localStorage.removeItem('pendingInvite');
+      
+      // Para compatibilidade com versões anteriores, também definir o pendingInvite
+      localStorage.setItem('pendingInvite', invite);
     }
   }, [searchParams, loginForm, registerForm]);
   
@@ -125,75 +139,36 @@ function AuthContent() {
       if (!userEmail) {
         throw new Error('Email não disponível');
       }
+
+      console.log(`Processando convite: teamId=${inviteTeamId}, userId=${user.id}, email=${userEmail}`);
+
+      // Processar o convite usando o TeamService
+      const memberId = await TeamService.processInvite(inviteTeamId, user.id, userEmail);
       
-      // Verificar se o usuário já é membro da equipe
-      const { data: existingMember, error: memberError } = await supabase
-        .from('team_members')
-        .select('*')
-        .eq('team_id', inviteTeamId)
-        .eq('email', userEmail)
-        .maybeSingle();
-      
-      if (memberError && memberError.code !== 'PGRST116') {
-        console.error('Erro ao verificar membro:', memberError);
-      }
-      
-      if (existingMember) {
-        // Se o usuário já é membro, atualizar o status e o user_id
-        const { error: updateError } = await supabase
-          .from('team_members')
-          .update({ 
-            user_id: user.id,
-            status: 'invited'
-          })
-          .eq('id', existingMember.id);
+      if (memberId) {
+        console.log('Convite processado com sucesso:', memberId);
         
-        if (updateError) {
-          console.error('Erro ao atualizar membro:', updateError);
-          throw updateError;
-        }
+        // Armazenar IDs importantes
+        localStorage.setItem('teamId', inviteTeamId);
+        localStorage.setItem('teamMemberId', memberId);
         
-        console.log('Membro atualizado com sucesso:', existingMember.id);
-      } else {
-        // Se não encontrou pelo email do usuário, tentar pelo email do convite
-        if (userEmail !== inviteEmail && inviteEmail) {
-          const { data: invitedMember, error: invitedError } = await supabase
-            .from('team_members')
-            .select('*')
-            .eq('team_id', inviteTeamId)
-            .eq('email', inviteEmail)
-            .maybeSingle();
-            
-          if (!invitedError && invitedMember) {
-            // Atualizar o membro convidado com o ID do usuário e o novo email
-            const { error: updateError } = await supabase
-              .from('team_members')
-              .update({ 
-                user_id: user.id,
-                email: userEmail,
-                status: 'invited'
-              })
-              .eq('id', invitedMember.id);
-              
-            if (updateError) {
-              console.error('Erro ao atualizar membro:', updateError);
-              throw updateError;
-            }
-            
-            console.log('Membro atualizado com sucesso:', invitedMember.id);
-          } else {
-            // Se o usuário não é membro, adicionar à equipe
-            await adicionarUsuarioEquipe(user, inviteTeamId);
-          }
-        } else {
-          // Se o usuário não é membro, adicionar à equipe
-          await adicionarUsuarioEquipe(user, inviteTeamId);
-        }
+        // Sincronizar outras associações de equipe
+        await TeamService.syncUserTeamMemberships(user.id, userEmail);
+        
+        // Atualizar o cache de membros
+        await loadUserTeams(user.id);
+        
+        toast({
+          title: "Convite aceito com sucesso!",
+          description: "Você agora é membro da equipe.",
+        });
       }
       
       // Limpar os dados do convite do localStorage
       localStorage.removeItem('pendingInvite');
       localStorage.removeItem('pendingInviteEmail');
+      localStorage.removeItem('pendingInviteTeamId');
+      localStorage.removeItem('pendingInviteTeamName');
       
       // Redirecionar para a página de configuração da equipe
       router.push('/team-setup');
@@ -204,10 +179,13 @@ function AuthContent() {
         description: error.message || "Ocorreu um erro ao processar o convite.",
         variant: "destructive"
       });
+      
+      // Mesmo com erro, tentar redirecionar para a página principal
+      router.push('/team-setup');
     } finally {
       setProcessingInvite(false);
     }
-  }, [inviteTeamId, processingInvite, router, toast]);
+  }, [inviteTeamId, processingInvite, loadUserTeams, toast, router]);
   
   // Função auxiliar para adicionar usuário à equipe
   const adicionarUsuarioEquipe = async (user: any, teamId: string) => {
@@ -260,7 +238,7 @@ function AuthContent() {
     } finally {
       setLocalLoading(false);
     }
-  }, [signInWithEmail, router, inviteTeamId, toast]);
+  }, [inviteTeamId]);
   
   // Manipulador de envio do formulário de cadastro
   const handleSignupSubmit = useCallback(async (data: RegisterFormValues) => {
@@ -285,7 +263,7 @@ function AuthContent() {
     } finally {
       setLocalLoading(false);
     }
-  }, [signUpWithEmail, router, inviteTeamId, toast]);
+  }, [inviteTeamId]);
   
   // Manipulador de mudança de aba
   const handleTabChange = useCallback((value: string) => {
@@ -612,7 +590,7 @@ function AuthContent() {
               </TabsContent>
             </Tabs>
           </CardContent>
-          <CardFooter className="flex flex-col">
+          {/* <CardFooter className="flex flex-col">
             <div className="relative w-full mb-4">
               <div className="absolute inset-0 flex items-center">
                 <div className="w-full border-t border-gray-300"></div>
@@ -636,7 +614,7 @@ function AuthContent() {
               </svg>
               Google
             </Button>
-          </CardFooter>
+          </CardFooter> */}
         </Card>
       </div>
     </Layout>

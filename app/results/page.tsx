@@ -1,23 +1,30 @@
 "use client"
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { AlertCircle, Info, HelpCircle } from 'lucide-react';
+
+// UI Components
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { RadarChart } from '@/components/radar-chart';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+
+// Custom Components
+import { Layout } from '@/components/layout';
+import { SetupProgress } from '@/components/team/setup-progress';
+import { RadarChart } from '@/components/radar-chart';
+import { TeamCompetencyDetails } from '@/components/team/team-competency-details';
+
+// Hooks and Services
 import { useAuth } from '@/resources/auth/auth-hook';
 import { useTeam } from '@/resources/team/team-hook';
 import { useSurvey } from '@/resources/survey/survey-hook';
-import { SurveyResponses } from '@/resources/survey/survey-model';
 import { RadarService } from '@/resources/survey/radar.service';
-import { Badge } from '@/components/ui/badge';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
-import { AlertCircle, Info, Download } from 'lucide-react';
-import { Layout } from '@/components/layout';
-import { Progress } from '@/components/ui/progress';
-import { useRouter } from 'next/navigation';
-import { SetupProgress } from '@/components/team/setup-progress';
+import { SurveyResponses } from '@/resources/survey/survey-model';
 
 // Mapeamento de status para exibição em português
 const statusLabels: Record<string, string> = {
@@ -37,10 +44,10 @@ export default function ResultsPage() {
   const { teamMemberId, loadSurveyResponses, surveyResponses } = useSurvey();
   
   const [userResponses, setUserResponses] = useState<SurveyResponses | null>(null);
-  const [teamResponses, setTeamResponses] = useState<SurveyResponses[]>([]);
+  const [leaderResponses, setLeaderResponses] = useState<SurveyResponses | null>(null);
+  const [memberResponses, setMemberResponses] = useState<Record<string, SurveyResponses | null>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [memberResponses, setMemberResponses] = useState<Record<string, SurveyResponses | null>>({});
   const [loadingStatus, setLoadingStatus] = useState<Record<string, string>>({});
   
   // Carregar dados do radar
@@ -61,38 +68,61 @@ export default function ResultsPage() {
           await loadTeamMembers(teamId);
         }
         
+        // Tentar obter o teamMemberId do contexto, localStorage ou buscar pelo email
+        let currentTeamMemberId = teamMemberId || localStorage.getItem("teamMemberId");
+        if (!currentTeamMemberId && user?.email) {
+          const member = teamMembers.find(m => m.email === user.email);
+          if (member?.id) {
+            currentTeamMemberId = member.id;
+            localStorage.setItem("teamMemberId", member.id);
+          }
+        }
+        
+        if (!currentTeamMemberId) {
+          throw new Error("ID do membro da equipe não encontrado");
+        }
+        
         // Carregar respostas do usuário atual
         let userSurveyResponses = surveyResponses;
-        if (!userSurveyResponses && teamMemberId) {
-          userSurveyResponses = await loadSurveyResponses();
+        if (!userSurveyResponses) {
+          userSurveyResponses = await RadarService.loadMemberResponses(currentTeamMemberId);
         }
         setUserResponses(userSurveyResponses);
         
         // Carregar respostas de todos os membros da equipe
-        const allMemberResponses = await RadarService.loadTeamResponses(teamId, teamMembers);
-        setMemberResponses(allMemberResponses);
+        const { memberResponses: teamMemberResponses, leaderResponses: teamLeaderResponses } = 
+          await RadarService.loadTeamResponses(teamId, teamMembers);
         
-        // Filtrar apenas respostas válidas para o cálculo da média
-        const validResponses = Object.values(allMemberResponses).filter(Boolean) as SurveyResponses[];
-        setTeamResponses(validResponses);
+        setMemberResponses(teamMemberResponses);
+        setLeaderResponses(teamLeaderResponses);
         
         setIsLoading(false);
       } catch (error: any) {
-        console.error('Erro ao carregar dados do radar:', error);
-        setError(error.message || 'Erro ao carregar dados do radar');
+        console.error('Erro ao carregar dados:', error);
+        setError(error.message || "Erro ao carregar dados do radar");
         setIsLoading(false);
       }
     };
     
-    loadData();
-  }, [user, selectedTeam, teamMembers, teamMemberId, loadTeamMembers, loadSurveyResponses, surveyResponses]);
+    if (user) {
+      loadData();
+    }
+  }, [user, selectedTeam, teamMembers, teamMemberId, surveyResponses]);
   
   // Transformar dados para o formato do radar
-  const userRadarData = RadarService.transformResponsesToRadarData(userResponses);
-  const teamAverageData = RadarService.calculateTeamAverage(teamResponses);
+  const userRadarData = useMemo(() => 
+    RadarService.transformResponsesToRadarData(userResponses),
+  [userResponses]);
+
+   const teamAverageData = useMemo(() => 
+    RadarService.calculateTeamAverage(memberResponses),
+  [memberResponses]);
   
   // Obter detalhes por competência
-  const competencyDetails = RadarService.getCompetencyDetails(userResponses, teamAverageData);
+  const competencyDetails = useMemo(() => 
+    RadarService.getCompetencyDetails(leaderResponses, teamAverageData),
+  [leaderResponses, teamAverageData]);
+
   
   // Verificar se há dados suficientes
   const hasUserData = userRadarData.length > 0;
@@ -192,9 +222,10 @@ export default function ResultsPage() {
           <TabsContent value="details">
             <Card>
               <CardHeader>
-                <CardTitle>Detalhes por Tópico</CardTitle>
+                <CardTitle>Detalhes por Competência</CardTitle>
                 <CardDescription>
-                  Análise detalhada de cada tópico comparado com a média da equipe
+                  Análise detalhada de cada competência comparando sua avaliação pessoal com a média da equipe.
+                  Um valor positivo (verde) indica que a equipe avalia melhor que você nesta competência.
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -204,41 +235,11 @@ export default function ResultsPage() {
                     <Skeleton className="h-12 w-full rounded-lg" />
                     <Skeleton className="h-12 w-full rounded-lg" />
                   </div>
-                ) : competencyDetails.length > 0 ? (
-                  <div className="space-y-6">
-                    {competencyDetails.map((item) => (
-                      <div key={item.topic} className="space-y-2">
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2">
-                          <h3 className="font-medium">{item.topic}</h3>
-                          <div className="flex flex-wrap gap-2 sm:gap-4">
-                            <span className="text-blue-600 font-medium text-sm sm:text-base">Você: {item.userScore}</span>
-                            <span className="text-green-600 font-medium text-sm sm:text-base">Equipe: {item.teamAverage.toFixed(1)}</span>
-                            <span className={`font-medium text-sm sm:text-base ${item.difference > 0 ? 'text-green-600' : item.difference < 0 ? 'text-red-600' : 'text-gray-600'}`}>
-                              {item.difference > 0 ? '+' : ''}{item.difference.toFixed(1)}
-                            </span>
-                          </div>
-                        </div>
-                        <div className="flex space-x-2 items-center">
-                          <div className="w-full bg-gray-200 rounded-full h-2.5">
-                            <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${(item.userScore / 5) * 100}%` }}></div>
-                          </div>
-                          <span className="text-sm text-gray-500 w-10 text-right">{item.userScore}/5</span>
-                        </div>
-                        <div className="flex space-x-2 items-center">
-                          <div className="w-full bg-gray-200 rounded-full h-2.5">
-                            <div className="bg-green-600 h-2.5 rounded-full" style={{ width: `${(item.teamAverage / 5) * 100}%` }}></div>
-                          </div>
-                          <span className="text-sm text-gray-500 w-10 text-right">{item.teamAverage.toFixed(1)}/5</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
                 ) : (
-                  <div className="flex items-center justify-center py-8">
-                    <p className="text-muted-foreground">
-                      Não há dados suficientes para exibir detalhes por tópico.
-                    </p>
-                  </div>
+                  <TeamCompetencyDetails 
+                    competencyDetails={competencyDetails}
+                    isLoading={isLoading}
+                  />
                 )}
               </CardContent>
             </Card>
@@ -283,7 +284,7 @@ export default function ResultsPage() {
                                 {isCurrentUser && <Badge className="mt-1 bg-blue-100 text-blue-800">Você</Badge>}
                               </TableCell>
                               <TableCell>
-                                <Badge className={statusColors[member.status || 'invited']}>
+                                <Badge className={`transition-none pointer-events-none ${statusColors[member.status || 'invited']}`}>
                                   {statusLabels[member.status || 'invited']}
                                 </Badge>
                               </TableCell>
@@ -291,9 +292,9 @@ export default function ResultsPage() {
                                 {member.id && loadingStatus[member.id] === 'loading' ? (
                                   <Skeleton className="h-6 w-20" />
                                 ) : hasResponses ? (
-                                  <Badge className="bg-green-100 text-green-800">Respondido</Badge>
+                                  <Badge className="transition-none pointer-events-none bg-green-100 text-green-800">Respondido</Badge>
                                 ) : (
-                                  <Badge className="bg-gray-100 text-gray-800">Pendente</Badge>
+                                  <Badge className="transition-none pointer-events-none bg-gray-100 text-gray-800">Pendente</Badge>
                                 )}
                               </TableCell>
                             </TableRow>

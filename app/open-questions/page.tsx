@@ -106,8 +106,18 @@ export default function OpenQuestions() {
         description: "Todas as suas respostas foram salvas. Agora você pode ver os resultados.",
       });
       
-      // Redirecionar para a página de resultados
-      router.push('/results');
+      // Adicionar um pequeno atraso para garantir que o estado foi atualizado
+      setTimeout(() => {
+        try {
+          // Redirecionar para a página de resultados
+          console.log('Redirecionando para /results');
+          router.push('/results');
+        } catch (routeError) {
+          console.error('Erro ao redirecionar:', routeError);
+          // Tentar uma abordagem alternativa de redirecionamento
+          window.location.href = '/results';
+        }
+      }, 500);
     } catch (error: any) {
       console.error('Erro ao enviar respostas:', error);
       toast({
