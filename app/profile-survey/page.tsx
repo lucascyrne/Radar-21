@@ -12,32 +12,66 @@ import { useAuth } from "@/resources/auth/auth-hook"
 import { useTeam } from "@/resources/team/team-hook"
 import { ProfileForm } from "@/components/survey/profile-form"
 import { SetupProgress } from '@/components/team/setup-progress'
+import { PrivacyNotice } from "@/components/survey/privacy-notice"
 
 export default function Profile() {
   const router = useRouter()
   const { toast } = useToast()
-  const { user } = useAuth()
+  const { user, isAuthenticated } = useAuth()
   const { selectedTeam, currentMember, loadTeamMembers } = useTeam()
   const { saveProfile, profile, error, updateTeamMemberId } = useSurvey()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [initialCheckDone, setInitialCheckDone] = useState(false)
   
-  // Verificar se o usuário está em uma equipe
+  // Verificar se o usuário está em uma equipe - executado apenas uma vez na montagem inicial
   useEffect(() => {
-    const teamId = localStorage.getItem("teamId") || selectedTeam?.id
-    if (!teamId && !user?.team_id) {
-      router.push("/team-setup")
-    } else if (teamId && user?.email) {
-      // Carregar membros da equipe para garantir que temos o currentMember
-      loadTeamMembers(teamId)
-    }
-  }, [user, selectedTeam, loadTeamMembers, router])
+    // Evitar redirecionamento durante Alt+Tab ou remontagens temporárias
+    if (initialCheckDone) return;
+    
+    const checkTeam = async () => {
+      try {
+        // Obter teamId de todas as fontes possíveis
+        const teamId = localStorage.getItem("teamId") || selectedTeam?.id || user?.team_id;
+        const teamMemberId = localStorage.getItem("teamMemberId");
+        
+        console.log("Verificando associação com equipe:", { 
+          teamId, 
+          selectedTeam: selectedTeam?.id,
+          userTeamId: user?.team_id,
+          teamMemberId 
+        });
+        
+        // Se não tiver um teamId válido E não for uma simples reconexão, redirecionar
+        if (!teamId && isAuthenticated !== undefined) {
+          console.log("Nenhuma equipe encontrada, redirecionando para seleção de equipe");
+          router.push("/team-setup");
+        } 
+        // Se tiver um teamId e email, carregar membros
+        else if (teamId && user?.email) {
+          console.log("Equipe encontrada, carregando membros:", teamId);
+          await loadTeamMembers(teamId);
+        }
+        
+        // Marcar verificação inicial como concluída
+        setInitialCheckDone(true);
+      } catch (error) {
+        console.error("Erro ao verificar equipe:", error);
+        // Não redirecionar em caso de erro para evitar loops
+        setInitialCheckDone(true);
+      }
+    };
+    
+    checkTeam();
+  }, [isAuthenticated]); // Dependência reduzida para evitar execuções desnecessárias
 
   // Definir o ID do membro da equipe quando disponível
   useEffect(() => {
     if (currentMember?.id) {
-      updateTeamMemberId(currentMember.id)
+      updateTeamMemberId(currentMember.id);
+      // Salvar no localStorage para persistência
+      localStorage.setItem("teamMemberId", currentMember.id);
     }
-  }, [currentMember, updateTeamMemberId])
+  }, [currentMember, updateTeamMemberId]);
 
   // Exibir mensagem de erro se houver
   useEffect(() => {
@@ -54,8 +88,11 @@ export default function Profile() {
     try {
       setIsSubmitting(true)
       
+      // Obter teamMemberId do estado atual ou do localStorage
+      const memberId = currentMember?.id || localStorage.getItem("teamMemberId");
+      
       // Verificar se temos o ID do membro da equipe
-      if (!currentMember?.id) {
+      if (!memberId) {
         throw new Error("ID do membro da equipe não encontrado. Por favor, tente novamente.");
       }
       
@@ -70,7 +107,6 @@ export default function Profile() {
       // Salvar no localStorage para compatibilidade com o código existente
       localStorage.setItem("userProfile", JSON.stringify(formattedData))
       localStorage.setItem("userEmail", user?.email || "")
-      localStorage.setItem("teamMemberId", currentMember.id)
       
       console.log("Enviando dados do perfil:", formattedData);
       
@@ -93,13 +129,15 @@ export default function Profile() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [currentMember?.id, saveProfile, user?.email, router, toast]);
+  }, [currentMember?.id, user?.email, saveProfile, toast, router]);
 
   return (
     <Layout>
       <div className="max-w-2xl mx-auto">
         <SetupProgress currentPhase="profile" />
         <h1 className="text-3xl font-bold mb-8 text-center">Seu Perfil</h1>
+
+        <PrivacyNotice />
 
         <ProfileForm 
           onSubmit={handleSubmit}

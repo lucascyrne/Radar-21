@@ -15,6 +15,7 @@ import { Layout } from "@/components/layout"
 import { PlusCircleIcon } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/resources/auth/auth.service';
+import { Skeleton } from '@/components/ui/skeleton';
 
 // Componentes personalizados
 import { SetupProgress } from '@/components/team/setup-progress';
@@ -23,6 +24,19 @@ import { TeamList } from '@/components/team/team-list';
 import { TeamDetails } from '@/components/team/team-details';
 import InviteUserForm from '@/components/team/invite-user-form';
 
+// Componente de Skeleton para equipes
+const TeamSkeleton = () => (
+  <Card className="mb-4">
+    <CardHeader>
+      <Skeleton className="h-6 w-3/4" />
+    </CardHeader>
+    <CardContent>
+      <Skeleton className="h-4 w-full mb-2" />
+      <Skeleton className="h-4 w-2/3" />
+    </CardContent>
+  </Card>
+);
+
 export default function TeamSetupPage() {
   const router = useRouter();
   const { user, isLoading: authLoading, isAuthenticated } = useAuth();
@@ -30,7 +44,7 @@ export default function TeamSetupPage() {
     teams, 
     selectedTeam, 
     teamMembers, 
-    isLoading: teamLoading, 
+    isLoading: teamLoading,
     error: teamError,
     loadUserTeams,
     createTeam,
@@ -208,7 +222,7 @@ export default function TeamSetupPage() {
     }
   }, [selectedTeam, teamMembers, user?.email, router]);
 
-  if (authLoading || teamLoading) {
+  if (authLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
@@ -235,7 +249,12 @@ export default function TeamSetupPage() {
           )}
           
           <TabsContent value="my-teams">
-            {teams.length === 0 ? (
+            {teamLoading ? (
+              <>
+                <TeamSkeleton />
+                <TeamSkeleton />
+              </>
+            ) : teams.length === 0 ? (
               <Card>
                 <CardHeader>
                   <CardTitle>Nenhuma equipe encontrada</CardTitle>
@@ -248,7 +267,7 @@ export default function TeamSetupPage() {
                 <CardFooter>
                   <Button 
                     onClick={() => setActiveTab("create-team")} 
-                    className="w-full flex items-center justify-center"
+                    className="w-full"
                   >
                     <PlusCircleIcon className="mr-2 h-4 w-4" />
                     Criar Nova Equipe
