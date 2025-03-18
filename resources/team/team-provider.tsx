@@ -33,6 +33,18 @@ export function TeamProvider({ children }: TeamProviderProps) {
     loadCurrentMember();
   }, [user?.email, state.selectedTeam?.id]);
 
+  // Efeito para carregar equipes automaticamente quando o usuário está autenticado
+  useEffect(() => {
+    const autoLoadTeams = async () => {
+      if (user?.id && !loadingTeamsRef.current && state.teams.length === 0) {
+        console.log('Carregando equipes automaticamente para o usuário:', user.id);
+        await loadUserTeams(user.id);
+      }
+    };
+    
+    autoLoadTeams();
+  }, [user?.id]);
+
   // Carregar equipes do usuário
   const loadUserTeams = useCallback(async (userId: string) => {
     if (!userId || loadingTeamsRef.current || state.teams.length > 0) return;

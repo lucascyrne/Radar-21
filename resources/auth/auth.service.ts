@@ -1,4 +1,5 @@
-import { createClient } from '@supabase/supabase-js';
+import { createClient, User } from '@supabase/supabase-js';
+import { InviteService } from '@/resources/invite/invite.service';
 
 // Inicializa o cliente Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
@@ -9,26 +10,33 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 // Serviço de autenticação
 export const AuthService = {
   // Login com Google
-  signInWithGoogle: async () => {
+  signInWithGoogle: async (options: { 
+    redirectTo?: string; 
+    queryParams?: { [key: string]: string } 
+  } = {}) => {
     try {
       // Determinar a URL base com base no ambiente atual
-      const baseUrl = 'https://radar21.com.br';
+      const baseUrl = typeof window !== 'undefined' ? window.location.origin : 'https://radar21.com.br';
       
       // Construir a URL de redirecionamento completa
-      const redirectUrl = `${baseUrl}/auth/callback`;
+      const redirectUrl = options.redirectTo || `${baseUrl}/auth/callback`;
+      
+      console.log('Iniciando fluxo OAuth com redirect para:', redirectUrl);
       
       // Iniciar o fluxo de autenticação com a URL de redirecionamento correta
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
-          redirectTo: redirectUrl
+          redirectTo: redirectUrl,
+          // Incluímos queryParams se forem fornecidos
+          queryParams: options.queryParams
         }
       });
       
       if (error) throw error;
     } catch (error) {
       console.error('Erro ao fazer login com Google:', error);
-      // Tratamento de erro...
+      throw error;
     }
   },
   
@@ -95,5 +103,14 @@ export const AuthService = {
     });
     if (error) throw error;
     return data;
+  },
+
+  /**
+   * Verifica e processa automaticamente convites pendentes para o usuário autenticado
+   * @param user Usuário autenticado
+   */
+  processAuthenticatedUser: async (user: User): Promise<void> => {
+    if (!user.email) return;
+    await InviteService.processInvite(user.id, user.email);
   }
 };

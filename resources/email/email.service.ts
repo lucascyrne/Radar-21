@@ -1,42 +1,47 @@
-import { createClient } from '@supabase/supabase-js';
+'use server';
 
-// Configuração do cliente Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { Resend } from 'resend';
+import { InviteEmailTemplate } from '@/components/email-template';
+import { EmailTemplateProps } from './email-model';
 
-export class EmailService {
-  /**
-   * Gera uma mensagem de convite padrão
-   * @param teamName Nome da equipe
-   * @param fromEmail Email do remetente (líder da equipe)
-   * @returns Mensagem de convite formatada
-   */
-  static generateInviteMessage(teamName: string, fromEmail: string): string {
-    return `Olá! Estou convidando você para participar da equipe "${teamName}" no Radar21 - uma plataforma para avaliação de competências de liderança na era da Indústria 4.0. Sua participação é muito importante para entendermos o perfil de nossa equipe. Por favor, aceite o convite e responda o questionário. Obrigado! - ${fromEmail}`;
+const resend = new Resend(process.env.NEXT_PUBLIC_RESEND_API_KEY);
+
+/**
+ * Gera uma mensagem de convite padrão
+ */
+export async function generateInviteMessage(teamName: string, fromEmail: string): Promise<string> {
+  return `Olá! Estou convidando você para participar da equipe "${teamName}" no Radar21 - uma plataforma para avaliação de competências de liderança na era da Indústria 4.0. Sua participação é muito importante para entendermos o perfil de nossa equipe. Por favor, aceite o convite e responda o questionário. Obrigado! - ${fromEmail}`;
+}
+
+/**
+ * Envia um email de convite para um usuário
+ */
+export async function sendInviteEmail(params: EmailTemplateProps): Promise<void> {
+  try {
+    await resend.emails.send({
+      from: 'Radar21 <noreply@radar21.com.br>',
+      to: params.to,
+      subject: `Convite para participar da equipe ${params.teamName} no Radar21`,
+      react: InviteEmailTemplate({
+        inviteUrl: params.inviteUrl,
+        message: params.message
+      })
+    });
+  } catch (error) {
+    console.error('Erro ao enviar email:', error);
+    throw new Error('Falha ao enviar email de convite');
   }
+}
 
-  /**
-   * Verifica o status de um email enviado
-   * @param emailId ID do email enviado
-   * @returns Status do email
-   */
-  static async checkEmailStatus(emailId: string): Promise<string> {
-    try {
-      const { data, error } = await supabase
-        .from('email_logs')
-        .select('*')
-        .eq('id', emailId)
-        .single();
-
-      if (error) {
-        throw new Error(`Erro ao verificar status do email: ${error.message}`);
-      }
-
-      return data?.status || 'unknown';
-    } catch (error: any) {
-      console.error('Erro ao verificar status do email:', error);
-      throw new Error(`Falha ao verificar status do email: ${error.message}`);
-    }
+/**
+ * Verifica o status de um email enviado
+ */
+export async function checkEmailStatus(emailId: string): Promise<string> {
+  try {
+    const response = await resend.emails.get(emailId);
+    return response.data?.last_event || 'unknown';
+  } catch (error: any) {
+    console.error('Erro ao verificar status do email:', error);
+    throw new Error(`Falha ao verificar status do email: ${error.message}`);
   }
-} 
+}

@@ -89,12 +89,51 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     };
   }, []);
 
-  // Login com Google
+  // Efeito para mover dados de convite antigos para novas chaves e limpar
+  useEffect(() => {
+    // Migrar chaves antigas para o novo formato
+    const oldPendingInvite = localStorage.getItem('pendingInvite');
+    const oldPendingInviteEmail = localStorage.getItem('pendingInviteEmail');
+    
+    if (oldPendingInvite) {
+      localStorage.setItem('pendingInviteTeamId', oldPendingInvite);
+      localStorage.removeItem('pendingInvite');
+    }
+    
+    if (oldPendingInviteEmail) {
+      localStorage.setItem('pendingInviteEmail', oldPendingInviteEmail);
+      localStorage.removeItem('pendingInviteEmail');
+    }
+  }, []);
+
+  // Login com Google atualizado
   const signInWithGoogle = useCallback(async () => {
     try {
       setError(null);
       setAuthState(prev => ({ ...prev, isLoading: true }));
-      await AuthService.signInWithGoogle();
+      
+      // Capturar os dados do convite pendente antes de redirecionar
+      const pendingInviteTeamId = localStorage.getItem('pendingInviteTeamId');
+      const pendingInviteTeamName = localStorage.getItem('pendingInviteTeamName');
+      
+      // Determinar a URL base para redirecionamento
+      const baseRedirectUrl = `${window.location.origin}/auth/callback`;
+      
+      // Se houver um convite pendente, adicionar como state parameter no URL
+      let redirectUrl = baseRedirectUrl;
+      if (pendingInviteTeamId) {
+        redirectUrl = `${baseRedirectUrl}?invite=${pendingInviteTeamId}`;
+        if (pendingInviteTeamName) {
+          redirectUrl += `&invite_name=${encodeURIComponent(pendingInviteTeamName)}`;
+        }
+      }
+      
+      console.log('Iniciando login Google com redirecionamento para:', redirectUrl);
+      
+      // Agora passamos as opções corretamente com a URL de redirecionamento
+      await AuthService.signInWithGoogle({
+        redirectTo: redirectUrl
+      });
     } catch (error: any) {
       console.error('Erro ao fazer login com Google:', error);
       setError(error.message || 'Erro ao fazer login com Google');
