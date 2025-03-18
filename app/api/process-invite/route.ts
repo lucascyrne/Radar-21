@@ -8,76 +8,86 @@ const supabase = createClient(supabaseUrl, supabaseKey);
 
 export async function POST(request: NextRequest) {
   try {
-    const { teamId, userId, email } = await request.json();
-
-    // Validar parâmetros
-    if (!teamId || !userId || !email) {
+    const body = await request.json();
+    const { teamId, userId, email } = body;
+    
+    if (!teamId || !email) {
       return NextResponse.json(
-        { error: 'Parâmetros inválidos' },
+        { error: 'Faltam parâmetros obrigatórios' },
         { status: 400 }
       );
     }
-
-    // Verificar se o membro já existe
-    const { data: existingMember, error: checkError } = await supabase
+    
+    console.log(`Processando convite para equipe ${teamId}, usuário ${userId}, email ${email}`);
+    
+    // Verificar se o membro já existe na equipe
+    const { data: existingMember, error: memberError } = await supabase
       .from('team_members')
       .select('*')
       .eq('team_id', teamId)
       .eq('email', email)
-      .maybeSingle();
-
-    if (checkError && checkError.code !== 'PGRST116') {
-      console.error('Erro ao verificar membro:', checkError);
-      return NextResponse.json(
-        { error: `Erro ao verificar membro: ${checkError.message}` },
-        { status: 500 }
-      );
+      .single();
+    
+    if (memberError && memberError.code !== 'PGRST116') {
+      console.error(`Erro ao verificar membro:`, memberError);
+      throw new Error(`Erro ao verificar membro: ${memberError.message}`);
     }
-
+    
+    let memberId;
+    
     if (existingMember) {
-      // Se o membro já existe, atualizar seu status e user_id
+      console.log(`Membro existente encontrado com id ${existingMember.id}`);
+      
+      // Atualizar o userId e manter o status atual
       const { error: updateError } = await supabase
         .from('team_members')
-        .update({ 
+        .update({
           user_id: userId,
-          status: 'invited' 
+          // Não alterar o status aqui
         })
-        .eq('team_id', teamId)
-        .eq('email', email);
-
+        .eq('id', existingMember.id);
+      
       if (updateError) {
-        console.error('Erro ao atualizar membro:', updateError);
-        return NextResponse.json(
-          { error: `Erro ao atualizar membro: ${updateError.message}` },
-          { status: 500 }
-        );
+        console.error(`Erro ao atualizar membro:`, updateError);
+        throw new Error(`Erro ao atualizar membro: ${updateError.message}`);
       }
+      
+      memberId = existingMember.id;
     } else {
-      // Se o membro não existe, inserir novo registro
-      const { error: insertError } = await supabase
+      console.log(`Membro não encontrado. Criando novo membro.`);
+      
+      // Adicionar novo membro à equipe
+      const { data: newMember, error: insertError } = await supabase
         .from('team_members')
         .insert({
           team_id: teamId,
           user_id: userId,
-          email,
+          email: email,
           role: 'member',
-          status: 'invited',
-        });
-
+          status: 'invited'
+        })
+        .select()
+        .single();
+      
       if (insertError) {
-        console.error('Erro ao adicionar membro:', insertError);
-        return NextResponse.json(
-          { error: `Erro ao adicionar membro: ${insertError.message}` },
-          { status: 500 }
-        );
+        console.error(`Erro ao adicionar membro:`, insertError);
+        throw new Error(`Erro ao adicionar membro: ${insertError.message}`);
       }
+      
+      memberId = newMember.id;
     }
-
-    return NextResponse.json({ success: true });
+    
+    console.log(`Processamento de convite concluído com sucesso. MemberId: ${memberId}`);
+    
+    return NextResponse.json({ 
+      success: true, 
+      memberId 
+    });
   } catch (error: any) {
     console.error('Erro ao processar convite:', error);
+    
     return NextResponse.json(
-      { error: `Erro ao processar convite: ${error.message}` },
+      { error: error.message || 'Erro ao processar convite' },
       { status: 500 }
     );
   }
