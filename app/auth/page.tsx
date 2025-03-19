@@ -9,8 +9,7 @@ import { useToast } from '@/hooks/use-toast';
 import { Layout } from '@/components/layout';
 import { LoginForm, RegisterForm } from './components/auth-forms';
 import { ErrorAlert } from './components/auth-alerts';
-import { LoadingSpinner } from '@/components/ui/loading-spinner';
-
+import { Loader2 } from 'lucide-react';
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -61,7 +60,9 @@ function AuthContent() {
   if (isLoading) {
     return (
       <Layout>
-        <LoadingSpinner message="Processando sua solicitação..." />
+        <div className="flex items-center justify-center">
+          <Loader2 className="animate-spin" />
+        </div>
       </Layout>
     );
   }

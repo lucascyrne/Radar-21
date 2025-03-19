@@ -7,92 +7,66 @@ import { Progress } from "@/components/ui/progress"
 import { Layout } from "@/components/layout"
 import { useToast } from "@/hooks/use-toast"
 import { useSurvey } from "@/resources/survey/survey-hook"
-import { QuestionSection, Section, Question } from "@/components/survey/question-section"
+import { QuestionSection } from "@/components/survey/question-section"
 import { SetupProgress } from '@/components/team/setup-progress'
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useTeam } from "@/resources/team/team-hook"
 import { useAuth } from "@/resources/auth/auth-hook"
 
 export default function SurveyPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { user, isAuthenticated } = useAuth()
-  const { selectedTeam, currentMember, updateMemberStatus } = useTeam()
+  const { user } = useAuth()
+  const { selectedTeam, updateMemberStatus } = useTeam()
   const { 
-    questions, sections, currentSection, setCurrentSection, 
-    saveAnswers, isLoading, error, answers, profile,
-    radarData, generateRadarData
+    questions, isLoading, error, answers,
+    saveAnswers
   } = useSurvey()
   
   const [progress, setProgress] = useState(0)
+  const [answeredCount, setAnsweredCount] = useState(0)
   const answeredRef = useRef(new Set<string>())
-  const [initialCheckDone, setInitialCheckDone] = useState(false)
-  
-  // Verificar se o usuário tem um perfil configurado - apenas uma verificação inicial
-  useEffect(() => {
-    // Evitar redirecionamento durante Alt+Tab ou remontagens temporárias
-    if (initialCheckDone) return;
-    
-    const checkProfile = async () => {
-      try {
-        // Verificar se existe um perfil no localStorage
-        const storedProfile = localStorage.getItem("userProfile")
-        const teamId = localStorage.getItem("teamId") || selectedTeam?.id || user?.team_id
-        const teamMemberId = localStorage.getItem("teamMemberId")
-        
-        console.log("Verificando perfil e associação:", { 
-          hasProfile: !!storedProfile || !!profile, 
-          teamId, 
-          teamMemberId 
-        })
-        
-        // Se não tiver um perfil configurado e a autenticação já foi determinada, redirecionar
-        if ((!storedProfile && !profile) && isAuthenticated !== undefined) {
-          console.log("Perfil não encontrado, redirecionando...")
-          router.push("/profile-survey")
-        }
-        // Se não tiver um time selecionado e a autenticação já foi determinada, redirecionar
-        else if (!teamId && isAuthenticated !== undefined) {
-          console.log("Time não encontrado, redirecionando...")
-          router.push("/team-setup")
-        }
-        
-        // Marcar verificação inicial como concluída
-        setInitialCheckDone(true)
-      } catch (error) {
-        console.error("Erro ao verificar perfil:", error)
-        // Não redirecionar em caso de erro para evitar loops
-        setInitialCheckDone(true)
-      }
-    }
-    
-    checkProfile()
-  }, [isAuthenticated, profile, router, selectedTeam?.id, user?.team_id]) // Dependências reduzidas para evitar execuções desnecessárias
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Calcular progresso da pesquisa
   useEffect(() => {
-    if (!questions.length) return
+    if (!questions?.length) return;
     
-    const totalQuestions = questions.length
-    const answered = answeredRef.current.size
-    
-    setProgress(Math.round((answered / totalQuestions) * 100))
-  }, [questions, answers])
+    const totalQuestions = questions.length;
+    const calculatedProgress = (answeredCount / totalQuestions) * 100;
+    console.log('Progresso atualizado:', {
+      totalQuestions,
+      answeredCount,
+      calculatedProgress,
+      answeredRefSize: answeredRef.current.size
+    });
+    setProgress(Math.round(calculatedProgress));
+  }, [questions, answeredCount]);
 
   // Marcar respostas existentes
   useEffect(() => {
+    console.log('Respostas atualizadas:', {
+      hasAnswers: !!answers,
+      answersLength: answers ? Object.keys(answers).length : 0
+    });
+
     if (answers && Object.keys(answers).length > 0) {
-      const answeredSet = new Set<string>()
+      const answeredSet = new Set<string>();
       
       for (const [questionId, value] of Object.entries(answers)) {
         if (value !== null && value !== undefined) {
-          answeredSet.add(questionId)
+          answeredSet.add(questionId);
         }
       }
       
-      answeredRef.current = answeredSet
+      console.log('Set de respostas atualizado:', {
+        answeredSetSize: answeredSet.size,
+        answers: Array.from(answeredSet)
+      });
+      
+      answeredRef.current = answeredSet;
+      setAnsweredCount(answeredSet.size);
     }
-  }, [answers])
+  }, [answers]);
 
   // Exibir mensagens de erro
   useEffect(() => {
@@ -105,104 +79,156 @@ export default function SurveyPage() {
     }
   }, [error, toast])
 
-  // Função para mudar de seção
-  const handleSectionChange = useCallback((section: string) => {
-    setCurrentSection(section)
-  }, [setCurrentSection])
+  // Função para atualizar o progresso
+  const updateProgress = useCallback((questionId: string) => {
+    console.log('Atualizando progresso:', {
+      questionId,
+      previousSize: answeredRef.current.size
+    });
+    
+    answeredRef.current.add(questionId);
+    setAnsweredCount(answeredRef.current.size);
+    
+    console.log('Progresso atualizado:', {
+      newSize: answeredRef.current.size,
+      answers: Array.from(answeredRef.current)
+    });
+  }, []);
 
   // Submeter respostas
   const handleSubmit = useCallback(async () => {
+    if (!user?.email) {
+      toast({
+        title: "Erro",
+        description: "Você precisa estar autenticado para enviar as respostas.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    setIsSubmitting(true)
     try {
-      // Verificar se todas as perguntas foram respondidas
-      const totalQuestions = questions.length
-      const answered = answeredRef.current.size
+      const totalQuestions = questions.length;
+      const answered = answeredRef.current.size;
       
+      console.log('Tentando submeter:', {
+        totalQuestions,
+        answered,
+        isLoading,
+        currentAnswers: answers,
+        answeredQuestions: Array.from(answeredRef.current)
+      });
+
       if (answered < totalQuestions) {
-        const missingCount = totalQuestions - answered
+        const missingCount = totalQuestions - answered;
         toast({
           title: "Questionário incompleto",
           description: `Faltam ${missingCount} ${missingCount === 1 ? 'pergunta' : 'perguntas'} para completar.`,
           variant: "destructive",
-        })
-        return
+        });
+        return;
+      }
+      
+      if (!answers || Object.keys(answers).length === 0) {
+        throw new Error("Nenhuma resposta encontrada para enviar");
       }
       
       // Dados do membro para atualização de status
-      const teamId = selectedTeam?.id || localStorage.getItem("teamId")
-      const userEmail = user?.email || localStorage.getItem("userEmail")
+      const teamId = selectedTeam?.id || localStorage.getItem("teamId");
+      const userEmail = user?.email || localStorage.getItem("userEmail");
       
       if (!teamId || !userEmail) {
-        throw new Error("Dados de equipe ou usuário ausentes. Por favor, tente novamente.")
+        throw new Error("Dados de equipe ou usuário ausentes. Por favor, tente novamente.");
       }
       
-      // Salvar respostas e gerar dados do radar
-      const result = await saveAnswers()
+      // Salvar respostas finais
+      const result = await saveAnswers(answers);
       
       if (result) {
-        // Atualizar status do membro para 'answered'
-        await updateMemberStatus(teamId, userEmail, 'answered')
-        
-        // Gerar dados do radar
-        await generateRadarData()
+        // Atualizar status do membro
+        await updateMemberStatus(teamId, userEmail, 'answered');
         
         toast({
-          title: "Pesquisa concluída",
-          description: "Suas respostas foram salvas com sucesso!",
-        })
+          title: "Questionário concluído",
+          description: "Suas respostas foram salvas com sucesso! Agora vamos para as perguntas abertas.",
+        });
         
-        // Redirecionar para resultados
-        router.push("/results")
+        router.push("/open-questions");
+      } else {
+        throw new Error("Não foi possível salvar as respostas. Por favor, tente novamente.");
       }
     } catch (error: any) {
+      console.error('Erro ao submeter:', error);
       toast({
-        title: "Erro ao enviar pesquisa",
+        title: "Erro ao enviar questionário",
         description: error.message || "Ocorreu um erro ao salvar suas respostas.",
         variant: "destructive",
-      })
+      });
+    } finally {
+      setIsSubmitting(false)
     }
-  }, [questions.length, user?.email, selectedTeam?.id, saveAnswers, updateMemberStatus, generateRadarData, toast, router])
+  }, [
+    questions,
+    answers,
+    saveAnswers,
+    updateMemberStatus,
+    toast,
+    router,
+    user?.email,
+    selectedTeam?.id,
+    isLoading
+  ]);
+
+  // Log do estado atual sempre que relevante
+  useEffect(() => {
+    console.log('Estado atual:', {
+      questionsLength: questions?.length,
+      answeredCount,
+      progress,
+      isLoading,
+      answeredRefSize: answeredRef.current.size
+    });
+  }, [questions, answeredCount, progress, isLoading]);
 
   return (
     <Layout>
-      <div className="max-w-3xl mx-auto">
-        <SetupProgress currentPhase="survey" />
-        <h1 className="text-3xl font-bold mb-4 text-center">Radar da Liderança 4.0</h1>
-        
-        <div className="mb-8">
-          <div className="flex justify-between items-center mb-2">
-            <span className="text-sm">Progresso: {progress}%</span>
-            <span className="text-sm">{answeredRef.current.size}/{questions.length} perguntas</span>
-          </div>
-          <Progress value={progress} className="h-2" />
+      <div className="container mx-auto px-4 py-8 space-y-8 max-w-4xl">
+        <div className="space-y-4">
+          <h1 className="text-3xl font-bold tracking-tight">Questionário de Competências</h1>
+          <p className="text-muted-foreground">
+            Avalie cada competência de acordo com sua experiência e percepção.
+            Suas respostas são confidenciais e ajudarão a identificar áreas de desenvolvimento.
+          </p>
         </div>
-        
-        <Tabs defaultValue={currentSection} onValueChange={handleSectionChange}>
-          <TabsList className="grid grid-cols-3 mb-6">
-            {sections.map((section: Section) => (
-              <TabsTrigger key={section.id} value={section.id}>
-                {section.title}
-              </TabsTrigger>
-            ))}
-          </TabsList>
-          
-          {sections.map((section: Section) => (
-            <TabsContent key={section.id} value={section.id}>
-              <QuestionSection 
-                section={section} 
-                questions={questions.filter((q: Question) => q.section_id === section.id)}
-                answeredSet={answeredRef}
-              />
-            </TabsContent>
-          ))}
-        </Tabs>
-        
-        <div className="mt-8 flex justify-end">
-          <Button 
-            onClick={handleSubmit} 
-            disabled={isLoading || answeredRef.current.size < questions.length}
-          >
-            Finalizar Pesquisa
-          </Button>
+
+        <div className="bg-card rounded-lg border shadow-sm p-6 space-y-6">
+          <div className="space-y-2">
+            <div className="flex justify-between text-sm">
+              <span>Progresso</span>
+              <span>{progress}%</span>
+            </div>
+            <Progress value={progress} className="w-full" />
+          </div>
+
+          <QuestionSection 
+            questions={questions?.map(q => ({
+              id: q.id,
+              question: q.text,
+              competency: q.id
+            })) || []}
+            answeredSet={answeredRef}
+            onAnswerUpdate={updateProgress}
+          />
+
+          <div className="flex justify-end pt-4">
+            <Button
+              onClick={handleSubmit}
+              disabled={progress < 100 || isSubmitting}
+              className="w-full sm:w-auto"
+            >
+              {isSubmitting ? "Enviando..." : "Finalizar Pesquisa"}
+            </Button>
+          </div>
         </div>
       </div>
     </Layout>

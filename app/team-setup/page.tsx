@@ -232,42 +232,46 @@ export default function TeamSetupPage() {
 
   return (
     <Layout>
-      <div className="max-w-3xl mx-auto">
-        <SetupProgress currentPhase="team" />
-        <h1 className="text-3xl font-bold mb-8 text-center">Minha Equipe</h1>
-        
-        <Tabs value={activeTab} onValueChange={handleTabChange} className="mb-8">
-          <TabsList className="grid w-full grid-cols-2">
-            <TabsTrigger value="my-teams">Minhas Equipes</TabsTrigger>
-            <TabsTrigger value="create-team">Criar Nova Equipe</TabsTrigger>
-          </TabsList>
+      <div className="container mx-auto px-4 py-8 space-y-8 max-w-3xl">
+        <div className="space-y-4">
+          <h1 className="text-3xl font-bold tracking-tight">Configuração da Equipe</h1>
+          <p className="text-muted-foreground">
+            Crie uma nova equipe ou participe de uma equipe existente para começar a avaliação.
+          </p>
+        </div>
+
+        <Tabs value={activeTab} onValueChange={handleTabChange} className="space-y-6">
+          <div className="flex justify-center w-full">
+            <TabsList>
+              <TabsTrigger value="my-teams">Minhas Equipes</TabsTrigger>
+              <TabsTrigger value="create-team">Criar Nova Equipe</TabsTrigger>
+            </TabsList>
+          </div>
           
           {teamError && (
-            <Alert variant="destructive" className="mb-4 mt-4">
+            <Alert variant="destructive" className="mt-4">
               <AlertDescription>{teamError}</AlertDescription>
             </Alert>
           )}
           
-          <TabsContent value="my-teams">
+          <TabsContent value="my-teams" className="space-y-6">
             {teamLoading ? (
-              <>
+              <div className="space-y-4">
                 <TeamSkeleton />
                 <TeamSkeleton />
-              </>
+              </div>
             ) : teams.length === 0 ? (
-              <Card>
-                <CardHeader>
+              <Card className="bg-card">
+                <CardHeader className="space-y-2">
                   <CardTitle>Nenhuma equipe encontrada</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="mb-4">
+                  <p className="text-muted-foreground text-sm">
                     Você ainda não faz parte de nenhuma equipe. Crie uma nova equipe ou aguarde um convite.
                   </p>
-                </CardContent>
-                <CardFooter>
+                </CardHeader>
+                <CardFooter className="pt-6">
                   <Button 
                     onClick={() => setActiveTab("create-team")} 
-                    className="w-full"
+                    className="w-full sm:w-auto"
                   >
                     <PlusCircleIcon className="mr-2 h-4 w-4" />
                     Criar Nova Equipe
@@ -275,16 +279,18 @@ export default function TeamSetupPage() {
                 </CardFooter>
               </Card>
             ) : (
-              <>
-                <TeamList 
-                  teams={teams}
-                  selectedTeamId={selectedTeam?.id}
-                  userEmail={user?.email || null}
-                  onSelectTeam={selectTeam}
-                />
+              <div className="space-y-6">
+                <div className="bg-card rounded-lg border shadow-sm">
+                  <TeamList 
+                    teams={teams}
+                    selectedTeamId={selectedTeam?.id}
+                    userEmail={user?.email || null}
+                    onSelectTeam={selectTeam}
+                  />
+                </div>
 
                 {selectedTeam && (
-                  <div className="space-y-6 mt-6">
+                  <div className="bg-card rounded-lg border shadow-sm p-6 space-y-6">
                     <TeamDetails
                       teamId={selectedTeam.id}
                       members={teamMembers}
@@ -298,16 +304,18 @@ export default function TeamSetupPage() {
                     />
                   </div>
                 )}
-              </>
+              </div>
             )}
           </TabsContent>
           
           <TabsContent value="create-team">
-            <CreateTeamForm
-              userEmail={user?.email || null}
-              isSubmitting={isSubmitting}
-              onSubmit={handleCreateTeamSubmit}
-            />
+            <div className="bg-card rounded-lg border shadow-sm p-6">
+              <CreateTeamForm
+                userEmail={user?.email || null}
+                isSubmitting={isSubmitting}
+                onSubmit={handleCreateTeamSubmit}
+              />
+            </div>
           </TabsContent>
         </Tabs>
       </div>
