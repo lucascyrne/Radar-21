@@ -4,9 +4,9 @@ import {
   SurveyResponse, 
   OpenQuestionResponse, 
   ProfileFormValues,
-  OpenQuestionResponses, 
   SurveyResponses,
-  SurveyFormValues
+  OpenQuestionsFormValues,
+  TeamMemberStatus
 } from './survey-model';
 
 // Configuração do cliente Supabase
@@ -14,12 +14,42 @@ const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 const supabase = createClient(supabaseUrl, supabaseKey);
 
+// Funções auxiliares para tratar erros do Supabase
+const handleDataError = (error: any) => {
+  if (error.code === 'PGRST116') return null;
+  if (error.code === 'JWT expired') {
+    console.warn('Sessão expirada, renovando...');
+    return null;
+  }
+  throw error;
+};
+
+const handleBooleanError = (error: any): boolean => {
+  if (error.code === 'PGRST116' || error.code === 'JWT expired') {
+    if (error.code === 'JWT expired') {
+      console.warn('Sessão expirada, renovando...');
+    }
+    return false;
+  }
+  throw error;
+};
+
+interface SurveyResponseData {
+  q1?: number | null;
+  q2?: number | null;
+  q3?: number | null;
+  q4?: number | null;
+  q5?: number | null;
+  q6?: number | null;
+  q7?: number | null;
+  q8?: number | null;
+  q9?: number | null;
+  q10?: number | null;
+  q11?: number | null;
+  q12?: number | null;
+}
+
 export class SurveyService {
-  /**
-   * Carrega o perfil do usuário
-   * @param teamMemberId ID do membro da equipe
-   * @returns Dados do perfil do usuário
-   */
   static async loadProfile(teamMemberId: string): Promise<UserProfile | null> {
     try {
       const { data, error } = await supabase
@@ -28,412 +58,165 @@ export class SurveyService {
         .eq('team_member_id', teamMemberId)
         .single();
 
-      if (error && error.code !== 'PGRST116') { // PGRST116 é o código para "nenhum resultado encontrado"
-        throw new Error(`Erro ao carregar perfil: ${error.message}`);
-      }
-
-      return data as UserProfile;
-    } catch (error: any) {
-      console.error('Erro ao carregar perfil:', error);
-      throw new Error(`Erro ao carregar perfil: ${error.message}`);
-    }
-  }
-
-  /**
-   * Salva o perfil do usuário
-   * @param teamMemberId ID do membro da equipe
-   * @param data Dados do perfil
-   * @returns Dados do perfil salvos
-   */
-  static async saveProfile(teamMemberId: string, data: ProfileFormValues): Promise<UserProfile> {
-    try {
-      console.log("Dados recebidos para salvar:", data);
-      
-      // Criar uma cópia dos dados para não modificar o objeto original
-      let formattedData = { ...data };
-      
-      // Função auxiliar para formatar datas
-      const formatDateField = (dateValue: string | null | undefined): string | null => {
-        if (!dateValue) return null;
-        
-        // Se já estiver no formato YYYY-MM-DD, retornar como está
-        if (dateValue.match(/^\d{4}-\d{2}-\d{2}$/)) {
-          return dateValue;
-        }
-        
-        // Se estiver no formato YYYY-MM, adicionar o último dia do mês
-        if (dateValue.match(/^\d{4}-\d{2}$/)) {
-          const [year, month] = dateValue.split('-');
-          const lastDay = new Date(parseInt(year), parseInt(month), 0).getDate();
-          return `${dateValue}-${lastDay}`;
-        }
-        
-        // Se o formato for inválido, retornar null
-        return null;
-      };
-      
-      // Formatar os campos de data independentemente
-      formattedData.birth_date = formatDateField(formattedData.birth_date) || undefined;
-      formattedData.graduation_date = formatDateField(formattedData.graduation_date) || undefined;
-      
-      // Converter employee_count para número
-      if (typeof formattedData.employee_count === 'string') {
-        formattedData.employee_count = parseInt(formattedData.employee_count, 10) || 0;
-      }
-      
-      console.log("Dados formatados para salvar:", formattedData);
-
-      const { data: profile, error } = await supabase
-        .from('user_profiles')
-        .upsert({
-          team_member_id: teamMemberId,
-          ...formattedData,
-        })
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Erro ao salvar perfil:', error);
-        throw new Error(`Erro ao salvar perfil: ${error.message}`);
-      }
-
-      return profile;
-    } catch (error: any) {
-      console.error('Erro ao salvar perfil:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Carrega as respostas do questionário
-   * @param teamMemberId ID do membro da equipe
-   * @returns Respostas do questionário
-   */
-  static async loadSurveyResponses(teamMemberId: string): Promise<SurveyResponses | null> {
-    try {
-      const { data, error } = await supabase
-        .from('survey_responses')
-        .select('*')
-        .eq('team_member_id', teamMemberId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        throw new Error(`Erro ao carregar respostas do questionário: ${error.message}`);
-      }
-
-      return data as SurveyResponses;
-    } catch (error: any) {
-      console.error('Erro ao carregar respostas do questionário:', error);
-      throw new Error(`Erro ao carregar respostas do questionário: ${error.message}`);
-    }
-  }
-
-  /**
-   * Salva as respostas do questionário
-   * @param teamMemberId ID do membro da equipe
-   * @param data Respostas do questionário
-   * @returns Respostas do questionário salvas
-   */
-  static async saveSurveyResponses(teamMemberId: string, data: SurveyFormValues): Promise<SurveyResponses> {
-    try {
-      console.log("Dados recebidos para salvar:", data);
-      
-      // Converter valores de string para número
-      const numericData: SurveyResponses = {
-        q1: parseInt(data.q1, 10),
-        q2: parseInt(data.q2, 10),
-        q3: parseInt(data.q3, 10),
-        q4: parseInt(data.q4, 10),
-        q5: parseInt(data.q5, 10),
-        q6: parseInt(data.q6, 10),
-        q7: parseInt(data.q7, 10),
-        q8: parseInt(data.q8, 10),
-        q9: parseInt(data.q9, 10),
-        q10: parseInt(data.q10, 10),
-        q11: parseInt(data.q11, 10),
-        q12: parseInt(data.q12, 10),
-      };
-      
-      console.log("Dados convertidos para salvar:", numericData);
-      
-      // Verificar se já existem respostas
-      const { data: existingResponses } = await supabase
-        .from('survey_responses')
-        .select('*')
-        .eq('team_member_id', teamMemberId)
-        .maybeSingle();
-
-      let result;
-
-      if (existingResponses) {
-        // Atualizar respostas existentes
-        const { data: updatedResponses, error } = await supabase
-          .from('survey_responses')
-          .update({
-            ...numericData,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingResponses.id)
-          .select('*')
-          .single();
-
-        if (error) {
-          throw new Error(`Erro ao atualizar respostas do questionário: ${error.message}`);
-        }
-
-        result = updatedResponses;
-      } else {
-        // Criar novas respostas
-        const { data: newResponses, error } = await supabase
-          .from('survey_responses')
-          .insert({
-            team_member_id: teamMemberId,
-            ...numericData,
-          })
-          .select('*')
-          .single();
-
-        if (error) {
-          throw new Error(`Erro ao criar respostas do questionário: ${error.message}`);
-        }
-
-        result = newResponses;
-      }
-
-      // Não atualizamos o status para answered aqui, pois isso deve ocorrer apenas após as perguntas abertas
-      // O status será atualizado na página de open-questions após o usuário completar todas as etapas
-
-      return result as SurveyResponses;
-    } catch (error: any) {
-      console.error('Erro ao salvar respostas do questionário:', error);
-      throw new Error(`Erro ao salvar respostas do questionário: ${error.message}`);
-    }
-  }
-
-  /**
-   * Carrega as respostas das perguntas abertas
-   * @param teamMemberId ID do membro da equipe
-   * @returns Respostas das perguntas abertas
-   */
-  static async loadOpenQuestionResponses(teamMemberId: string): Promise<OpenQuestionResponses | null> {
-    try {
-      const { data, error } = await supabase
-        .from('open_question_responses')
-        .select('*')
-        .eq('team_member_id', teamMemberId)
-        .single();
-
-      if (error && error.code !== 'PGRST116') {
-        throw new Error(`Erro ao carregar respostas das perguntas abertas: ${error.message}`);
-      }
-
-      return data as OpenQuestionResponses;
-    } catch (error: any) {
-      console.error('Erro ao carregar respostas das perguntas abertas:', error);
-      throw new Error(`Erro ao carregar respostas das perguntas abertas: ${error.message}`);
-    }
-  }
-
-  /**
-   * Salva as respostas das perguntas abertas
-   * @param teamMemberId ID do membro da equipe
-   * @param data Respostas das perguntas abertas
-   * @returns Respostas das perguntas abertas salvas
-   */
-  static async saveOpenQuestionResponses(teamMemberId: string, data: OpenQuestionResponses): Promise<OpenQuestionResponses> {
-    try {
-      // Verificar se já existem respostas
-      const { data: existingResponses } = await supabase
-        .from('open_question_responses')
-        .select('*')
-        .eq('team_member_id', teamMemberId)
-        .maybeSingle();
-
-      let result;
-
-      if (existingResponses) {
-        // Atualizar respostas existentes
-        const { data: updatedResponses, error } = await supabase
-          .from('open_question_responses')
-          .update({
-            ...data,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', existingResponses.id)
-          .select('*')
-          .single();
-
-        if (error) {
-          throw new Error(`Erro ao atualizar respostas das perguntas abertas: ${error.message}`);
-        }
-
-        result = updatedResponses;
-      } else {
-        // Criar novas respostas
-        const { data: newResponses, error } = await supabase
-          .from('open_question_responses')
-          .insert({
-            team_member_id: teamMemberId,
-            ...data,
-          })
-          .select('*')
-          .single();
-
-        if (error) {
-          throw new Error(`Erro ao criar respostas das perguntas abertas: ${error.message}`);
-        }
-
-        result = newResponses;
-      }
-
-      return result as OpenQuestionResponses;
-    } catch (error: any) {
-      console.error('Erro ao salvar respostas das perguntas abertas:', error);
-      throw new Error(`Erro ao salvar respostas das perguntas abertas: ${error.message}`);
-    }
-  }
-
-  /**
-   * Verifica o status atual do membro da equipe
-   * @param teamMemberId ID do membro da equipe
-   * @returns Status atual do membro
-   */
-  static async checkMemberStatus(teamMemberId: string): Promise<string | null> {
-    try {
-      const { data, error } = await supabase
-        .from('team_members')
-        .select('*')
-        .eq('id', teamMemberId)
-        .single();
-      
-      if (error) {
-        console.error('Erro ao verificar status do membro:', error);
-        return null;
-      }
-      
-      return data?.status || null;
+      if (error) return handleDataError(error);
+      return data;
     } catch (error) {
-      console.error('Erro ao verificar status do membro:', error);
+      console.error('Erro ao carregar perfil:', error);
       return null;
     }
   }
 
-  /**
-   * Atualiza o status do membro da equipe
-   * @param teamMemberId ID do membro da equipe
-   * @param status Novo status
-   */
-  static async updateMemberStatus(teamMemberId: string, status: 'invited' | 'answered'): Promise<void> {
+  static async saveProfile(teamMemberId: string, profile: ProfileFormValues): Promise<boolean> {
     try {
-      // Verificar o status atual
-      const currentStatus = await this.checkMemberStatus(teamMemberId);
-      console.log(`Status atual do membro ${teamMemberId}: "${currentStatus}"`);
-      
-      // Mapear status em português para inglês (conforme constraint do banco)
-      let dbStatus: string;
-      switch (status.trim().toLowerCase()) {
-        case 'invited':
-          dbStatus = 'invited'; // 'enviado' corresponde a 'invited'
-          break;
-        case 'answered':
-          dbStatus = 'answered'; // 'cadastrado' corresponde a 'answered'
-          break;
-        default:
-          throw new Error(`Status inválido: ${status}. Deve ser 'invited' ou 'answered'.`);
-      }
-      
-      // Se o status atual for igual ao novo status mapeado, não fazer nada
-      if (currentStatus === dbStatus) {
-        console.log(`Status já está como "${dbStatus}". Nenhuma atualização necessária.`);
-        return;
-      }
-      
-      console.log(`Atualizando status do membro ${teamMemberId} para: "${dbStatus}" (original: "${status}")`);
-      
-      // Tentar atualizar usando o método padrão
-      try {
-        const { error } = await supabase
-          .from('team_members')
-          .update({ status: dbStatus })
-          .eq('id', teamMemberId);
-        
-        if (error) {
-          console.error('Erro ao atualizar status (método padrão):', error);
-          throw error;
-        }
-      } catch (updateError: any) {
-        console.error('Erro ao atualizar status (método padrão):', updateError);
-        
-        // Se falhar, tentar uma abordagem alternativa com SQL bruto
-        try {
-          // Usar uma consulta SQL direta via função
-          const { error: rpcError } = await supabase.rpc('update_member_status', {
-            p_member_id: teamMemberId,
-            p_status: dbStatus
-          });
-          
-          if (rpcError) {
-            console.error('Erro ao atualizar status (RPC):', rpcError);
-            
-            // Se a função RPC também falhar, tentar uma última abordagem
-            const { error: rawError } = await supabase.from('team_members')
-              .update({ 
-                status: dbStatus,
-                updated_at: new Date().toISOString() // Adicionar um campo extra para forçar a atualização
-              })
-              .eq('id', teamMemberId);
-            
-            if (rawError) {
-              console.error('Erro ao atualizar status (última tentativa):', rawError);
-              throw rawError;
-            }
-          }
-        } catch (finalError: any) {
-          console.error('Erro final ao atualizar status:', finalError);
-          throw finalError;
-        }
-      }
-    } catch (error: any) {
-      console.error('Erro ao atualizar status do membro:', error);
-      throw new Error(`Erro ao atualizar status do membro: ${error.message}`);
+      const { error } = await supabase
+        .from('user_profiles')
+        .upsert({
+          team_member_id: teamMemberId,
+          ...profile,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) return handleBooleanError(error);
+      return true;
+    } catch (error) {
+      console.error('Erro ao salvar perfil:', error);
+      return false;
     }
   }
 
-  /**
-   * Verifica se o usuário completou todas as etapas
-   * @param teamMemberId ID do membro da equipe
-   * @returns Verdadeiro se todas as etapas estiverem completas
-   */
-  static async checkSurveyCompletion(teamMemberId: string): Promise<boolean> {
+  static async loadSurveyResponses(teamMemberId: string): Promise<SurveyResponse | null> {
     try {
-      // Verificar perfil
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('team_member_id', teamMemberId)
-        .single();
-      
-      if (profileError && profileError.code !== 'PGRST116') throw profileError;
-      
-      // Verificar respostas do questionário
-      const { data: surveyResponses, error: surveyError } = await supabase
+      const { data, error } = await supabase
         .from('survey_responses')
         .select('*')
         .eq('team_member_id', teamMemberId)
         .single();
+
+      if (error) return handleDataError(error);
       
-      if (surveyError && surveyError.code !== 'PGRST116') throw surveyError;
+      if (data) {
+        const responses: SurveyResponses = {};
+        for (let i = 1; i <= 12; i++) {
+          const key = `q${i}`;
+          if (data[key] !== null) {
+            responses[key] = data[key];
+          }
+        }
+        
+        return {
+          id: data.id,
+          team_member_id: data.team_member_id,
+          created_at: data.created_at,
+          updated_at: data.updated_at,
+          responses
+        };
+      }
       
-      // Verificar respostas das perguntas abertas
-      const { data: openQuestions, error: openError } = await supabase
+      return null;
+    } catch (error) {
+      console.error('Erro ao carregar respostas:', error);
+      return null;
+    }
+  }
+
+  static async saveSurveyResponses(teamMemberId: string, responses: SurveyResponses): Promise<boolean> {
+    try {
+      const dbResponses = {
+        team_member_id: teamMemberId,
+        updated_at: new Date().toISOString(),
+        ...responses
+      };
+
+      const { error } = await supabase
+        .from('survey_responses')
+        .upsert(dbResponses, {
+          onConflict: 'team_member_id'
+        });
+
+      if (error) return handleBooleanError(error);
+      return true;
+    } catch (error) {
+      console.error('Erro ao salvar respostas:', error);
+      return false;
+    }
+  }
+
+  static async loadOpenQuestions(teamMemberId: string): Promise<OpenQuestionResponse | null> {
+    try {
+      const { data, error } = await supabase
         .from('open_question_responses')
         .select('*')
         .eq('team_member_id', teamMemberId)
         .single();
-      
-      if (openError && openError.code !== 'PGRST116') throw openError;
-      
-      // Retornar true se todas as etapas estiverem completas
+
+      if (error) return handleDataError(error);
+      return data;
+    } catch (error) {
+      console.error('Erro ao carregar perguntas abertas:', error);
+      return null;
+    }
+  }
+
+  static async saveOpenQuestions(teamMemberId: string, answers: OpenQuestionsFormValues): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('open_question_responses')
+        .upsert({
+          team_member_id: teamMemberId,
+          ...answers,
+          updated_at: new Date().toISOString()
+        });
+
+      if (error) return handleBooleanError(error);
+      return true;
+    } catch (error) {
+      console.error('Erro ao salvar perguntas abertas:', error);
+      return false;
+    }
+  }
+
+  static async getMemberStatus(teamMemberId: string): Promise<TeamMemberStatus | null> {
+    try {
+      const { data, error } = await supabase
+        .from('team_members')
+        .select('status')
+        .eq('id', teamMemberId)
+        .single();
+
+      if (error) return handleDataError(error);
+      return data?.status || null;
+    } catch (error) {
+      console.error('Erro ao obter status do membro:', error);
+      return null;
+    }
+  }
+
+  static async updateMemberStatus(teamMemberId: string, status: TeamMemberStatus): Promise<boolean> {
+    try {
+      const { error } = await supabase
+        .from('team_members')
+        .update({ 
+          status,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', teamMemberId);
+
+      if (error) return handleBooleanError(error);
+      return true;
+    } catch (error) {
+      console.error('Erro ao atualizar status do membro:', error);
+      return false;
+    }
+  }
+
+  static async checkSurveyCompletion(teamMemberId: string): Promise<boolean> {
+    try {
+      const [profile, surveyResponses, openQuestions] = await Promise.all([
+        this.loadProfile(teamMemberId),
+        this.loadSurveyResponses(teamMemberId),
+        this.loadOpenQuestions(teamMemberId)
+      ]);
+
       return !!profile && !!surveyResponses && !!openQuestions;
     } catch (error) {
       console.error('Erro ao verificar conclusão do questionário:', error);
@@ -441,52 +224,88 @@ export class SurveyService {
     }
   }
 
-  /**
-   * Carrega todos os dados do usuário
-   * @param teamMemberId ID do membro da equipe
-   * @returns Todos os dados do usuário
-   */
-  static async loadUserData(teamMemberId: string): Promise<{
-    profile: UserProfile | null;
-    surveyResponses: SurveyResponse | null;
-    openQuestions: OpenQuestionResponse | null;
-  }> {
+  static getCompetencyName(questionId: string): string {
+    const competencies: Record<string, string> = {
+      q1: 'Liderança',
+      q2: 'Comunicação',
+      q3: 'Trabalho em Equipe',
+      q4: 'Resolução de Problemas',
+      q5: 'Inovação',
+      q6: 'Adaptabilidade',
+      q7: 'Gestão do Tempo',
+      q8: 'Pensamento Crítico',
+      q9: 'Ética Profissional',
+      q10: 'Conhecimento Técnico',
+      q11: 'Aprendizado Contínuo',
+      q12: 'Orientação a Resultados'
+    };
+
+    return competencies[questionId] || questionId;
+  }
+
+  static async getTeamResults(teamId: string) {
     try {
-      // Carregar perfil
-      const { data: profile, error: profileError } = await supabase
-        .from('user_profiles')
-        .select('*')
-        .eq('team_member_id', teamMemberId)
-        .single();
-      
-      if (profileError && profileError.code !== 'PGRST116') throw profileError;
-      
-      // Carregar respostas do questionário
-      const { data: surveyResponses, error: surveyError } = await supabase
-        .from('survey_responses')
-        .select('*')
-        .eq('team_member_id', teamMemberId)
-        .single();
-      
-      if (surveyError && surveyError.code !== 'PGRST116') throw surveyError;
-      
-      // Carregar respostas das perguntas abertas
-      const { data: openQuestions, error: openError } = await supabase
-        .from('open_question_responses')
-        .select('*')
-        .eq('team_member_id', teamMemberId)
-        .single();
-      
-      if (openError && openError.code !== 'PGRST116') throw openError;
-      
+      // Buscar todos os membros da equipe com suas respostas
+      const { data: members, error: membersError } = await supabase
+        .from('team_members')
+        .select(`
+          id,
+          role,
+          survey_responses!inner (
+            q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12
+          )
+        `)
+        .eq('team_id', teamId)
+        .eq('status', 'answered');
+
+      if (membersError) throw membersError;
+      if (!members?.length) return null;
+
+      // Separar líder e membros
+      const leader = members.find(m => m.role === 'leader');
+      const teamMembers = members.filter(m => m.role === 'member');
+
+      if (!leader || !teamMembers.length) return null;
+
+      // Extrair respostas do líder
+      const leaderResponses = leader.survey_responses;
+      if (!leaderResponses) return null;
+
+      // Definir IDs das questões
+      const questionIds = Array.from({ length: 12 }, (_, i) => `q${i + 1}` as keyof SurveyResponseData);
+
+      // Calcular média da equipe por questão
+      const teamAverage = questionIds.map(questionId => {
+        const values = teamMembers
+          .map(member => (member.survey_responses as SurveyResponseData)?.[questionId])
+          .filter((value): value is number => value !== undefined && value !== null);
+
+        const average = values.length
+          ? values.reduce((sum, value) => sum + value, 0) / values.length
+          : 0;
+
+        return {
+          questionId,
+          average: Number(average.toFixed(2))
+        };
+      });
+
+      // Formatar respostas do líder
+      const formattedLeaderResponses = questionIds.map(questionId => {
+        const value = (leader.survey_responses as SurveyResponseData)?.[questionId];
+        return {
+          questionId,
+          value: value !== undefined && value !== null ? Number(value) : 0
+        };
+      });
+
       return {
-        profile: profile || null,
-        surveyResponses: surveyResponses || null,
-        openQuestions: openQuestions || null,
+        teamAverage,
+        leaderResponses: formattedLeaderResponses
       };
     } catch (error) {
-      console.error('Erro ao carregar dados do usuário:', error);
-      throw error;
+      console.error('Erro ao carregar resultados da equipe:', error);
+      return null;
     }
   }
-} 
+}

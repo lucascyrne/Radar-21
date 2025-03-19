@@ -225,7 +225,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
       setState(prev => ({ ...prev, selectedTeam: team }));
       loadTeamMembers(team.id);
     }
-  }, [state.teams, state.selectedTeam?.id, loadTeamMembers]);
+  }, [state.teams, state.selectedTeam?.id]);
 
   // Atualizar status do membro
   const updateMemberStatus = useCallback(async (
@@ -344,7 +344,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
     };
 
     processInvite();
-  }, [user?.id, user?.email, pendingInvite, processPendingInvite, refreshTeams]);
+  }, [user?.id, user?.email, pendingInvite]);
 
   return (
     <TeamContext.Provider

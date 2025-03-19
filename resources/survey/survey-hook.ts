@@ -1,8 +1,7 @@
 "use client"
 
 import { useContext } from 'react';
-import { SurveyContext } from './survey-context';
-import { SurveyContextType } from './survey-context';
+import SurveyContext, { SurveyContextType } from './survey-context';
 
 export function useSurvey(): SurveyContextType {
   const context = useContext(SurveyContext);

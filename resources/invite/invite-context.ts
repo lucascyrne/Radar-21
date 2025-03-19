@@ -1,20 +1,14 @@
-import { createContext } from 'react';
-import { InviteData, PendingInvite } from './invite-model';
+import { createContext, useContext } from 'react';
+import { InviteContextType } from './invite-model';
 
-export interface InviteContextState {
-  pendingInvite: PendingInvite | null;
-  isProcessing: boolean;
-  error: string | null;
-  sendInvite: (data: InviteData) => Promise<void>;
-  processPendingInvite: (userId: string, email: string) => Promise<void>;
-  clearPendingInvite: () => void;
-}
-
-export const InviteContext = createContext<InviteContextState>({
-  pendingInvite: null,
+const defaultContext: InviteContextType = {
   isProcessing: false,
   error: null,
-  sendInvite: async () => {},
-  processPendingInvite: async () => {},
-  clearPendingInvite: () => {}
-}); 
+  pendingInviteId: undefined,
+  sendInvite: async () => { throw new Error('InviteContext não foi inicializado') },
+  resendInvite: async () => { throw new Error('InviteContext não foi inicializado') },
+  processInvite: async () => { throw new Error('InviteContext não foi inicializado') },
+  clearPendingInvite: () => { throw new Error('InviteContext não foi inicializado') }
+};
+
+export const InviteContext = createContext<InviteContextType>(defaultContext);

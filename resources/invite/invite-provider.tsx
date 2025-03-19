@@ -1,80 +1,131 @@
 'use client';
 
 import React, { useState, useCallback } from 'react';
+import { Resend } from 'resend';
+import { InviteEmailTemplate } from '@/components/email-template';
 import { InviteContext } from './invite-context';
-import { InviteService } from './invite.service';
-import { InviteData, PendingInvite } from './invite-model';
+import { InviteData, InviteStatus, EmailConfig } from './invite-model';
+import { supabase } from '@/resources/auth/auth.service';
+
+const resend = new Resend(process.env.NEXT_PUBLIC_RESEND_API_KEY);
+
+const emailConfig: EmailConfig = {
+  from: 'Radar21 <noreply@radar21.com.br>',
+  subject: (teamName: string) => `Convite para participar da equipe ${teamName} no Radar21`,
+  template: InviteEmailTemplate
+};
 
 export const InviteProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [pendingInvite, setPendingInvite] = useState<PendingInvite | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingInviteId, setPendingInviteId] = useState<string>();
 
-  // Carregar convite pendente ao inicializar
-  React.useEffect(() => {
-    // Primeiro, tentar capturar convite da URL
-    InviteService.captureInviteFromUrl();
-    
-    // Depois, carregar do storage
-    const stored = InviteService.getPendingInvite();
-    if (stored) {
-      console.log('Convite pendente encontrado:', stored);
-      setPendingInvite(stored);
+  const handleEmailSend = async (data: InviteData) => {
+    try {
+      await resend.emails.send({
+        from: emailConfig.from,
+        to: data.email,
+        subject: emailConfig.subject(data.teamName),
+        react: emailConfig.template(data)
+      });
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao enviar email';
+      throw new Error(errorMessage);
     }
-  }, []);
+  };
+
+  const updateTeamMemberStatus = async (teamId: string, email: string, status: InviteStatus) => {
+    const { error } = await supabase
+      .from('team_members')
+      .upsert({
+        team_id: teamId,
+        email: email,
+        status: status,
+        updated_at: new Date().toISOString()
+      });
+
+    if (error) throw error;
+  };
 
   const sendInvite = useCallback(async (data: InviteData) => {
     setIsProcessing(true);
     setError(null);
     
     try {
-      await InviteService.sendInvite(data);
+      // Atualizar status do membro para 'pending'
+      await updateTeamMemberStatus(data.teamId, data.email, 'pending');
+      
+      // Enviar email
+      await handleEmailSend(data);
+      
+      // Atualizar status para 'sent'
+      await updateTeamMemberStatus(data.teamId, data.email, 'sent');
+      
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erro ao enviar convite');
-      throw err;
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao processar convite';
+      setError(errorMessage);
+      throw new Error(errorMessage);
     } finally {
       setIsProcessing(false);
     }
   }, []);
 
-  const processPendingInvite = useCallback(async (userId: string, email: string) => {
-    if (!pendingInvite) {
-      console.log('Nenhum convite pendente para processar');
-      return;
-    }
-    
+  const resendInvite = useCallback(async (data: InviteData) => {
     setIsProcessing(true);
     setError(null);
     
     try {
-      console.log('Processando convite pendente:', { userId, email, pendingInvite });
-      const teamId = await InviteService.processInvite(userId, email);
-      if (teamId) {
-        console.log('Convite processado com sucesso:', teamId);
-        setPendingInvite(null);
-      }
+      await handleEmailSend(data);
+      await updateTeamMemberStatus(data.teamId, data.email, 'sent');
     } catch (err) {
-      console.error('Erro ao processar convite:', err);
-      setError(err instanceof Error ? err.message : 'Erro ao processar convite');
-      throw err;
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao reenviar convite';
+      setError(errorMessage);
+      throw new Error(errorMessage);
     } finally {
       setIsProcessing(false);
     }
-  }, [pendingInvite]);
+  }, []);
+
+  const processInvite = useCallback(async (userId: string, email: string, teamId: string) => {
+    setIsProcessing(true);
+    setError(null);
+    
+    try {
+      const { error } = await supabase
+        .from('team_members')
+        .update({
+          user_id: userId,
+          status: 'accepted',
+          updated_at: new Date().toISOString()
+        })
+        .eq('team_id', teamId)
+        .eq('email', email);
+
+      if (error) throw error;
+      
+      clearPendingInvite();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Erro ao processar convite';
+      setError(errorMessage);
+      throw new Error(errorMessage);
+    } finally {
+      setIsProcessing(false);
+    }
+  }, []);
 
   const clearPendingInvite = useCallback(() => {
-    InviteService.clearPendingInvite();
-    setPendingInvite(null);
+    setPendingInviteId(undefined);
   }, []);
 
   return (
     <InviteContext.Provider
       value={{
-        pendingInvite,
         isProcessing,
         error,
+        pendingInviteId,
         sendInvite,
-        processPendingInvite,
+        resendInvite,
+        processInvite,
         clearPendingInvite
       }}
     >

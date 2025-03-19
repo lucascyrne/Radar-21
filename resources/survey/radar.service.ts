@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { SurveyResponses } from './survey-model';
 import { TeamMember } from '../team/team-model';
-import { RadarDataPoint } from '@/components/radar-chart';
+import { RadarDataPoint } from '@/components/survey/radar-chart';
 
 // Inicializar cliente Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
