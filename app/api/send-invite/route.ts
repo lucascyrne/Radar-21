@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { Resend } from 'resend';
-import { sendInviteEmail } from '@/resources/email/email.service';
-import { supabase } from '@/resources/auth/auth.service';
 import { TeamService } from '@/resources/team/team.service';
+import { InviteEmailTemplate } from '@/components/email-template';
 
 // Inicializar o cliente Resend com a chave de API
 const resend = new Resend(process.env.NEXT_PUBLIC_RESEND_API_KEY);
@@ -43,12 +42,11 @@ export async function POST(request: NextRequest) {
     
     // Enviar o email de convite
     console.log('Enviando email de convite');
-    await sendInviteEmail({
+    await resend.emails.send({
+      from: 'Radar21 <noreply@radar21.com.br>',
       to: email,
-      teamName: teamName,
-      inviteUrl: inviteUrl,
-      message: message,
-      invitedBy: invitedBy
+      subject: `Convite para participar da equipe ${teamName} no Radar21`,
+      react: InviteEmailTemplate({ inviteUrl, message })
     });
     
     console.log('Convite enviado com sucesso');
