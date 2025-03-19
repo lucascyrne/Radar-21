@@ -1,6 +1,6 @@
 import { Progress } from "@/components/ui/progress"
 
-export type SetupPhase = 'team' | 'profile' | 'survey' | 'results';
+export type SetupPhase = 'team' | 'profile' | 'survey' | 'open-questions' | 'results';
 
 interface SetupProgressProps {
   currentPhase: SetupPhase;
@@ -9,9 +9,10 @@ interface SetupProgressProps {
 export function SetupProgress({ currentPhase }: SetupProgressProps) {
   // Mapeamento de fases para valores de progresso
   const progressMap: Record<SetupPhase, number> = {
-    team: 25,
-    profile: 50,
-    survey: 75,
+    team: 20,
+    profile: 40,
+    survey: 60,
+    'open-questions': 80,
     results: 100
   };
 
@@ -25,6 +26,9 @@ export function SetupProgress({ currentPhase }: SetupProgressProps) {
           Meu Perfil
         </span>
         <span className={currentPhase === 'survey' ? 'font-bold' : 'text-muted-foreground'}>
+          Questionário
+        </span>
+        <span className={currentPhase === 'open-questions' ? 'font-bold' : 'text-muted-foreground'}>
           Perguntas Abertas
         </span>
         <span className={currentPhase === 'results' ? 'font-bold' : 'text-muted-foreground'}>
