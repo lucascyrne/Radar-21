@@ -43,6 +43,8 @@ export const AuthService = {
   // Verificar sessão atual
   getSession: async () => {
     try {
+      // Forçar refresh da sessão
+      await supabase.auth.refreshSession();
       const { data, error } = await supabase.auth.getSession();
       if (error) throw error;
       return data.session;
@@ -67,28 +69,34 @@ export const AuthService = {
   // Logout
   signOut: async () => {
     try {
-      // Limpar dados do localStorage
-      localStorage.removeItem("teamId");
-      localStorage.removeItem("teamMemberId");
-      localStorage.removeItem("userProfile");
+      // Limpar cache do navegador
+      if (typeof window !== 'undefined') {
+        // Limpar localStorage
+        localStorage.clear();
+        
+        // Limpar sessionStorage
+        sessionStorage.clear();
+        
+        // Limpar cookies relacionados à autenticação
+        document.cookie.split(";").forEach(function(c) { 
+          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+        });
+      }
       
-      // Chamar o método de logout do Supabase com scope global
+      // Fazer logout no Supabase
       const { error } = await supabase.auth.signOut({
         scope: 'global'
       });
       
-      if (error) {
-        console.error('Erro ao fazer logout:', error);
-      }
+      if (error) throw error;
       
-      // Aguardar um momento para garantir que a sessão seja limpa
+      // Aguardar um momento para garantir que tudo seja limpo
       await new Promise(resolve => setTimeout(resolve, 500));
       
       return true;
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
-      // Mesmo com erro, consideramos o logout bem-sucedido
-      return true;
+      return true; // Retorna true mesmo com erro para forçar o logout no cliente
     }
   },
   

@@ -1,12 +1,12 @@
-import type React from "react"
-import "@/app/globals.css"
 import { Inter } from "next/font/google"
+import "@/app/globals.css"
 import type { Metadata } from "next"
 import { AuthProvider } from '@/resources/auth/auth-provider'
 import { SurveyProvider } from "@/resources/survey/survey-provider"
 import { TeamProvider } from "@/resources/team/team-provider"
 import { Toaster } from "@/components/ui/toaster"
 import Script from "next/script"
+import { InviteProvider } from "@/resources/invite/invite-provider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -22,7 +22,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="pt-BR">
+    <html lang="pt-BR" suppressHydrationWarning>
       <head>
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-ZT0F9FYDT2"
@@ -36,17 +36,19 @@ export default function RootLayout({
             gtag('config', 'G-ZT0F9FYDT2');
           `}
         </Script>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Radar21 - Avaliação de Competências para Indústria 4.0</title>
       </head>
       <body className={inter.className}>
         <AuthProvider>
-          <InviteProvider>
-            <TeamProvider>
-              <SurveyProvider>
+          <TeamProvider>
+            <SurveyProvider>
+              <InviteProvider>
                 {children}
                 <Toaster />
-              </SurveyProvider>
-            </TeamProvider>
-          </InviteProvider>
+              </InviteProvider>
+            </SurveyProvider>
+          </TeamProvider>
         </AuthProvider>
       </body>
     </html>
@@ -54,4 +56,3 @@ export default function RootLayout({
 }
 
 import './globals.css'
-import { InviteProvider } from "@/resources/invite/invite-provider"

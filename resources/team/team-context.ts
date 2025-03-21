@@ -3,7 +3,7 @@ import { CreateTeamFormValues, Team, TeamState, TeamMember, TeamMemberStatus } f
 
 // Tipo do contexto de equipes
 export interface TeamContextType extends TeamState {
-  loadUserTeams: (userId: string) => Promise<void>;
+  loadTeams: (userId: string) => Promise<void>;
   loadTeamMembers: (teamId: string) => Promise<void>;
   getCurrentMember: (teamId: string, userEmail: string) => Promise<TeamMember | null>;
   createTeam: (data: CreateTeamFormValues, userId: string, userEmail: string) => Promise<Team>;
@@ -28,7 +28,7 @@ export const initialTeamState: TeamState = {
 
 export const TeamContext = createContext<TeamContextType>({
   ...initialTeamState,
-  loadUserTeams: async () => {},
+  loadTeams: async () => {},
   loadTeamMembers: async () => {},
   getCurrentMember: async () => null,
   createTeam: async () => ({

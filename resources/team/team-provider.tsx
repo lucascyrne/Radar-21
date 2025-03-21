@@ -3,9 +3,10 @@
 import { ReactNode, useCallback, useState, useRef, useEffect } from 'react';
 import { initialTeamState, TeamContext } from './team-context';
 import { TeamService } from './team.service';
-import { CreateTeamFormValues, Team, TeamMember, TeamMemberStatus } from './team-model';
+import { CreateTeamFormValues, TeamMember, TeamMemberStatus } from './team-model';
 import { useAuth } from '../auth/auth-hook';
 import { useInvite } from '../invite/invite-hook';
+import { supabase } from '../auth/auth.service';
 
 interface TeamProviderProps {
   children: ReactNode;
@@ -40,7 +41,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
     const autoLoadTeams = async () => {
       if (user?.id && !loadingTeamsRef.current && state.teams.length === 0) {
         console.log('Carregando equipes automaticamente para o usuário:', user.id);
-        await loadUserTeams(user.id);
+        await loadTeams();
       }
     };
     
@@ -86,7 +87,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
         loadedMembersRef.current.clear();
         
         // Recarregar equipes do usuário
-        await loadUserTeams(user.id);
+        await loadTeams();
         
         // Se recebeu um teamId específico, carregar seus membros
         if (customEvent.detail?.teamId) {
@@ -102,39 +103,48 @@ export function TeamProvider({ children }: TeamProviderProps) {
   }, [user?.id]);
 
   // Carregar equipes do usuário
-  const loadUserTeams = useCallback(async (userId: string) => {
-    if (!userId || loadingTeamsRef.current) return;
-    
-    loadingTeamsRef.current = true;
-    setState(prev => ({ ...prev, isLoading: true, error: null }));
-    
+  const loadTeams = useCallback(async () => {
+    if (!user?.id) return;
+
     try {
-      const { teams } = await TeamService.getUserTeams(userId);
-      const safeTeams = Array.isArray(teams) ? teams : [];
+      setState(prev => ({ ...prev, isLoading: true, error: null }));
       
-      setState(prev => ({ 
-        ...prev, 
-        teams: safeTeams,
-        selectedTeam: safeTeams[0] || null,
+      // Forçar nova busca das equipes
+      const { data: teams, error } = await supabase
+        .from('teams')
+        .select('*')
+        .eq('created_by', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+
+      // Buscar membros de todas as equipes
+      const teamIds = teams.map(team => team.id);
+      const { data: members, error: membersError } = await supabase
+        .from('team_members')
+        .select('*')
+        .in('team_id', teamIds);
+
+      if (membersError) throw membersError;
+
+      // Atualizar estado com dados frescos
+      setState(prev => ({
+        ...prev,
+        teams,
+        teamMembers: members || [],
         isLoading: false,
-        isInitialLoading: false
+        error: null
       }));
 
-      // Se tiver uma equipe selecionada, carregar seus membros
-      if (safeTeams[0]?.id) {
-        await loadTeamMembers(safeTeams[0].id);
-      }
     } catch (error: any) {
-      setState(prev => ({ 
-        ...prev, 
+      console.error('Erro ao carregar equipes:', error);
+      setState(prev => ({
+        ...prev,
         isLoading: false,
-        isInitialLoading: false,
-        error: error.message || 'Erro ao carregar equipes' 
+        error: error.message
       }));
-    } finally {
-      loadingTeamsRef.current = false;
     }
-  }, []);
+  }, [user?.id]);
 
   // Obter o membro atual
   const getCurrentMember = useCallback(async (teamId: string, userEmail: string): Promise<TeamMember | null> => {
@@ -364,7 +374,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
       if (user?.id && user?.email && pendingInviteId) {
         try {
           console.log('Processando convite pendente para usuário:', user.email);
-          await processInvite(user.id, user.email);
+          await processInvite(user.id, user.email, pendingInviteId);
           
           // Forçar limpeza do cache e recarregamento completo
           loadingTeamsRef.current = false;
@@ -400,7 +410,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
     <TeamContext.Provider
       value={{
         ...state,
-        loadUserTeams,
+        loadTeams,
         loadTeamMembers,
         getCurrentMember,
         createTeam,
