@@ -3,7 +3,6 @@ import { z } from 'zod';
 // Esquema para o perfil do usuário
 export const profileSchema = z.object({
   name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
-  email: z.string().email('Email inválido'),
   birth_date: z.string().optional(),
   education: z.string().min(1, 'Selecione seu nível de escolaridade'),
   graduation_date: z.string().optional(),
@@ -26,7 +25,7 @@ export type ProfileFormValues = z.infer<typeof profileSchema>;
 // Esquema para as perguntas abertas
 export const openQuestionsSchema = z.object({
   q13: z.string().min(1, 'Este campo é obrigatório'),
-  q14: z.string().min(1, 'Este campo é obrigatório'),
+  q14: z.string().optional(),
 });
 
 export type OpenQuestionsFormValues = z.infer<typeof openQuestionsSchema>;

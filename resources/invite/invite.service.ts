@@ -6,7 +6,7 @@ import { InviteEmailTemplate } from '@/components/email-template';
 const resend = new Resend(process.env.NEXT_PUBLIC_RESEND_API_KEY);
 
 export class InviteService {
-  private static readonly STORAGE_KEY = 'pendingInviteTeamId';
+  private static readonly STORAGE_KEY = 'pendingInvite';
 
   private static async sendInviteEmail(data: InviteData): Promise<void> {
     try {
@@ -16,7 +16,8 @@ export class InviteService {
         subject: `Convite para participar da equipe ${data.teamName} no Radar21`,
         react: InviteEmailTemplate({
           inviteUrl: data.inviteUrl,
-          message: data.message
+          message: data.message,
+          teamName: data.teamName
         })
       });
     } catch (error) {
@@ -25,7 +26,13 @@ export class InviteService {
     }
   }
 
-  private static async updateTeamMemberStatus(teamId: string, email: string, status: InviteStatus, userId?: string): Promise<void> {
+  private static async updateTeamMemberStatus(
+    teamId: string, 
+    email: string, 
+    status: InviteStatus, 
+    userId?: string,
+    role: 'leader' | 'member' = 'member'
+  ): Promise<void> {
     try {
       const { error } = await supabase
         .from('team_members')
@@ -34,7 +41,10 @@ export class InviteService {
           email: email,
           user_id: userId,
           status: status,
+          role: role,
           updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'team_id,email'
         });
 
       if (error) throw error;
@@ -46,8 +56,21 @@ export class InviteService {
 
   static async sendInvite(data: InviteData): Promise<void> {
     try {
-      // Gerar URL de convite
-      data.inviteUrl = `${window.location.origin}/auth?invite=${data.teamId}`;
+      // Gerar URL de convite com nome da equipe
+      const encodedTeamName = encodeURIComponent(data.teamName);
+      data.inviteUrl = `${window.location.origin}/auth?invite=${data.teamId}&team=${encodedTeamName}`;
+
+      // Verificar se já existe convite pendente
+      const { data: existingInvite } = await supabase
+        .from('team_members')
+        .select('status')
+        .eq('team_id', data.teamId)
+        .eq('email', data.email)
+        .single();
+
+      if (existingInvite?.status === 'accepted') {
+        throw new Error('Este usuário já é membro da equipe');
+      }
 
       // Atualizar status do membro para 'pending'
       await this.updateTeamMemberStatus(data.teamId, data.email, 'pending');
@@ -68,7 +91,33 @@ export class InviteService {
       const pendingInvite = this.getPendingInvite();
       if (!pendingInvite) return null;
 
+      // Verificar se o convite ainda é válido
+      const { data: invite } = await supabase
+        .from('team_members')
+        .select('status, team_id')
+        .eq('team_id', pendingInvite.teamId)
+        .eq('email', email)
+        .single();
+
+      if (!invite || invite.status === 'accepted') {
+        this.clearPendingInvite();
+        throw new Error('Convite inválido ou já utilizado');
+      }
+
+      // Atualizar status do membro
       await this.updateTeamMemberStatus(pendingInvite.teamId, email, 'accepted', userId);
+      
+      // Atualizar o usuário com o teamId
+      const { error: userError } = await supabase
+        .from('users')
+        .upsert({
+          id: userId,
+          email: email,
+          team_id: pendingInvite.teamId,
+          updated_at: new Date().toISOString()
+        });
+
+      if (userError) throw userError;
       
       this.clearPendingInvite();
       return pendingInvite.teamId;
@@ -83,22 +132,22 @@ export class InviteService {
 
     const params = new URLSearchParams(window.location.search);
     const teamId = params.get('invite');
+    const teamName = params.get('team');
     
     if (teamId) {
-      console.log('Capturando convite da URL:', teamId);
-      this.storePendingInvite(teamId);
+      this.storePendingInvite(teamId, teamName || undefined);
     }
   }
 
-  static getPendingInvite(): { teamId: string } | null {
+  static getPendingInvite(): { teamId: string; teamName?: string } | null {
     if (typeof window === 'undefined') return null;
-    const teamId = sessionStorage.getItem(this.STORAGE_KEY);
-    return teamId ? { teamId } : null;
+    const inviteData = sessionStorage.getItem(this.STORAGE_KEY);
+    return inviteData ? JSON.parse(inviteData) : null;
   }
 
-  static storePendingInvite(teamId: string): void {
+  static storePendingInvite(teamId: string, teamName?: string): void {
     if (typeof window === 'undefined') return;
-    sessionStorage.setItem(this.STORAGE_KEY, teamId);
+    sessionStorage.setItem(this.STORAGE_KEY, JSON.stringify({ teamId, teamName }));
   }
 
   static clearPendingInvite(): void {
