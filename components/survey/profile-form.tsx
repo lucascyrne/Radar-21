@@ -38,25 +38,17 @@ export function ProfileForm({ defaultValues, onSubmit }: ProfileFormProps) {
   });
 
   useEffect(() => {
-    const subscription = form.watch((value) => {
-      console.log('Form values changed:', value);
-      console.log('Form state:', {
-        isDirty: form.formState.isDirty,
-        isValid: form.formState.isValid,
-        errors: form.formState.errors
-      });
-    });
-
-    return () => subscription.unsubscribe();
-  }, [form]);
+    if (defaultValues) {
+      form.reset(defaultValues);
+    }
+  }, [defaultValues, form]);
 
   const handleFormSubmit = async (data: ProfileFormValues) => {
     try {
-      console.log('Dados do formulário antes do submit:', data);
       await onSubmit(data);
     } catch (error) {
       console.error('Erro ao submeter formulário:', error);
-      form.reset(data);
+      // Não reseta o formulário em caso de erro para manter os dados
     }
   };
 

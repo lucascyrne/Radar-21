@@ -17,6 +17,7 @@ export interface SurveyState {
   openQuestions: OpenQuestionsFormValues | null;
   teamMemberId: string | null;
   isLoading: boolean;
+  isSaving: boolean;
   error: string | null;
   radarData: RadarDataPoint[];
 }
@@ -39,6 +40,7 @@ const initialState: SurveyContextType = {
   openQuestions: null,
   teamMemberId: null,
   isLoading: false,
+  isSaving: false,
   error: null,
   radarData: [],
   questions: [],

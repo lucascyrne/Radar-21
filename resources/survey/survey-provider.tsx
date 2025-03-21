@@ -20,6 +20,14 @@ interface SurveyProviderProps {
   children: ReactNode;
 }
 
+interface LoadingState {
+  profile: boolean;
+  survey: boolean;
+  openQuestions: boolean;
+  teamMember: boolean;
+  saving: boolean;
+}
+
 const initialState: SurveyState = {
   profile: null,
   surveyResponses: null,
@@ -32,6 +40,13 @@ const initialState: SurveyState = {
 
 export function SurveyProvider({ children }: SurveyProviderProps) {
   const [state, setState] = useState<SurveyState>(initialState);
+  const [loadingState, setLoadingState] = useState<LoadingState>({
+    profile: false,
+    survey: false,
+    openQuestions: false,
+    teamMember: false,
+    saving: false
+  });
   const { user } = useAuth();
   const { selectedTeam, teamMembers, loadTeamMembers } = useTeam();
   
@@ -40,9 +55,16 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [radarData, setRadarData] = useState<RadarDataPoint[]>([]);
 
-  // Método para atualizar o estado de loading e erro
-  const updateLoading = useCallback((isLoading: boolean, error: string | null = null) => {
-    setState(prev => ({ ...prev, isLoading, error }));
+  // Método unificado para atualizar estados de loading
+  const updateLoadingState = useCallback((
+    key: keyof LoadingState,
+    isLoading: boolean,
+    error: string | null = null
+  ) => {
+    setLoadingState(prev => ({ ...prev, [key]: isLoading }));
+    if (error !== undefined) {
+      setState(prev => ({ ...prev, error }));
+    }
   }, []);
 
   // Método para atualizar o estado de salvamento
@@ -62,7 +84,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
     if (!user?.email) return null;
     
     try {
-      updateLoading(true);
+      updateLoadingState('teamMember', true);
       
       const teamId = selectedTeam?.id || localStorage.getItem("teamId");
       
@@ -102,33 +124,32 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
           }
           
           updateTeamMemberId(newMember.id);
-          updateLoading(false);
           return newMember.id;
         }
         
         updateTeamMemberId(data.id);
-        updateLoading(false);
         return data.id;
       }
       
       if (member.id) {
         updateTeamMemberId(member.id);
-        updateLoading(false);
         return member.id;
       }
       
       throw new Error("ID do membro da equipe não encontrado");
     } catch (error: any) {
       console.error('Erro ao buscar ID do membro da equipe:', error);
-      updateLoading(false, error.message || 'Erro ao buscar ID do membro da equipe');
+      setState(prev => ({ ...prev, error: error.message || 'Erro ao buscar ID do membro da equipe' }));
       return null;
+    } finally {
+      updateLoadingState('teamMember', false);
     }
-  }, [user, selectedTeam, teamMembers, updateLoading, updateTeamMemberId]);
+  }, [user, selectedTeam, teamMembers, updateLoadingState, updateTeamMemberId]);
 
   // Carregar dados do perfil do usuário
   const loadProfile = useCallback(async () => {
     try {
-      updateLoading(true);
+      updateLoadingState('profile', true);
       
       const teamMemberId = state.teamMemberId || await fetchTeamMemberId();
       
@@ -137,22 +158,21 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       }
       
       const profile = await SurveyService.loadProfile(teamMemberId);
-      
-      setState(prev => ({ ...prev!, profile }));
-      updateLoading(false);
-      
+      setState(prev => ({ ...prev, profile }));
       return profile;
     } catch (error: any) {
       console.error('Erro ao carregar perfil:', error);
-      updateLoading(false, error.message || 'Erro ao carregar perfil');
+      setState(prev => ({ ...prev, error: error.message || 'Erro ao carregar perfil' }));
       return null;
+    } finally {
+      updateLoadingState('profile', false);
     }
-  }, [state.teamMemberId, updateLoading, fetchTeamMemberId]);
+  }, [state.teamMemberId, updateLoadingState, fetchTeamMemberId]);
 
   // Salvar perfil do usuário
   const saveProfile = useCallback(async (data: ProfileFormValues): Promise<boolean> => {
     try {
-      updateSaving(true);
+      updateLoadingState('saving', true);
       
       const teamMemberId = state.teamMemberId || await fetchTeamMemberId();
       
@@ -176,14 +196,14 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       setState(prev => ({ ...prev, error: error.message || 'Erro ao salvar perfil' }));
       return false;
     } finally {
-      updateSaving(false);
+      updateLoadingState('saving', false);
     }
-  }, [state.teamMemberId]);
+  }, [state.teamMemberId, updateLoadingState, fetchTeamMemberId]);
 
   // Carregar respostas do questionário
   const loadSurveyResponses = useCallback(async () => {
     try {
-      updateLoading(true);
+      updateLoadingState('survey', true);
       
       const teamMemberId = state.teamMemberId || await fetchTeamMemberId();
       
@@ -198,19 +218,19 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
         setAnswers(surveyResponse.responses);
       }
       
-      updateLoading(false);
+      updateLoadingState('survey', false);
       return surveyResponse;
     } catch (error: any) {
       console.error('Erro ao carregar respostas do questionário:', error);
-      updateLoading(false, error.message || 'Erro ao carregar respostas do questionário');
+      setState(prev => ({ ...prev, error: error.message || 'Erro ao carregar respostas do questionário' }));
       return null;
     }
-  }, [state.teamMemberId, updateLoading, fetchTeamMemberId]);
+  }, [state.teamMemberId, updateLoadingState, fetchTeamMemberId]);
 
   // Salvar respostas do questionário
   const saveSurveyResponses = useCallback(async (data: SurveyFormValues) => {
     try {
-      updateLoading(true);
+      updateLoadingState('saving', true);
       
       const teamMemberId = state.teamMemberId || await fetchTeamMemberId();
       
@@ -221,18 +241,19 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       await SurveyService.saveSurveyResponses(teamMemberId, data);
       
       setState(prev => ({ ...prev!, surveyResponses: data }));
-      updateLoading(false);
     } catch (error: any) {
       console.error('Erro ao salvar respostas do questionário:', error);
-      updateLoading(false, error.message || 'Erro ao salvar respostas do questionário');
+      setState(prev => ({ ...prev, error: error.message || 'Erro ao salvar respostas do questionário' }));
       throw error;
+    } finally {
+      updateLoadingState('saving', false);
     }
   }, [state.teamMemberId]);
 
   // Carregar respostas das perguntas abertas
   const loadOpenQuestions = useCallback(async () => {
     try {
-      updateLoading(true);
+      updateLoadingState('openQuestions', true);
       
       const teamMemberId = state.teamMemberId || await fetchTeamMemberId();
       
@@ -246,19 +267,19 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
         setState(prev => ({ ...prev!, openQuestions }));
       }
       
-      updateLoading(false);
+      updateLoadingState('openQuestions', false);
       return openQuestions;
     } catch (error: any) {
       console.error('Erro ao carregar respostas das perguntas abertas:', error);
-      updateLoading(false, error.message || 'Erro ao carregar respostas das perguntas abertas');
+      setState(prev => ({ ...prev, error: error.message || 'Erro ao carregar respostas das perguntas abertas' }));
       return null;
     }
-  }, [state.teamMemberId]);
+  }, [state.teamMemberId, updateLoadingState, fetchTeamMemberId]);
 
   // Salvar respostas das perguntas abertas
   const saveOpenQuestions = useCallback(async (data: OpenQuestionsFormValues): Promise<boolean> => {
     try {
-      updateLoading(true);
+      updateLoadingState('saving', true);
       
       const teamMemberId = state.teamMemberId || await fetchTeamMemberId();
       
@@ -276,19 +297,19 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
         await SurveyService.updateMemberStatus(teamMemberId, 'answered');
       }
       
-      updateLoading(false);
+      updateLoadingState('saving', false);
       return true;
     } catch (error: any) {
       console.error('Erro ao salvar respostas das perguntas abertas:', error);
-      updateLoading(false, error.message || 'Erro ao salvar respostas das perguntas abertas');
+      setState(prev => ({ ...prev, error: error.message || 'Erro ao salvar respostas das perguntas abertas' }));
       return false;
     }
-  }, [state.teamMemberId]);
+  }, [state.teamMemberId, updateLoadingState, fetchTeamMemberId]);
   
   // Função para marcar todas as etapas como concluídas
   const completeAllSteps = useCallback(async () => {
     try {
-      updateLoading(true);
+      updateLoadingState('saving', true);
       
       const teamMemberId = state.teamMemberId || await fetchTeamMemberId();
       
@@ -302,14 +323,14 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
         await SurveyService.updateMemberStatus(teamMemberId, 'answered');
       }
       
-      updateLoading(false);
+      updateLoadingState('saving', false);
       return isComplete;
     } catch (error: any) {
       console.error('Erro ao verificar conclusão das etapas:', error);
-      updateLoading(false, error.message || 'Erro ao verificar conclusão das etapas');
+      setState(prev => ({ ...prev, error: error.message || 'Erro ao verificar conclusão das etapas' }));
       return false;
     }
-  }, [state.teamMemberId]);
+  }, [state.teamMemberId, updateLoadingState]);
 
   // Função para salvar respostas
   const saveAnswers = useCallback(async (responses: SurveyResponses) => {
@@ -449,7 +470,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
         }
       } catch (error: any) {
         console.error('Erro ao carregar dados:', error);
-        updateLoading(false, error.message);
+        setState(prev => ({ ...prev, error: error.message }));
       }
     };
 
@@ -464,16 +485,17 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
         surveyResponses: state.surveyResponses,
         openQuestions: state.openQuestions,
         isLoading: state.isLoading,
+        isSaving: loadingState.saving,
         error: state.error,
         questions,
+        radarData: state.radarData,
         saveAnswers,
         generateRadarData,
-        radarData: state.radarData || [],
         saveProfile,
         saveOpenQuestions,
         updateTeamMemberId,
         completeAllSteps,
-        teamMemberId: state.teamMemberId,
+        teamMemberId: state.teamMemberId
       }}
     >
       {children}
