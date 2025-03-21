@@ -37,6 +37,7 @@ export default function RootLayout({
           `}
         </Script>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="description" content="Plataforma para avaliação de competências de liderança 4.0 em equipes" />
         <title>Radar21 - Avaliação de Competências para Indústria 4.0</title>
         <link
           rel="icon"
@@ -45,16 +46,18 @@ export default function RootLayout({
         />
       </head>
       <body className={inter.className}>
-        <AuthProvider>
-          <TeamProvider>
-            <SurveyProvider>
-              <InviteProvider>
-                {children}
-                <Toaster />
-              </InviteProvider>
-            </SurveyProvider>
-          </TeamProvider>
-        </AuthProvider>
+        <div id="app">
+          <AuthProvider>
+            <TeamProvider>
+              <SurveyProvider>
+                <InviteProvider>
+                  {children}
+                  <Toaster />
+                </InviteProvider>
+              </SurveyProvider>
+            </TeamProvider>
+          </AuthProvider>
+        </div>
       </body>
     </html>
   )

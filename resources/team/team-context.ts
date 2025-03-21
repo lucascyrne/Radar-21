@@ -14,6 +14,7 @@ export interface TeamContextType extends TeamState {
   resetTeamsLoaded: () => void;
   resetMembersLoaded: (teamId: string) => void;
   refreshTeams: () => Promise<void>;
+  clearState: () => void;
 }
 
 // Estado inicial do contexto de equipes
@@ -46,4 +47,5 @@ export const TeamContext = createContext<TeamContextType>({
   resetTeamsLoaded: () => {},
   resetMembersLoaded: () => {},
   refreshTeams: async () => {},
+  clearState: () => {},
 }); 

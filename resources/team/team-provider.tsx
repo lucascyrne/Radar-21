@@ -36,6 +36,21 @@ export function TeamProvider({ children }: TeamProviderProps) {
   const loadingMembersRef = useRef(false);
   const loadedMembersRef = useRef<Set<string>>(new Set());
 
+  // Limpar estado do provider
+  const clearState = useCallback(() => {
+    setState(initialTeamState);
+    loadingTeamsRef.current = false;
+    loadingMembersRef.current = false;
+    loadedMembersRef.current.clear();
+  }, []);
+
+  // Efeito para limpar estado quando o usuário mudar
+  useEffect(() => {
+    if (!user) {
+      clearState();
+    }
+  }, [user]);
+
   // Carregar membros da equipe
   const loadTeamMembers = useCallback(async (teamId: string) => {
     if (!teamId || loadingMembersRef.current) return;
@@ -67,16 +82,11 @@ export function TeamProvider({ children }: TeamProviderProps) {
 
   // Carregar equipes do usuário
   const loadTeams = useCallback(async () => {
-    if (!user?.email) return;
+    if (!user?.email || loadingTeamsRef.current) return;
 
     try {
       setState(prev => ({ ...prev, isLoading: true, error: null }));
-      
-      type SupabaseTeamMember = {
-        id: string;
-        team_id: string;
-        teams: DBTeam;
-      };
+      loadingTeamsRef.current = true;
       
       // Buscar todos os times onde o usuário é membro
       const { data: memberData, error: memberError } = await supabase
@@ -93,20 +103,13 @@ export function TeamProvider({ children }: TeamProviderProps) {
           )
         `)
         .eq('email', user.email)
-        .returns<SupabaseTeamMember[]>();
+        .not('teams', 'is', null)
+        .returns<MemberTeamResponse[]>();
 
       if (memberError) throw memberError;
 
-      if (!memberData) {
-        setState(prev => ({
-          ...prev,
-          teams: [],
-          selectedTeam: null,
-          teamMembers: [],
-          isLoading: false,
-          error: null,
-          isInitialLoading: false
-        }));
+      if (!memberData || memberData.length === 0) {
+        clearState();
         return;
       }
 
@@ -123,34 +126,22 @@ export function TeamProvider({ children }: TeamProviderProps) {
                   id: team.id,
                   name: team.name,
                   owner_id: '', // Campo não usado mais
-                  owner_email: team.creator_email,
+                  owner_email: team.owner_email,
                   team_size: team.team_size,
                   created_at: team.created_at
                 } as Team
-              ] as const;
+              ];
             })
         ).values()
       ).sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
-      // Buscar membros de todas as equipes
-      const teamIds = uniqueTeams.map(team => team.id);
-      const { data: members, error: membersError } = await supabase
-        .from('team_members')
-        .select('*')
-        .in('team_id', teamIds)
-        .returns<TeamMember[]>();
-
-      if (membersError) throw membersError;
 
       // Atualizar estado com dados frescos
       setState(prev => ({
         ...prev,
         teams: uniqueTeams,
         selectedTeam: prev.selectedTeam || uniqueTeams[0] || null,
-        teamMembers: members || [],
         isLoading: false,
-        error: null,
-        isInitialLoading: false
+        error: null
       }));
 
       // Se temos uma equipe selecionada, carregar seus membros
@@ -160,28 +151,22 @@ export function TeamProvider({ children }: TeamProviderProps) {
 
     } catch (error: any) {
       console.error('Erro ao carregar equipes:', error);
+      clearState();
       setState(prev => ({
         ...prev,
-        isLoading: false,
-        error: error.message,
-        isInitialLoading: false
+        error: error.message
       }));
     } finally {
       loadingTeamsRef.current = false;
     }
-  }, [user?.email, loadTeamMembers]);
+  }, [user?.email, clearState]);
 
   // Efeito para carregar equipes automaticamente quando o usuário está autenticado
   useEffect(() => {
-    const autoLoadTeams = async () => {
-      if (user?.id && !loadingTeamsRef.current) {
-        loadingTeamsRef.current = true;
-        await loadTeams();
-      }
-    };
-    
-    autoLoadTeams();
-  }, [user?.id]);
+    if (user?.email) {
+      loadTeams();
+    }
+  }, [user?.email, loadTeams]);
 
   // Efeito para carregar o membro atual quando o usuário ou a equipe selecionada mudar
   useEffect(() => {
@@ -199,20 +184,11 @@ export function TeamProvider({ children }: TeamProviderProps) {
 
   // Efeito para ouvir atualizações de equipe
   useEffect(() => {
-    const handleTeamUpdate = async (event: Event) => {
-      if (user?.id) {
-        const customEvent = event as CustomEvent<{ teamId: string }>;
-        // Limpar o cache de equipes carregadas
+    const handleTeamUpdate = () => {
+      if (user?.email) {
         loadingTeamsRef.current = false;
         loadedMembersRef.current.clear();
-        
-        // Recarregar equipes do usuário
-        await loadTeams();
-        
-        // Se recebeu um teamId específico, carregar seus membros
-        if (customEvent.detail?.teamId) {
-          await loadTeamMembers(customEvent.detail.teamId);
-        }
+        loadTeams();
       }
     };
 
@@ -220,7 +196,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
     return () => {
       window.removeEventListener('teamUpdate', handleTeamUpdate);
     };
-  }, [user?.id]);
+  }, [user?.email, loadTeams]);
 
   // Obter o membro atual
   const getCurrentMember = useCallback(async (teamId: string, userEmail: string): Promise<TeamMember | null> => {
@@ -497,6 +473,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
         resetTeamsLoaded,
         resetMembersLoaded,
         refreshTeams,
+        clearState,
       }}
     >
       {children}

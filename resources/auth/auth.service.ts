@@ -7,6 +7,15 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+const LOCAL_STORAGE_KEYS = {
+  TEAM_ID: 'teamId',
+  TEAM_MEMBER_ID: 'teamMemberId',
+  PENDING_INVITE: 'radar21_pending_invite',
+  PENDING_INVITE_EMAIL: 'radar21_pending_invite_email',
+  USER_SESSION: 'supabase.auth.token',
+  LAST_AUTH_USER: 'lastAuthUser'
+};
+
 // Serviço de autenticação
 export const AuthService = {
   // Login com Google
@@ -69,26 +78,15 @@ export const AuthService = {
   // Logout
   signOut: async () => {
     try {
-      // Limpar cache do navegador
-      if (typeof window !== 'undefined') {
-        // Limpar localStorage
-        localStorage.clear();
-        
-        // Limpar sessionStorage
-        sessionStorage.clear();
-        
-        // Limpar cookies relacionados à autenticação
-        document.cookie.split(";").forEach(function(c) { 
-          document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
-        });
-      }
-      
-      // Fazer logout no Supabase
+      // Primeiro, fazer logout no Supabase
       const { error } = await supabase.auth.signOut({
         scope: 'global'
       });
       
       if (error) throw error;
+
+      // Limpar estado local
+      AuthService.clearLocalState();
       
       // Aguardar um momento para garantir que tudo seja limpo
       await new Promise(resolve => setTimeout(resolve, 500));
@@ -96,7 +94,9 @@ export const AuthService = {
       return true;
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
-      return true; // Retorna true mesmo com erro para forçar o logout no cliente
+      // Mesmo com erro, tentar limpar o estado local
+      AuthService.clearLocalState();
+      return true;
     }
   },
   
@@ -153,6 +153,25 @@ export const AuthService = {
     } catch (error) {
       console.error('Erro ao processar usuário autenticado:', error);
       // Não propagar o erro para não interromper o fluxo de autenticação
+    }
+  },
+
+  clearLocalState: () => {
+    try {
+      // Limpar todas as chaves conhecidas
+      Object.values(LOCAL_STORAGE_KEYS).forEach(key => {
+        localStorage.removeItem(key);
+      });
+
+      // Limpar sessionStorage
+      sessionStorage.clear();
+
+      // Limpar cookies relacionados à autenticação
+      document.cookie.split(";").forEach(function(c) { 
+        document.cookie = c.replace(/^ +/, "").replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/"); 
+      });
+    } catch (error) {
+      console.error('Erro ao limpar estado local:', error);
     }
   }
 };

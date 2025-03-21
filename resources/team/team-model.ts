@@ -70,7 +70,7 @@ export interface TeamState {
 export interface TeamResponse {
   id: string;
   name: string;
-  creator_email: string;
+  owner_email: string;
   team_size: number;
   created_at: string;
 }

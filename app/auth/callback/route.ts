@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
       }
       
       if (invite) {
-        InviteService.storePendingInvite(invite, inviteName || undefined);
+        InviteService.storePendingInvite(invite, inviteName || '');
       }
       
       let redirectUrl = '/auth';

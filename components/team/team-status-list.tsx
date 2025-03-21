@@ -12,12 +12,14 @@ interface TeamStatusListProps {
 const statusLabels: Record<string, string> = {
   'invited': 'Convidado',
   'answered': 'Respondeu',
+  'pending_survey': 'Aguardando',
 };
 
 // Mapeamento de status para cores (sem hover)
 const statusColors: Record<string, string> = {
   'invited': 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100 hover:text-yellow-800',
   'answered': 'bg-green-100 text-green-800 hover:bg-green-100 hover:text-green-800',
+  'pending_survey': 'bg-blue-100 text-blue-800 hover:bg-blue-100 hover:text-blue-800',
 };
 
 // Estilo base para badges sem hover
