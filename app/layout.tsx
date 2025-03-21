@@ -13,7 +13,6 @@ const inter = Inter({ subsets: ["latin"] })
 export const metadata: Metadata = {
   title: "Radar21 - Avaliação de Competências de Liderança 4.0",
   description: "Plataforma para avaliação de competências de liderança 4.0 em equipes",
-  generator: 'v0.dev'
 }
 
 export default function RootLayout({
@@ -24,6 +23,26 @@ export default function RootLayout({
   return (
     <html lang="pt-BR" suppressHydrationWarning>
       <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link
+          rel="icon"
+          href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 12h-4l-3 9L9 3l-3 9H2'/></svg>"
+          type="image/svg+xml"
+        />
+      </head>
+      <body className={inter.className}>
+        <div suppressHydrationWarning>
+          <AuthProvider>
+            <TeamProvider>
+              <SurveyProvider>
+                <InviteProvider>
+                  {children}
+                  <Toaster />
+                </InviteProvider>
+              </SurveyProvider>
+            </TeamProvider>
+          </AuthProvider>
+        </div>
         <Script
           src="https://www.googletagmanager.com/gtag/js?id=G-ZT0F9FYDT2"
           strategy="afterInteractive"
@@ -36,28 +55,6 @@ export default function RootLayout({
             gtag('config', 'G-ZT0F9FYDT2');
           `}
         </Script>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
-        <meta name="description" content="Plataforma para avaliação de competências de liderança 4.0 em equipes" />
-        <title>Radar21 - Avaliação de Competências para Indústria 4.0</title>
-        <link
-          rel="icon"
-          href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 12h-4l-3 9L9 3l-3 9H2'/></svg>"
-          type="image/svg+xml"
-        />
-      </head>
-      <body className={inter.className}>
-        <div id="app">
-          <AuthProvider>
-            <TeamProvider>
-              <SurveyProvider>
-                <InviteProvider>
-                  {children}
-                  <Toaster />
-                </InviteProvider>
-              </SurveyProvider>
-            </TeamProvider>
-          </AuthProvider>
-        </div>
       </body>
     </html>
   )

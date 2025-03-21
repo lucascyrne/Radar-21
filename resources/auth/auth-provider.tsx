@@ -85,10 +85,8 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           updateStateWithSession(session);
           if (session?.user) {
             await AuthService.processAuthenticatedUser(session.user);
-            // Só redireciona para team-setup se o usuário não estiver em uma rota protegida
-            const protectedRoutes = ['/survey', '/profile-survey', '/open-questions', '/results'];
-            const currentPath = window.location.pathname;
-            if (!protectedRoutes.some(route => currentPath.startsWith(route))) {
+            // Só redireciona para team-setup se o usuário estiver na página de autenticação
+            if (window.location.pathname === '/auth') {
               router.push('/team-setup');
             }
           }

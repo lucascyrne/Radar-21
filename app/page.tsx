@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ArrowRight, BarChart2, Users, Brain, Shield, Lock } from "lucide-react"
 import { Layout } from "@/components/layout"
+import { AuroraText } from "@/components/magicui/aurora-text"
 
 export default function Home() {
   return (
@@ -11,10 +12,28 @@ export default function Home() {
       <section className="relative overflow-hidden py-32 px-4">
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/20 -z-10" />
         <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/80 animate-fade-in">
-            A era da IA e da
-            <br />
-            Indústria 4.0
+          <h1 className="text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl flex flex-col items-center gap-1">
+            <AuroraText
+              colors={["#1E40AF", "#3B82F6", "#1E3A8A"]}
+              speed={0.4}
+              className="leading-tight font-extrabold text-center"
+            >
+              A era da IA e da
+            </AuroraText>
+            <AuroraText
+              colors={["#3B82F6", "#1E3A8A", "#1E40AF"]}
+              speed={0.4}
+              className="leading-tight font-extrabold text-center"
+            >
+              Indústria 4.0
+            </AuroraText>
+            <AuroraText
+              colors={["#1E3A8A", "#1E40AF", "#3B82F6"]}
+              speed={0.4}
+              className="leading-tight font-extrabold text-center text-4xl sm:text-5xl md:text-6xl"
+            >
+              requer novas competências
+            </AuroraText>
           </h1>
           <p className="mt-8 text-xl md:text-2xl text-muted-foreground leading-relaxed">
             Descubra se você e sua equipe têm as competências e atitudes certas, e onde podem melhorar.
