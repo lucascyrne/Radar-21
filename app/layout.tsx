@@ -38,6 +38,11 @@ export default function RootLayout({
         </Script>
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <title>Radar21 - Avaliação de Competências para Indústria 4.0</title>
+        <link
+          rel="icon"
+          href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'><path d='M22 12h-4l-3 9L9 3l-3 9H2'/></svg>"
+          type="image/svg+xml"
+        />
       </head>
       <body className={inter.className}>
         <AuthProvider>

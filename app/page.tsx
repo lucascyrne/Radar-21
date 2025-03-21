@@ -12,12 +12,12 @@ export default function Home() {
         <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/20 -z-10" />
         <div className="max-w-4xl mx-auto text-center">
           <h1 className="text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl bg-clip-text text-transparent bg-gradient-to-r from-primary to-primary/80 animate-fade-in">
-            Lidere na Era da
+            A era da IA e da
             <br />
             Indústria 4.0
           </h1>
           <p className="mt-8 text-xl md:text-2xl text-muted-foreground leading-relaxed">
-            Descubra como suas competências de liderança se alinham com as demandas da nova revolução industrial
+            Descubra se você e sua equipe têm as competências e atitudes certas, e onde podem melhorar.
           </p>
           <div className="mt-12 flex items-center justify-center gap-4">
             <Link href="/auth">
