@@ -53,7 +53,7 @@ export default function ProfileSurveyPage() {
       if (!memberId) {
         throw new Error("ID do membro da equipe não encontrado. Por favor, tente novamente.")
       }
-      
+
       // Garantir que employee_count seja um número
       const formattedData = {
         ...data,
@@ -64,7 +64,6 @@ export default function ProfileSurveyPage() {
       
       // Salvar no localStorage para compatibilidade com o código existente
       localStorage.setItem("userProfile", JSON.stringify(formattedData))
-      localStorage.setItem("userEmail", user?.email || "")
       
       console.log('Profile - Saving profile data:', formattedData);
       const success = await saveProfile(formattedData)
