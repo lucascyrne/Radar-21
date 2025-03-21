@@ -1,3 +1,5 @@
+import { EmailConfig } from "@/resources/email/email-model";
+
 export interface InviteData {
   teamId: string;
   teamName: string;
@@ -7,7 +9,14 @@ export interface InviteData {
   inviteUrl?: string;
 }
 
-export type InviteStatus = 'pending' | 'sent' | 'accepted' | 'declined';
+export type InviteStatus = 'invited' | 'answered' | 'pending_survey';
+
+export interface TeamMemberData {
+  status: InviteStatus;
+  team_id: string;
+  role: 'leader' | 'member';
+  user_id?: string;
+}
 
 export interface InviteState {
   isProcessing: boolean;
@@ -18,14 +27,8 @@ export interface InviteState {
 export interface InviteActions {
   sendInvite: (data: InviteData) => Promise<void>;
   resendInvite: (data: InviteData) => Promise<void>;
-  processInvite: (userId: string, email: string, teamId: string) => Promise<void>;
+  processInvite: (userId: string, email: string) => Promise<void>;
   clearPendingInvite: () => void;
 }
 
-export type InviteContextType = InviteState & InviteActions;
-
-export interface EmailConfig {
-  from: string;
-  subject: (teamName: string) => string;
-  template: (params: InviteData) => JSX.Element;
-} 
+export type InviteContextType = InviteState & InviteActions; 

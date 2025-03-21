@@ -3,6 +3,7 @@
 import { Suspense, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/resources/auth/auth-hook';
+import { InviteService } from '@/resources/invite/invite.service';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
@@ -10,6 +11,7 @@ import { Layout } from '@/components/layout';
 import { LoginForm, RegisterForm } from './components/auth-forms';
 import { ErrorAlert } from './components/auth-alerts';
 import { Loader2 } from 'lucide-react';
+
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -25,14 +27,11 @@ function AuthContent() {
 
   // Efeito para capturar parâmetros do convite
   useEffect(() => {
-    const invite = searchParams.get('team');
+    const teamId = searchParams.get('invite');
     const email = searchParams.get('email');
     
-    if (invite) {
-      localStorage.setItem('pendingInviteTeamId', invite);
-      if (email) {
-        localStorage.setItem('pendingInviteEmail', email);
-      }
+    if (teamId && email) {
+      InviteService.storePendingInvite(teamId, email);
     }
   }, [searchParams]);
 

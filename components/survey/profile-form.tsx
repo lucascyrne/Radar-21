@@ -4,44 +4,37 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import {
   Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
 } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { profileSchema, ProfileFormValues, UserProfile } from "@/resources/survey/survey-model";
 import { useEffect } from "react";
 import { ProfileFormFields } from './profile-form-fields';
+import { useSurvey } from "@/resources/survey/survey-hook";
+import { Loader2 } from "lucide-react";
 
 interface ProfileFormProps {
   defaultValues?: Partial<ProfileFormValues>;
   onSubmit: (data: ProfileFormValues) => void;
-  isSubmitting?: boolean;
 }
 
-export function ProfileForm({ defaultValues, onSubmit, isSubmitting = false }: ProfileFormProps) {
+export function ProfileForm({ defaultValues, onSubmit }: ProfileFormProps) {
   console.log('Renderizando ProfileForm com defaultValues:', defaultValues);
-
+  const { isSaving } = useSurvey();
+  
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
-    defaultValues: {
-      name: '',
-       birth_date: '',
-      education: '',
-      graduation_date: '',
-      organization: '',
-      website: '',
-      org_type: '',
-      org_size: '',
+    defaultValues: defaultValues || {
+      name: "",
+      birth_date: "",
+      education: "",
+      graduation_date: "",
       employee_count: 0,
-      city: '',
-      work_model: '',
-      ...defaultValues,
+      organization: "",
+      org_type: "",
+      org_size: "",
+      city: "",
+      work_model: "",
+      website: "",
     },
-    mode: 'onBlur',
   });
 
   useEffect(() => {
@@ -86,17 +79,17 @@ export function ProfileForm({ defaultValues, onSubmit, isSubmitting = false }: P
             <div className="flex justify-end w-full">
               <Button 
                 type="submit" 
-                disabled={!form.formState.isValid || isSubmitting}
-                onClick={() => {
-                  console.log('Estado do formulário ao clicar:', {
-                    values: form.getValues(),
-                    isValid: form.formState.isValid,
-                    errors: form.formState.errors,
-                    isDirty: form.formState.isDirty
-                  });
-                }}
+                className="w-full"
+                disabled={isSaving}
               >
-                {isSubmitting ? 'Enviando...' : 'Continuar'}
+                {isSaving ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Salvando...
+                  </>
+                ) : (
+                  'Continuar'
+                )}
               </Button>
             </div>
           </CardFooter>

@@ -42,7 +42,12 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
 
   // Método para atualizar o estado de loading e erro
   const updateLoading = useCallback((isLoading: boolean, error: string | null = null) => {
-    setState(prev => ({ ...prev!, isLoading, error }));
+    setState(prev => ({ ...prev, isLoading, error }));
+  }, []);
+
+  // Método para atualizar o estado de salvamento
+  const updateSaving = useCallback((isSaving: boolean, error: string | null = null) => {
+    setState(prev => ({ ...prev, isSaving, error }));
   }, []);
 
   // Método para atualizar o teamMemberId
@@ -147,7 +152,7 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
   // Salvar perfil do usuário
   const saveProfile = useCallback(async (data: ProfileFormValues): Promise<boolean> => {
     try {
-      updateLoading(true);
+      updateSaving(true);
       
       const teamMemberId = state.teamMemberId || await fetchTeamMemberId();
       
@@ -156,19 +161,24 @@ export function SurveyProvider({ children }: SurveyProviderProps) {
       }
       
       await SurveyService.saveProfile(teamMemberId, data);
+      const savedProfile = await SurveyService.loadProfile(teamMemberId);
       
-      const profile = await loadProfile();
-      setState(prev => ({ ...prev!, profile }));
-      updateTeamMemberId(teamMemberId);
-      updateLoading(false);
+      setState(prev => ({ 
+        ...prev, 
+        profile: savedProfile,
+        teamMemberId,
+        error: null 
+      }));
       
       return true;
     } catch (error: any) {
       console.error('Erro ao salvar perfil:', error);
-      updateLoading(false, error.message || 'Erro ao salvar perfil');
+      setState(prev => ({ ...prev, error: error.message || 'Erro ao salvar perfil' }));
       return false;
+    } finally {
+      updateSaving(false);
     }
-  }, [state.teamMemberId, updateLoading, updateTeamMemberId, loadProfile, fetchTeamMemberId]);
+  }, [state.teamMemberId]);
 
   // Carregar respostas do questionário
   const loadSurveyResponses = useCallback(async () => {

@@ -111,6 +111,25 @@ export const AuthService = {
    */
   processAuthenticatedUser: async (user: User): Promise<void> => {
     if (!user.email) return;
-    await InviteService.processInvite(user.id, user.email);
+    
+    try {
+      const teamId = await InviteService.processInvite(user.id, user.email);
+      
+      if (teamId) {
+        // Atualizar os metadados do usuário com o teamId
+        const { error } = await supabase.auth.updateUser({
+          data: {
+            team_id: teamId,
+            role: 'member',
+            status: 'pending_survey'
+          }
+        });
+
+        if (error) throw error;
+      }
+    } catch (error) {
+      console.error('Erro ao processar usuário autenticado:', error);
+      // Não propagar o erro para não interromper o fluxo de autenticação
+    }
   }
 };

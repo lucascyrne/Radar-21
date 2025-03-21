@@ -11,26 +11,24 @@ import {
 } from './survey-model';
 
 // Tipo do contexto de pesquisa
-export interface SurveyContextType {
-  // Estado
+export interface SurveyState {
   profile: UserProfile | null;
   surveyResponses: SurveyResponses | null;
   openQuestions: OpenQuestionsFormValues | null;
+  teamMemberId: string | null;
   isLoading: boolean;
   error: string | null;
-  teamMemberId: string | null;
-  answers: SurveyResponses | null;
+  radarData: RadarDataPoint[];
+}
 
-  // Dados da pesquisa
+export interface SurveyContextType extends SurveyState {
   questions: Question[];
-  radarData: RadarDataPoint[] | null;
-
-  // Ações
-  saveAnswers: (answers: SurveyResponses) => Promise<boolean>;
-  saveOpenQuestions: (data: OpenQuestionsFormValues) => Promise<boolean>;
-  saveProfile: (data: ProfileFormValues) => Promise<boolean>;
+  answers: SurveyResponses | null;
+  saveAnswers: (responses: SurveyResponses) => Promise<boolean>;
   generateRadarData: () => Promise<void>;
-  updateTeamMemberId: (id: string) => void;
+  saveProfile: (data: ProfileFormValues) => Promise<boolean>;
+  saveOpenQuestions: (data: OpenQuestionsFormValues) => Promise<boolean>;
+  updateTeamMemberId: (teamMemberId: string | null) => void;
   completeAllSteps: () => Promise<boolean>;
 }
 
@@ -39,20 +37,18 @@ const initialState: SurveyContextType = {
   profile: null,
   surveyResponses: null,
   openQuestions: null,
+  teamMemberId: null,
   isLoading: false,
   error: null,
-  teamMemberId: null,
-  answers: null,
-
-  // Dados iniciais da pesquisa
+  radarData: [],
   questions: [],
-  radarData: null,
+  answers: null,
 
   // Funções vazias (serão implementadas no provider)
   saveAnswers: async () => false,
-  saveOpenQuestions: async () => false,
-  saveProfile: async () => false,
   generateRadarData: async () => {},
+  saveProfile: async () => false,
+  saveOpenQuestions: async () => false,
   updateTeamMemberId: () => {},
   completeAllSteps: async () => false
 };
