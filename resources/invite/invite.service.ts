@@ -2,6 +2,7 @@ import { supabase } from '@/resources/auth/auth.service';
 import { InviteData, InviteStatus } from './invite-model';
 import { Resend } from 'resend';
 import { InviteEmailTemplate } from '@/components/email-template';
+import { EmailConfig } from '@/resources/email/email-model';
 
 const resend = new Resend(process.env.NEXT_PUBLIC_RESEND_API_KEY);
 
@@ -10,7 +11,7 @@ export class InviteService {
 
   private static async sendInviteEmail(data: InviteData): Promise<void> {
     try {
-      await resend.emails.send({
+      const emailConfig: EmailConfig = {
         from: 'Radar21 <noreply@radar21.com.br>',
         to: data.email,
         subject: `Convite para participar da equipe ${data.teamName} no Radar21`,
@@ -19,7 +20,9 @@ export class InviteService {
           message: data.message,
           teamName: data.teamName
         })
-      });
+      };
+
+      await resend.emails.send(emailConfig);
     } catch (error) {
       console.error('Erro ao enviar email:', error);
       throw error;
@@ -135,19 +138,28 @@ export class InviteService {
     const teamName = params.get('team');
     
     if (teamId) {
-      this.storePendingInvite(teamId, teamName || undefined);
+      this.storePendingInvite(teamId, teamName ? decodeURIComponent(teamName) : undefined);
     }
   }
 
   static getPendingInvite(): { teamId: string; teamName?: string } | null {
     if (typeof window === 'undefined') return null;
-    const inviteData = sessionStorage.getItem(this.STORAGE_KEY);
-    return inviteData ? JSON.parse(inviteData) : null;
+    try {
+      const inviteData = sessionStorage.getItem(this.STORAGE_KEY);
+      return inviteData ? JSON.parse(inviteData) : null;
+    } catch (error) {
+      console.error('Erro ao ler convite pendente:', error);
+      return null;
+    }
   }
 
   static storePendingInvite(teamId: string, teamName?: string): void {
     if (typeof window === 'undefined') return;
-    sessionStorage.setItem(this.STORAGE_KEY, JSON.stringify({ teamId, teamName }));
+    try {
+      sessionStorage.setItem(this.STORAGE_KEY, JSON.stringify({ teamId, teamName }));
+    } catch (error) {
+      console.error('Erro ao armazenar convite:', error);
+    }
   }
 
   static clearPendingInvite(): void {

@@ -1,6 +1,6 @@
 import { EmailTemplateProps } from '@/resources/email/email-model';
 
-export function InviteEmailTemplate({ inviteUrl, message, teamName }: Partial<EmailTemplateProps>) {
+export function InviteEmailTemplate({ inviteUrl, message, teamName }: EmailTemplateProps) {
   return (
     <div style={{ fontFamily: 'Arial, sans-serif', maxWidth: '600px', margin: '0 auto', padding: '20px' }}>
       <div style={{ textAlign: 'center', marginBottom: '30px' }}>
