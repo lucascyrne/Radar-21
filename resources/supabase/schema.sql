@@ -4,12 +4,12 @@
 CREATE TABLE IF NOT EXISTS teams (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
   name TEXT NOT NULL,
-  creator_email TEXT NOT NULL,
+  owner_email TEXT NOT NULL,
   team_size INTEGER NOT NULL,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
   
   -- Índice para busca por nome da equipe
-  CONSTRAINT teams_name_creator_unique UNIQUE (name, creator_email)
+  CONSTRAINT teams_name_creator_unique UNIQUE (name, owner_email)
 );
 
 -- Tabela de membros da equipe

@@ -66,3 +66,16 @@ export interface TeamState {
   isLoading: boolean;
   error: string | null;
 }
+
+export interface TeamResponse {
+  id: string;
+  name: string;
+  creator_email: string;
+  team_size: number;
+  created_at: string;
+}
+
+export interface MemberTeamResponse {
+  team_id: string;
+  teams: TeamResponse;
+}
