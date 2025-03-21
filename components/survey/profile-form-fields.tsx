@@ -39,24 +39,6 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
 
       <FormField
         control={form.control}
-        name="email"
-        render={({ field }) => (
-          <FormItem>
-            <FormLabel>Email *</FormLabel>
-            <FormControl>
-              <Input 
-                type="email"
-                placeholder="seu.email@exemplo.com" 
-                {...field}
-              />
-            </FormControl>
-            <FormMessage />
-          </FormItem>
-        )}
-      />
-
-      <FormField
-        control={form.control}
         name="birth_date"
         render={({ field }) => (
           <FormItem>

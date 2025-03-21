@@ -62,7 +62,7 @@ export default function InviteUserForm({
     resolver: zodResolver(inviteFormSchema),
     defaultValues: {
       email: "",
-      message: user ? generateInviteMessage(teamId, user.email) : "",
+      message: user ? generateInviteMessage(teamName, user.email) : "",
     },
   });
 
@@ -141,7 +141,7 @@ export default function InviteUserForm({
       // Limpar formulário
       form.reset({
         email: "",
-        message: user ? generateInviteMessage(teamId, user.email) : "",
+        message: user ? generateInviteMessage(teamName, user.email) : "",
       });
 
       toast({

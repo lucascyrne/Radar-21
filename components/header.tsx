@@ -90,6 +90,10 @@ export const Header = memo(function Header() {
                   </Avatar>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => router.push('/profile')} className="cursor-pointer">
+                    <Avatar className="mr-2 h-4 w-4" />
+                    <span>Meu Perfil</span>
+                  </DropdownMenuItem>
                   <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                     <LogOut className="mr-2 h-4 w-4" />
                     <span>Sair</span>
@@ -158,6 +162,17 @@ export const Header = memo(function Header() {
                           </Avatar>
                           <span className="font-medium">{getDisplayName(user.email)}</span>
                         </div>
+                        <Button 
+                          variant="outline" 
+                          className="flex items-center justify-start"
+                          onClick={() => {
+                            setIsSheetOpen(false)
+                            router.push('/profile')
+                          }}
+                        >
+                          <Avatar className="mr-2 h-4 w-4" />
+                          <span>Meu Perfil</span>
+                        </Button>
                         <Button 
                           variant="outline" 
                           className="flex items-center justify-start" 

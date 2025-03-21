@@ -29,8 +29,7 @@ export function ProfileForm({ defaultValues, onSubmit, isSubmitting = false }: P
     resolver: zodResolver(profileSchema),
     defaultValues: {
       name: '',
-      email: '',
-      birth_date: '',
+       birth_date: '',
       education: '',
       graduation_date: '',
       organization: '',

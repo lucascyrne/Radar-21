@@ -20,7 +20,7 @@ const questions = [
   {
     id: "q14",
     competency: "Formação",
-    question: "Na sua opinião, como a universidade poderia ter lhe preparado melhor para os desafios profissionais que você enfrentou após a graduação?",
+    question: "Na sua opinião, como sua formação acadêmica poderia ter lhe preparado melhor para os desafios profissionais que você enfrenta? (Opcional)",
   },
 ]
 

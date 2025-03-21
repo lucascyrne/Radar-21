@@ -1,6 +1,5 @@
 import { useCallback } from 'react';
 import { Team } from '@/resources/team/team-model';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 interface TeamListProps {
   teams: Team[];
@@ -15,30 +14,26 @@ export function TeamList({ teams, selectedTeamId, userEmail, onSelectTeam }: Tea
   }, [onSelectTeam]);
 
   return (
-    <Card className="mb-6">
-      <CardHeader>
-        <CardTitle>Minhas Equipes</CardTitle>
-      </CardHeader>
-      <CardContent>
-        <div className="space-y-4">
-          {teams.map(team => (
-            <div 
-              key={team.id} 
-              className={`p-4 rounded-lg cursor-pointer transition-colors ${
-                selectedTeamId === team.id 
-                  ? 'bg-primary/10' 
-                  : 'hover:bg-muted'
-              }`}
-              onClick={() => handleSelectTeam(team.id)}
-            >
-              <h3 className="font-medium">{team.name}</h3>
-              <p className="text-sm text-muted-foreground">
-                {team.owner_email === userEmail ? 'Líder' : 'Membro'}
-              </p>
-            </div>
-          ))}
-        </div>
-      </CardContent>
-    </Card>
+    <div className="space-y-4 p-6">
+      <h2 className="text-2xl font-semibold">Minhas Equipes</h2>
+      <div className="space-y-2">
+        {teams.map(team => (
+          <div 
+            key={team.id} 
+            className={`p-4 rounded-lg border cursor-pointer transition-all ${
+              selectedTeamId === team.id 
+                ? 'bg-primary/5 border-primary/20 shadow-sm' 
+                : 'hover:bg-accent border-border hover:border-primary/20'
+            }`}
+            onClick={() => handleSelectTeam(team.id)}
+          >
+            <h3 className="font-medium">{team.name}</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              {team.owner_email === userEmail ? 'Líder' : 'Membro'}
+            </p>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 } 
