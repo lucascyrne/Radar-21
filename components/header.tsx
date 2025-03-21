@@ -15,7 +15,7 @@ const TEAM_ROUTES = ['/team-setup', '/profile-survey', '/survey', '/open-questio
 
 // Componente memoizado para evitar renderizações desnecessárias
 export const Header = memo(function Header() {
-  const { user, signOut } = useAuth()
+  const { user } = useAuth()
   const router = useRouter()
   const pathname = usePathname()
   const [isClient, setIsClient] = useState(false)
@@ -30,9 +30,8 @@ export const Header = memo(function Header() {
   }, [])
   
   const handleLogout = async () => {
-    await signOut()
     setIsSheetOpen(false)
-    router.push('/auth')
+    router.push('/logout')
   }
   
   // Obter as iniciais do email do usuário
