@@ -4,15 +4,15 @@ import React, { useState, useCallback } from 'react';
 import { Resend } from 'resend';
 import { InviteEmailTemplate } from '@/components/email-template';
 import { InviteContext } from './invite-context';
-import { InviteData, InviteStatus, EmailConfig } from './invite-model';
+import { InviteData, InviteStatus } from './invite-model';
 import { supabase } from '@/resources/auth/auth.service';
+import { EmailConfig } from '../email/email-model';
 
 const resend = new Resend(process.env.NEXT_PUBLIC_RESEND_API_KEY);
 
-const emailConfig: EmailConfig = {
+const emailDefaults = {
   from: 'Radar21 <noreply@radar21.com.br>',
-  subject: (teamName: string) => `Convite para participar da equipe ${teamName} no Radar21`,
-  template: InviteEmailTemplate
+  subject: 'Convite para participar da equipe no Radar21'
 };
 
 export const InviteProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -23,10 +23,14 @@ export const InviteProvider: React.FC<{ children: React.ReactNode }> = ({ childr
   const handleEmailSend = async (data: InviteData) => {
     try {
       await resend.emails.send({
-        from: emailConfig.from,
+        from: emailDefaults.from,
         to: data.email,
-        subject: emailConfig.subject(data.teamName),
-        react: emailConfig.template(data)
+        subject: emailDefaults.subject,
+        react: InviteEmailTemplate({
+          inviteUrl: data.inviteUrl,
+          message: data.message,
+          teamName: data.teamName
+        })
       });
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao enviar email';
@@ -53,13 +57,13 @@ export const InviteProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     
     try {
       // Atualizar status do membro para 'pending'
-      await updateTeamMemberStatus(data.teamId, data.email, 'pending');
+      await updateTeamMemberStatus(data.teamId, data.email, 'pending_survey');
       
       // Enviar email
       await handleEmailSend(data);
       
       // Atualizar status para 'sent'
-      await updateTeamMemberStatus(data.teamId, data.email, 'sent');
+      await updateTeamMemberStatus(data.teamId, data.email, 'pending_survey');
       
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao processar convite';
@@ -76,7 +80,7 @@ export const InviteProvider: React.FC<{ children: React.ReactNode }> = ({ childr
     
     try {
       await handleEmailSend(data);
-      await updateTeamMemberStatus(data.teamId, data.email, 'sent');
+      await updateTeamMemberStatus(data.teamId, data.email, 'pending_survey');
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Erro ao reenviar convite';
       setError(errorMessage);

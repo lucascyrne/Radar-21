@@ -176,4 +176,33 @@ export class InviteService {
     localStorage.removeItem(STORAGE_KEY);
     localStorage.removeItem(INVITE_EMAIL_KEY);
   }
+
+  /**
+   * Verifica se existe um convite pendente para o email fornecido
+   * @param email Email do usuário
+   * @returns Promise<boolean> True se existir um convite pendente
+   */
+  static async checkPendingInvite(email: string): Promise<boolean> {
+    try {
+      const supabase = this.getSupabase();
+      const { data, error } = await supabase
+        .from('team_members')
+        .select('*')
+        .eq('email', email)
+        .eq('status', 'invited')
+        .single();
+
+      if (error) {
+        if (error.code === 'PGRST116') { // No rows returned
+          return false;
+        }
+        throw error;
+      }
+
+      return !!data;
+    } catch (error) {
+      console.error('Erro ao verificar convite pendente:', error);
+      return false;
+    }
+  }
 }

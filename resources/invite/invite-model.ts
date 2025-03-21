@@ -17,18 +17,3 @@ export interface TeamMemberData {
   role: 'leader' | 'member';
   user_id?: string;
 }
-
-export interface InviteState {
-  isProcessing: boolean;
-  error: string | null;
-  pendingInviteId?: string;
-}
-
-export interface InviteActions {
-  sendInvite: (data: InviteData) => Promise<void>;
-  resendInvite: (data: InviteData) => Promise<void>;
-  processInvite: (userId: string, email: string) => Promise<void>;
-  clearPendingInvite: () => void;
-}
-
-export type InviteContextType = InviteState & InviteActions; 

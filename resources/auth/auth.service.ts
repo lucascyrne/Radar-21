@@ -67,8 +67,23 @@ export const AuthService = {
   // Logout
   signOut: async () => {
     try {
-      // Chamar o método de logout do Supabase
-      await supabase.auth.signOut();
+      // Limpar dados do localStorage
+      localStorage.removeItem("teamId");
+      localStorage.removeItem("teamMemberId");
+      localStorage.removeItem("userProfile");
+      
+      // Chamar o método de logout do Supabase com scope global
+      const { error } = await supabase.auth.signOut({
+        scope: 'global'
+      });
+      
+      if (error) {
+        console.error('Erro ao fazer logout:', error);
+      }
+      
+      // Aguardar um momento para garantir que a sessão seja limpa
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
       return true;
     } catch (error) {
       console.error('Erro ao fazer logout:', error);

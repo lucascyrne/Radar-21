@@ -161,6 +161,19 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       if (!user.email) return false;
 
+      // Verificar se já existe um teamId associado ao usuário
+      if (user.team_id) {
+        console.log('Usuário já possui uma equipe:', user.team_id);
+        return false;
+      }
+
+      // Verificar se há um convite pendente antes de tentar processar
+      const hasPendingInvite = await InviteService.checkPendingInvite(user.email);
+      if (!hasPendingInvite) {
+        console.log('Nenhum convite pendente encontrado para:', user.email);
+        return false;
+      }
+
       const teamId = await InviteService.processInvite(user.id, user.email);
       if (teamId) {
         // Atualizar o estado do usuário com a nova equipe
@@ -174,7 +187,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return false;
     } catch (error) {
       console.error('Erro ao processar convite:', error);
-      updateState({ error: 'Erro ao processar convite' });
+      // Não atualizar o estado com erro para não afetar a experiência do usuário
       return false;
     }
   };

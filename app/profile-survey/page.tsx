@@ -14,7 +14,7 @@ export default function ProfileSurveyPage() {
   const router = useRouter()
   const { toast } = useToast()
   const { currentMember } = useTeam()
-  const { saveProfile, profile, error, updateTeamMemberId, isSaving } = useSurvey()
+  const { saveProfile, error, updateTeamMemberId, isSaving } = useSurvey()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
   // Definir o ID do membro da equipe quando disponível

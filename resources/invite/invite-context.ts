@@ -1,5 +1,20 @@
-import { createContext, useContext } from 'react';
-import { InviteContextType } from './invite-model';
+import { createContext } from 'react';
+import { InviteData } from './invite-model';
+
+export interface InviteState {
+  isProcessing: boolean;
+  error: string | null;
+  pendingInviteId?: string;
+}
+
+export interface InviteActions {
+  sendInvite: (data: InviteData) => Promise<void>;
+  resendInvite: (data: InviteData) => Promise<void>;
+  processInvite: (userId: string, email: string, teamId: string) => Promise<void>;
+  clearPendingInvite: () => void;
+}
+
+export type InviteContextType = InviteState & InviteActions; 
 
 const defaultContext: InviteContextType = {
   isProcessing: false,
