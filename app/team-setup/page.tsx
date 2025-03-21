@@ -46,7 +46,7 @@ export default function TeamSetupPage() {
     teamMembers, 
     isLoading: teamLoading,
     error: teamError,
-    loadUserTeams,
+    loadTeams,
     createTeam,
     selectTeam,
     generateInviteMessage,
@@ -72,7 +72,7 @@ export default function TeamSetupPage() {
   // Efeito para carregar equipes do usuário uma única vez
   useEffect(() => {
     if (user?.id && isAuthenticated) {
-      loadUserTeams(user.id);
+      loadTeams(user.id);
     }
   }, [user?.id, isAuthenticated]);
 
