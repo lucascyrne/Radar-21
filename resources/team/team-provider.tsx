@@ -458,12 +458,34 @@ export function TeamProvider({ children }: TeamProviderProps) {
     }
   }, [state.teams, user?.email, loadTeamMembers]);
 
+  // Carregar respostas da pesquisa da equipe
+  const loadTeamSurveyResponses = useCallback(async (teamId: string) => {
+    try {
+      setState(prev => ({ ...prev, isLoading: true }));
+      const responses = await TeamService.getTeamSurveyResponses(teamId);
+      setState(prev => ({ 
+        ...prev, 
+        teamSurveyResponses: responses,
+        isLoading: false 
+      }));
+      return responses;
+    } catch (error: any) {
+      setState(prev => ({ 
+        ...prev, 
+        isLoading: false,
+        error: error.message || 'Erro ao carregar respostas da equipe'
+      }));
+      return [];
+    }
+  }, []);
+
   return (
     <TeamContext.Provider
       value={{
         ...state,
         loadTeams,
         loadTeamMembers,
+        loadTeamSurveyResponses,
         getCurrentMember,
         createTeam,
         addTeamMember,

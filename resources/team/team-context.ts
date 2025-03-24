@@ -1,10 +1,11 @@
 import { createContext } from 'react';
-import { CreateTeamFormValues, Team, TeamState, TeamMember, TeamMemberStatus } from './team-model';
+import { CreateTeamFormValues, Team, TeamState, TeamMember, TeamMemberStatus, TeamSurveyResponse } from './team-model';
 
 // Tipo do contexto de equipes
 export interface TeamContextType extends TeamState {
   loadTeams: (userId: string) => Promise<void>;
   loadTeamMembers: (teamId: string) => Promise<void>;
+  loadTeamSurveyResponses: (teamId: string) => Promise<TeamSurveyResponse[]>;
   getCurrentMember: (teamId: string, userEmail: string) => Promise<TeamMember | null>;
   createTeam: (data: CreateTeamFormValues, userId: string, userEmail: string) => Promise<Team>;
   addTeamMember: (teamId: string, userId: string | null, email: string, role: 'leader' | 'member', status: TeamMemberStatus) => Promise<void>;
@@ -23,6 +24,7 @@ export const initialTeamState: TeamState = {
   selectedTeam: null,
   teamMembers: [],
   currentMember: null,
+  teamSurveyResponses: [],
   isLoading: false,
   error: null,
 };
@@ -31,6 +33,7 @@ export const TeamContext = createContext<TeamContextType>({
   ...initialTeamState,
   loadTeams: async () => {},
   loadTeamMembers: async () => {},
+  loadTeamSurveyResponses: async () => [],
   getCurrentMember: async () => null,
   createTeam: async () => ({
     id: '',

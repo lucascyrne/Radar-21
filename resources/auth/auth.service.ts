@@ -78,25 +78,25 @@ export const AuthService = {
   // Logout
   signOut: async () => {
     try {
-      // Primeiro, fazer logout no Supabase
+      // Primeiro, limpar estado local para evitar redirecionamentos indesejados
+      AuthService.clearLocalState();
+
+      // Fazer logout no Supabase
       const { error } = await supabase.auth.signOut({
         scope: 'global'
       });
       
       if (error) throw error;
 
-      // Limpar estado local
-      AuthService.clearLocalState();
-      
-      // Aguardar um momento para garantir que tudo seja limpo
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // Aguardar para garantir que a sessão seja completamente limpa
+      await new Promise(resolve => setTimeout(resolve, 1000));
       
       return true;
     } catch (error) {
       console.error('Erro ao fazer logout:', error);
-      // Mesmo com erro, tentar limpar o estado local
+      // Mesmo com erro, garantir que o estado local seja limpo
       AuthService.clearLocalState();
-      return true;
+      throw error;
     }
   },
   

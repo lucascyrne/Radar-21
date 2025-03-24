@@ -50,12 +50,13 @@ interface SurveyResponseData {
 }
 
 export class SurveyService {
-  static async loadProfile(teamMemberId: string): Promise<UserProfile | null> {
+  static async loadProfile(userId: string, teamId: string): Promise<UserProfile | null> {
     try {
       const { data, error } = await supabase
         .from('user_profiles')
         .select('*')
-        .eq('team_member_id', teamMemberId)
+        .eq('user_id', userId)
+        .eq('team_id', teamId)
         .single();
 
       if (error) return handleDataError(error);
@@ -66,12 +67,13 @@ export class SurveyService {
     }
   }
 
-  static async saveProfile(teamMemberId: string, profile: ProfileFormValues): Promise<boolean> {
+  static async saveProfile(userId: string, teamId: string, profile: ProfileFormValues): Promise<boolean> {
     try {
       const { error } = await supabase
         .from('user_profiles')
         .upsert({
-          team_member_id: teamMemberId,
+          user_id: userId,
+          team_id: teamId,
           ...profile,
           updated_at: new Date().toISOString()
         });
@@ -84,12 +86,13 @@ export class SurveyService {
     }
   }
 
-  static async loadSurveyResponses(teamMemberId: string): Promise<SurveyResponse | null> {
+  static async loadSurveyResponses(userId: string, teamId: string): Promise<SurveyResponse | null> {
     try {
       const { data, error } = await supabase
         .from('survey_responses')
         .select('*')
-        .eq('team_member_id', teamMemberId)
+        .eq('user_id', userId)
+        .eq('team_id', teamId)
         .single();
 
       if (error) return handleDataError(error);
@@ -105,7 +108,8 @@ export class SurveyService {
         
         return {
           id: data.id,
-          team_member_id: data.team_member_id,
+          user_id: data.user_id,
+          team_id: data.team_id,
           created_at: data.created_at,
           updated_at: data.updated_at,
           responses
@@ -119,10 +123,11 @@ export class SurveyService {
     }
   }
 
-  static async saveSurveyResponses(teamMemberId: string, responses: SurveyResponses): Promise<boolean> {
+  static async saveSurveyResponses(userId: string, teamId: string, responses: SurveyResponses): Promise<boolean> {
     try {
       const dbResponses = {
-        team_member_id: teamMemberId,
+        user_id: userId,
+        team_id: teamId,
         updated_at: new Date().toISOString(),
         ...responses
       };
@@ -130,7 +135,7 @@ export class SurveyService {
       const { error } = await supabase
         .from('survey_responses')
         .upsert(dbResponses, {
-          onConflict: 'team_member_id'
+          onConflict: 'user_id,team_id'
         });
 
       if (error) return handleBooleanError(error);
@@ -141,12 +146,13 @@ export class SurveyService {
     }
   }
 
-  static async loadOpenQuestions(teamMemberId: string): Promise<OpenQuestionResponse | null> {
+  static async loadOpenQuestions(userId: string, teamId: string): Promise<OpenQuestionResponse | null> {
     try {
       const { data, error } = await supabase
         .from('open_question_responses')
         .select('*')
-        .eq('team_member_id', teamMemberId)
+        .eq('user_id', userId)
+        .eq('team_id', teamId)
         .single();
 
       if (error) return handleDataError(error);
@@ -157,12 +163,13 @@ export class SurveyService {
     }
   }
 
-  static async saveOpenQuestions(teamMemberId: string, answers: OpenQuestionsFormValues): Promise<boolean> {
+  static async saveOpenQuestions(userId: string, teamId: string, answers: OpenQuestionsFormValues): Promise<boolean> {
     try {
       const { error } = await supabase
         .from('open_question_responses')
         .upsert({
-          team_member_id: teamMemberId,
+          user_id: userId,
+          team_id: teamId,
           ...answers,
           updated_at: new Date().toISOString()
         });
@@ -209,12 +216,12 @@ export class SurveyService {
     }
   }
 
-  static async checkSurveyCompletion(teamMemberId: string): Promise<boolean> {
+  static async checkSurveyCompletion(userId: string, teamId: string): Promise<boolean> {
     try {
       const [profile, surveyResponses, openQuestions] = await Promise.all([
-        this.loadProfile(teamMemberId),
-        this.loadSurveyResponses(teamMemberId),
-        this.loadOpenQuestions(teamMemberId)
+        this.loadProfile(userId, teamId),
+        this.loadSurveyResponses(userId, teamId),
+        this.loadOpenQuestions(userId, teamId)
       ]);
 
       return !!profile && !!surveyResponses && !!openQuestions;

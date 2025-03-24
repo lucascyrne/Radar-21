@@ -47,7 +47,6 @@ CREATE TABLE IF NOT EXISTS user_profiles (
 -- Tabela de respostas do questionário
 CREATE TABLE IF NOT EXISTS survey_responses (
   id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  team_member_id UUID REFERENCES team_members(id) ON DELETE CASCADE,
   q1 INTEGER CHECK (q1 BETWEEN 1 AND 5),
   q2 INTEGER CHECK (q2 BETWEEN 1 AND 5),
   q3 INTEGER CHECK (q3 BETWEEN 1 AND 5),
@@ -120,3 +119,129 @@ CREATE INDEX IF NOT EXISTS idx_team_invites_email ON team_invites(email);
 CREATE INDEX IF NOT EXISTS idx_team_invites_team_id ON team_invites(team_id);
 CREATE INDEX IF NOT EXISTS idx_team_members_user_id ON team_members(user_id);
 CREATE INDEX IF NOT EXISTS idx_team_members_team_id ON team_members(team_id); 
+
+-- Migração para atualizar a estrutura da tabela survey_responses
+ALTER TABLE survey_responses 
+  DROP CONSTRAINT IF EXISTS survey_responses_team_member_id_fkey,
+  DROP CONSTRAINT IF EXISTS survey_responses_team_member_unique;
+
+-- Adicionar nova coluna user_id
+ALTER TABLE survey_responses 
+  ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE;
+
+-- Atualizar registros existentes
+UPDATE survey_responses sr
+SET user_id = tm.user_id
+FROM team_members tm
+WHERE sr.team_member_id = tm.id;
+
+-- Remover coluna antiga
+ALTER TABLE survey_responses 
+  DROP COLUMN team_member_id;
+
+-- Adicionar nova constraint
+ALTER TABLE survey_responses 
+  ADD CONSTRAINT survey_responses_user_id_unique UNIQUE (user_id);
+
+-- Migração para atualizar a tabela open_question_responses
+ALTER TABLE open_question_responses 
+  DROP CONSTRAINT IF EXISTS open_question_responses_team_member_id_fkey,
+  DROP CONSTRAINT IF EXISTS open_question_responses_team_member_unique;
+
+-- Adicionar novas colunas
+ALTER TABLE open_question_responses 
+  ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  ADD COLUMN team_id UUID REFERENCES teams(id) ON DELETE CASCADE;
+
+-- Atualizar registros existentes
+UPDATE open_question_responses oqr
+SET user_id = tm.user_id,
+    team_id = tm.team_id
+FROM team_members tm
+WHERE oqr.team_member_id = tm.id;
+
+-- Remover coluna antiga
+ALTER TABLE open_question_responses 
+  DROP COLUMN team_member_id;
+
+-- Adicionar novas constraints
+ALTER TABLE open_question_responses 
+  ADD CONSTRAINT open_question_responses_user_team_unique UNIQUE (user_id, team_id);
+
+-- Adicionar campo team_id à tabela survey_responses
+ALTER TABLE survey_responses 
+  ADD COLUMN team_id UUID REFERENCES teams(id) ON DELETE CASCADE;
+
+-- Atualizar registros existentes na tabela survey_responses
+UPDATE survey_responses sr
+SET team_id = tm.team_id
+FROM team_members tm
+WHERE sr.user_id = tm.user_id;
+
+-- Adicionar constraint de unicidade para user_id e team_id
+ALTER TABLE survey_responses 
+  ADD CONSTRAINT survey_responses_user_team_unique UNIQUE (user_id, team_id);
+
+-- Migração para atualizar a tabela user_profiles
+ALTER TABLE user_profiles 
+  DROP CONSTRAINT IF EXISTS user_profiles_team_member_id_fkey;
+
+-- Adicionar novas colunas
+ALTER TABLE user_profiles 
+  ADD COLUMN user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
+  ADD COLUMN team_id UUID REFERENCES teams(id) ON DELETE CASCADE;
+
+-- Atualizar registros existentes
+UPDATE user_profiles up
+SET user_id = tm.user_id,
+    team_id = tm.team_id
+FROM team_members tm
+WHERE up.team_member_id = tm.id;
+
+-- Remover coluna antiga
+ALTER TABLE user_profiles 
+  DROP COLUMN team_member_id;
+
+-- Adicionar nova constraint
+ALTER TABLE user_profiles 
+  ADD CONSTRAINT user_profiles_user_team_unique UNIQUE (user_id, team_id);
+
+-- Atualizar índices para as novas colunas
+DROP INDEX IF EXISTS idx_user_profiles_team_member_id;
+DROP INDEX IF EXISTS idx_survey_responses_team_member_id;
+DROP INDEX IF EXISTS idx_open_question_responses_team_member_id;
+
+CREATE INDEX IF NOT EXISTS idx_user_profiles_user_id ON user_profiles(user_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_team_id ON user_profiles(team_id);
+CREATE INDEX IF NOT EXISTS idx_survey_responses_user_id ON survey_responses(user_id);
+CREATE INDEX IF NOT EXISTS idx_survey_responses_team_id ON survey_responses(team_id);
+CREATE INDEX IF NOT EXISTS idx_open_question_responses_user_id ON open_question_responses(user_id);
+CREATE INDEX IF NOT EXISTS idx_open_question_responses_team_id ON open_question_responses(team_id);
+
+-- Criar view para facilitar consulta de respostas por equipe
+CREATE OR REPLACE VIEW team_survey_responses AS
+SELECT 
+  tm.id as team_member_id,
+  tm.team_id,
+  tm.user_id,
+  tm.email,
+  tm.role,
+  tm.status,
+  sr.q1,
+  sr.q2,
+  sr.q3,
+  sr.q4,
+  sr.q5,
+  sr.q6,
+  sr.q7,
+  sr.q8,
+  sr.q9,
+  sr.q10,
+  sr.q11,
+  sr.q12,
+  sr.created_at as response_created_at,
+  sr.updated_at as response_updated_at
+FROM team_members tm
+LEFT JOIN survey_responses sr 
+  ON sr.user_id = tm.user_id 
+  AND sr.team_id = tm.team_id;

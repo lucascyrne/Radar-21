@@ -18,7 +18,10 @@ export default function SurveyPage() {
   const { user } = useAuth()
   const { selectedTeam, updateMemberStatus } = useTeam()
   const { 
-    questions, isLoading, error, answers,
+    questions,
+    loading,
+    error,
+    answers,
     saveAnswers
   } = useSurvey()
   
@@ -70,14 +73,14 @@ export default function SurveyPage() {
 
   // Exibir mensagens de erro
   useEffect(() => {
-    if (error) {
+    if (error.profile || error.survey || error.openQuestions) {
       toast({
         title: "Erro",
-        description: error,
+        description: error.profile || error.survey || error.openQuestions,
         variant: "destructive",
-      })
+      });
     }
-  }, [error, toast])
+  }, [error, toast]);
 
   // Função para atualizar o progresso
   const updateProgress = useCallback((questionId: string) => {
@@ -114,7 +117,7 @@ export default function SurveyPage() {
       console.log('Tentando submeter:', {
         totalQuestions,
         answered,
-        isLoading,
+        isLoading: loading,
         currentAnswers: answers,
         answeredQuestions: Array.from(answeredRef.current)
       });
@@ -176,7 +179,7 @@ export default function SurveyPage() {
     router,
     user?.email,
     selectedTeam?.id,
-    isLoading
+    loading
   ]);
 
   // Log do estado atual sempre que relevante
@@ -185,10 +188,10 @@ export default function SurveyPage() {
       questionsLength: questions?.length,
       answeredCount,
       progress,
-      isLoading,
+      isLoading: loading,
       answeredRefSize: answeredRef.current.size
     });
-  }, [questions, answeredCount, progress, isLoading]);
+  }, [questions, answeredCount, progress, loading]);
 
   return (
     <Layout>

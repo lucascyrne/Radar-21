@@ -57,12 +57,37 @@ export interface TeamMembership {
   status: TeamMemberStatus;
 }
 
+// Interface para respostas da pesquisa por equipe
+export interface TeamSurveyResponse {
+  team_member_id: string;
+  team_id: string;
+  user_id: string;
+  email: string;
+  role: 'leader' | 'member';
+  status: TeamMemberStatus;
+  q1?: number;
+  q2?: number;
+  q3?: number;
+  q4?: number;
+  q5?: number;
+  q6?: number;
+  q7?: number;
+  q8?: number;
+  q9?: number;
+  q10?: number;
+  q11?: number;
+  q12?: number;
+  response_created_at?: string;
+  response_updated_at?: string;
+}
+
 // Estado do contexto de equipes
 export interface TeamState {
   teams: Team[];
   selectedTeam: Team | null;
   teamMembers: TeamMember[];
   currentMember: TeamMember | null;
+  teamSurveyResponses: TeamSurveyResponse[];
   isLoading: boolean;
   error: string | null;
 }

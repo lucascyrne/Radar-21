@@ -16,6 +16,8 @@ import { SurveyService } from "@/resources/survey/survey.service"
 import { OpenQuestionResponse } from "@/resources/survey/survey-model"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useAuth } from "@/resources/auth/auth-hook"
+import { TeamService } from "@/resources/team/team.service"
+import { TeamSurveyResponse } from "@/resources/team/team-model"
 
 const competencyDescriptions: Record<string, string> = {
   'Liderança': 'Capacidade de influenciar e guiar equipes, promovendo um ambiente colaborativo e alcançando resultados através das pessoas.',
@@ -34,8 +36,10 @@ const competencyDescriptions: Record<string, string> = {
 
 export default function ResultsPage() {
   const { toast } = useToast()
-  const { currentMember, teamMembers, loadTeamMembers } = useTeam()
+  const { user } = useAuth()
+  const { selectedTeam } = useTeam()
   const { surveyResponses, answers } = useSurvey()
+  const { loadTeamSurveyResponses } = useTeam()
   const [userResults, setUserResults] = useState<RadarDataPoint[]>([])
   const [teamResults, setTeamResults] = useState<RadarDataPoint[]>([])
   const [leaderResults, setLeaderResults] = useState<RadarDataPoint[]>([])
@@ -43,38 +47,42 @@ export default function ResultsPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [userResponses, setUserResponses] = useState<SurveyResponses | null>(null)
 
-  // Encontrar team_id e team_member_id do localStorage se necessário
+  // Efeito para carregar respostas do usuário
   useEffect(() => {
-    const teamId = localStorage.getItem("teamId")
-    const teamMemberId = localStorage.getItem("teamMemberId")
-    
-    console.log('IDs do localStorage:', { teamId, teamMemberId })
-    
-    if (teamId && teamMembers.length === 0) {
-      loadTeamMembers(teamId)
-    }
+    const loadUserData = async () => {
+      try {
+        const teamId = selectedTeam?.id || localStorage.getItem("teamId")
+        const userId = user?.id
 
-    // Se temos respostas do usuário diretamente, vamos usá-las
-    if (answers) {
-      setUserResponses(answers)
-    } else if (surveyResponses) {
-      setUserResponses(surveyResponses)
-    } else if (teamMemberId) {
-      // Tentar carregar respostas do usuário diretamente do serviço
-      const loadResponses = async () => {
-        try {
-          const responses = await SurveyService.loadSurveyResponses(teamMemberId)
+        if (!userId || !teamId) {
+          console.error('IDs necessários não encontrados:', { userId, teamId })
+          return
+        }
+
+        // Se temos respostas do usuário diretamente, vamos usá-las
+        if (answers) {
+          setUserResponses(answers)
+        } else if (surveyResponses) {
+          setUserResponses(surveyResponses)
+        } else {
+          // Tentar carregar respostas do usuário diretamente do serviço
+          const responses = await SurveyService.loadSurveyResponses(userId, teamId)
           if (responses) {
             setUserResponses(responses.responses)
           }
-        } catch (error) {
-          console.error('Erro ao carregar respostas:', error)
         }
+      } catch (error) {
+        console.error('Erro ao carregar respostas:', error)
+        toast({
+          title: "Erro ao carregar respostas",
+          description: "Não foi possível carregar suas respostas.",
+          variant: "destructive",
+        })
       }
-      
-      loadResponses()
     }
-  }, [answers, surveyResponses, teamMembers.length])
+
+    loadUserData()
+  }, [user?.id, selectedTeam?.id, answers, surveyResponses])
 
   // Processar respostas do usuário quando disponíveis
   useEffect(() => {
@@ -102,47 +110,51 @@ export default function ResultsPage() {
     const loadTeamData = async () => {
       try {
         setIsLoading(true)
-        console.log('Tentando carregar dados da equipe...')
         
-        // Determinar o team_id
-        const teamId = currentMember?.team_id || localStorage.getItem("teamId")
-        if (!teamId) {
-          console.error('ID da equipe não encontrado')
+        const teamId = selectedTeam?.id || localStorage.getItem("teamId")
+        const userId = user?.id
+        
+        if (!teamId || !userId) {
+          console.error('IDs necessários não encontrados')
           setIsLoading(false)
           return
         }
         
-        console.log('Carregando resultados para equipe:', teamId)
+        // Buscar respostas da equipe usando o contexto
+        const teamResponses = await loadTeamSurveyResponses(teamId)
         
-        // Buscar os dados de media da equipe e respostas do líder
-        const teamData = await SurveyService.getTeamResults(teamId)
-        
-        if (teamData) {
-          console.log('Dados da equipe recebidos:', teamData)
-          
-          // Transformar média da equipe
-          setTeamResults(teamData.teamAverage.map(item => ({
+        if (teamResponses.length > 0) {
+          // Calcular média da equipe
+          const teamAverages = Object.keys(teamResponses[0])
+            .filter(key => key.startsWith('q'))
+            .map(questionId => ({
+              questionId,
+              average: teamResponses.reduce((sum: number, member: TeamSurveyResponse) => 
+                sum + (member[questionId as keyof TeamSurveyResponse] as number || 0), 0) / teamResponses.length
+            }))
+
+          // Identificar respostas do líder
+          const leaderResponses = teamResponses
+            .find((member: TeamSurveyResponse) => member.role === 'leader')
+
+          setTeamResults(teamAverages.map(item => ({
             category: SurveyService.getCompetencyName(item.questionId),
             value: item.average
           })))
           
-          // Transformar respostas do líder
-          setLeaderResults(teamData.leaderResponses.map(item => ({
-            category: SurveyService.getCompetencyName(item.questionId),
-            value: item.value
-          })))
-        } else {
-          console.warn('Sem dados de equipe disponíveis')
+          if (leaderResponses) {
+            setLeaderResults(Object.entries(leaderResponses)
+              .filter(([key]) => key.startsWith('q'))
+              .map(([key, value]) => ({
+                category: SurveyService.getCompetencyName(key),
+                value: Number(value)
+              })))
+          }
         }
         
-        // Determinar o memberId para buscar respostas abertas
-        const memberId = currentMember?.id || localStorage.getItem("teamMemberId")
-        if (memberId) {
-          // Carregar respostas abertas
-          console.log('Carregando respostas abertas para membro:', memberId)
-          const openQuestionsData = await SurveyService.loadOpenQuestions(memberId)
-          setOpenQuestions(openQuestionsData)
-        }
+        // Carregar respostas abertas
+        const openQuestionsData = await SurveyService.loadOpenQuestions(userId, teamId)
+        setOpenQuestions(openQuestionsData)
         
         setIsLoading(false)
       } catch (error) {
@@ -156,11 +168,10 @@ export default function ResultsPage() {
       }
     }
     
-    // Se temos respostas do usuário, começar a carregar dados da equipe
     if (userResults.length > 0) {
       loadTeamData()
     }
-  }, [userResults.length, currentMember?.team_id, currentMember?.id, toast])
+  }, [userResults.length, selectedTeam?.id, user?.id])
 
   // Verificar se temos dados para exibir
   const hasUserData = userResults.length > 0

@@ -555,5 +555,36 @@ export const TeamService = {
     } catch (error: any) {
       console.error('Erro ao padronizar status dos membros:', error);
     }
+  },
+
+  /**
+   * Obtém as respostas da pesquisa dos membros de uma equipe
+   * @param teamId ID da equipe
+   * @returns Lista de respostas dos membros
+   */
+  async getTeamSurveyResponses(teamId: string): Promise<any[]> {
+    try {
+      const { data, error } = await supabase
+        .from('team_survey_responses')
+        .select(`
+          team_member_id,
+          user_id,
+          email,
+          role,
+          q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12
+        `)
+        .eq('team_id', teamId)
+        .eq('status', 'answered');
+
+      if (error) {
+        console.error('Erro ao buscar respostas da equipe:', error);
+        throw error;
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error('Erro ao buscar respostas da equipe:', error);
+      return [];
+    }
   }
 }; 

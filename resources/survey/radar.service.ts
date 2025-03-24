@@ -41,53 +41,39 @@ export class RadarService {
   /**
    * Carrega as respostas de um membro específico
    */
-  static async loadMemberResponses(memberId: string): Promise<SurveyResponses | null> {
-    // Verificar cache
-    const cacheKey = `member_${memberId}`;
-    const cachedData = responsesCache.get(cacheKey);
-    
-    if (cachedData && (Date.now() - cachedData.timestamp) < CACHE_EXPIRATION) {
-      return cachedData.data;
-    }
-    
+  static async loadMemberResponses(userId: string, teamId: string): Promise<SurveyResponses | null> {
     try {
-      // Primeiro, tentar buscar respostas da pesquisa
-      const { data: surveyData, error: surveyError } = await supabase
-        .from('survey_responses')
-        .select('*')
-        .eq('team_member_id', memberId)
-        .single();
-        
-      if (surveyError && surveyError.code !== 'PGRST116') {
-        console.error('Erro ao carregar respostas da pesquisa:', surveyError);
+      const cacheKey = `member_${userId}_${teamId}`;
+      const cachedData = responsesCache.get(cacheKey);
+      if (cachedData) return cachedData.data;
+
+      const [surveyData, openQuestionsData] = await Promise.all([
+        supabase
+          .from('survey_responses')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('team_id', teamId)
+          .single(),
+        supabase
+          .from('open_question_responses')
+          .select('*')
+          .eq('user_id', userId)
+          .eq('team_id', teamId)
+          .single()
+      ]);
+
+      if (surveyData.error || openQuestionsData.error) {
+        console.error('Erro ao carregar respostas:', surveyData.error || openQuestionsData.error);
         return null;
       }
-      
-      if (surveyData) {
-        // Armazenar no cache e retornar
-        responsesCache.set(cacheKey, { data: surveyData, timestamp: Date.now() });
-        return surveyData;
-      }
-      
-      // Se não encontrou respostas da pesquisa, tentar buscar respostas das questões abertas
-      const { data: openData, error: openError } = await supabase
-        .from('open_question_responses')
-        .select('*')
-        .eq('team_member_id', memberId)
-        .single();
-        
-      if (openError && openError.code !== 'PGRST116') {
-        console.error('Erro ao carregar respostas das questões abertas:', openError);
-        return null;
-      }
-      
-      if (openData) {
-        // Armazenar no cache e retornar
-        responsesCache.set(cacheKey, { data: openData, timestamp: Date.now() });
-        return openData;
-      }
-      
-      return null;
+
+      const responses: SurveyResponses = {
+        ...surveyData.data,
+        ...openQuestionsData.data
+      };
+
+      responsesCache.set(cacheKey, { data: responses, timestamp: Date.now() });
+      return responses;
     } catch (error) {
       console.error('Erro ao carregar respostas do membro:', error);
       return null;
@@ -128,7 +114,7 @@ export class RadarService {
       
       for (const member of completedMembers) {
         if (member.id) {
-          const responses = await this.loadMemberResponses(member.id);
+          const responses = await this.loadMemberResponses(member.id, member.team_id);
           if (member.role === 'leader') {
             leaderResponses = responses;
           } else {

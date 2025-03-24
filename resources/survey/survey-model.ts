@@ -31,7 +31,9 @@ export const openQuestionsSchema = z.object({
 export type OpenQuestionsFormValues = z.infer<typeof openQuestionsSchema>;
 
 // Tipo para as respostas do questionário
-export type SurveyResponses = Record<string, number>;
+export type SurveyResponses = {
+  [key: string]: number;
+};
 
 export type SurveyFormValues = SurveyResponses;
 
@@ -44,13 +46,27 @@ export interface Question {
 
 // Estado do questionário
 export interface SurveyState {
+  userId: string | null;
+  teamId: string | null;
   profile: UserProfile | null;
   surveyResponses: SurveyResponses | null;
-  openQuestions: OpenQuestionsFormValues | null;
-  teamMemberId: string | null;
-  isLoading: boolean;
-  error: string | null;
+  openQuestions: OpenQuestionResponse | null;
+  loading: {
+    profile: boolean;
+    survey: boolean;
+    openQuestions: boolean;
+    teamMember: boolean;
+    saving: boolean;
+  };
+  error: {
+    profile: string | null;
+    survey: string | null;
+    openQuestions: string | null;
+  };
   radarData: RadarDataPoint[];
+  questions: Question[];
+  answers: SurveyResponses | null;
+  isSaving: boolean;
 }
 
 // Tipo para o status do membro da equipe
@@ -59,7 +75,8 @@ export type TeamMemberStatus = 'invited' | 'answered';
 // Interface para o perfil do usuário
 export interface UserProfile extends ProfileFormValues {
   id: string;
-  team_member_id: string;
+  user_id: string;
+  team_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -67,7 +84,8 @@ export interface UserProfile extends ProfileFormValues {
 // Interface para as respostas do questionário no banco de dados
 export interface SurveyResponse {
   id: string;
-  team_member_id: string;
+  user_id: string;
+  team_id: string;
   created_at: string;
   updated_at: string;
   responses: SurveyResponses;
@@ -76,7 +94,8 @@ export interface SurveyResponse {
 // Interface para as respostas das perguntas abertas no banco de dados
 export interface OpenQuestionResponse extends OpenQuestionsFormValues {
   id: string;
-  team_member_id: string;
+  user_id: string;
+  team_id: string;
   created_at: string;
   updated_at: string;
 }
@@ -85,8 +104,8 @@ export interface RadarDataPoint {
   category: string;
   value: number;
 }
-
 export interface RadarDataPoint {
   category: string
   value: number
 }
+

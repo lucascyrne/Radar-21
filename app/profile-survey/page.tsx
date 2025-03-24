@@ -7,53 +7,58 @@ import { useToast } from "@/hooks/use-toast"
 import { useSurvey } from "@/resources/survey/survey-hook"
 import { ProfileFormValues } from "@/resources/survey/survey-model"
 import { useTeam } from "@/resources/team/team-hook"
+import { useAuth } from "@/resources/auth/auth-hook"
 import { ProfileForm } from "@/components/survey/profile-form"
 import { PrivacyNotice } from "@/components/survey/privacy-notice"
 
 export default function ProfileSurveyPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { currentMember } = useTeam()
-  const { saveProfile, error, updateTeamMemberId, isSaving } = useSurvey()
+  const { user } = useAuth()
+  const { selectedTeam } = useTeam()
+  const { saveProfile, error, updateUserId, updateTeamId, loading } = useSurvey()
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  // Definir o ID do membro da equipe quando disponível
+  // Definir os IDs quando disponíveis
   useEffect(() => {
-    const setupTeamMember = async () => {
-      if (currentMember?.id) {
-        updateTeamMemberId(currentMember.id)
-        localStorage.setItem("teamMemberId", currentMember.id)
-      } else {
-        const storedId = localStorage.getItem("teamMemberId")
-        if (storedId) {
-          updateTeamMemberId(storedId)
-        }
+    const setupIds = async () => {
+      const teamId = selectedTeam?.id || localStorage.getItem("teamId")
+      const userId = user?.id
+
+      if (userId) {
+        updateUserId(userId)
+      }
+      
+      if (teamId) {
+        updateTeamId(teamId)
+        localStorage.setItem("teamId", teamId)
       }
     }
     
-    setupTeamMember()
-  }, [currentMember, updateTeamMemberId])
+    setupIds()
+  }, [selectedTeam?.id, user?.id])
 
   // Exibir mensagem de erro se houver
   useEffect(() => {
-    if (error) {
+    if (error.profile) {
       toast({
         title: "Erro",
-        description: error,
+        description: error.profile,
         variant: "destructive",
       })
     }
-  }, [error, toast])
+  }, [error.profile, toast])
 
   const handleSubmit = useCallback(async (data: ProfileFormValues) => {
     try {
-      if (isSubmitting || isSaving) return
+      if (isSubmitting || loading.saving) return
       
       setIsSubmitting(true)
       
-      const memberId = currentMember?.id || localStorage.getItem("teamMemberId")
+      const userId = user?.id
+      const teamId = selectedTeam?.id || localStorage.getItem("teamId")
       
-      if (!memberId) {
+      if (!userId || !teamId) {
         throw new Error("Por favor, aguarde enquanto carregamos suas informações ou faça login novamente.")
       }
 
@@ -85,7 +90,7 @@ export default function ProfileSurveyPage() {
     } finally {
       setIsSubmitting(false)
     }
-  }, [currentMember?.id, isSubmitting, isSaving])
+  }, [user?.id, selectedTeam?.id, isSubmitting, loading.saving])
 
   return (
     <Layout>

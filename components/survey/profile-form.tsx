@@ -18,7 +18,8 @@ interface ProfileFormProps {
 
 export function ProfileForm({ defaultValues, onSubmit }: ProfileFormProps) {
   console.log('Renderizando ProfileForm com defaultValues:', defaultValues);
-  const { isSaving } = useSurvey();
+  const { loading } = useSurvey();
+  const isSaving = loading.profile;
   
   const form = useForm<ProfileFormValues>({
     resolver: zodResolver(profileSchema),
