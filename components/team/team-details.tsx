@@ -75,7 +75,6 @@ function TeamDetailsComponent({
       {/* Formulário de convite (apenas para líderes) */}
       {isTeamLeader && selectedTeam && (
         <div className="space-y-4">
-          <h3 className="text-lg font-semibold">Convidar Novos Membros</h3>
           <InviteUserForm
             teamId={teamId}
             teamName={selectedTeam.name}
