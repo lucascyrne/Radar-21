@@ -30,9 +30,24 @@ export default function SurveyPage() {
   const answeredRef = useRef(new Set<string>())
   const [isSubmitting, setIsSubmitting] = useState(false)
 
+  // Log do estado inicial
+  useEffect(() => {
+    console.log('Estado atual da página:', {
+      hasQuestions: !!questions,
+      questionsLength: questions?.length,
+      loading,
+      error,
+      hasAnswers: !!answers,
+      answersLength: answers ? Object.keys(answers).length : 0
+    });
+  }, [questions, loading, error, answers]);
+
   // Calcular progresso da pesquisa
   useEffect(() => {
-    if (!questions?.length) return;
+    if (!questions?.length) {
+      console.log('Sem questões disponíveis para calcular progresso');
+      return;
+    }
     
     const totalQuestions = questions.length;
     const calculatedProgress = (answeredCount / totalQuestions) * 100;
@@ -213,20 +228,34 @@ export default function SurveyPage() {
             <Progress value={progress} className="w-full" />
           </div>
 
-          <QuestionSection 
-            questions={questions?.map(q => ({
-              id: q.id,
-              question: q.text,
-              competency: q.id
-            })) || []}
-            answeredSet={answeredRef}
-            onAnswerUpdate={updateProgress}
-          />
+          {loading.survey ? (
+            <div className="text-center py-8">
+              <p>Carregando questões...</p>
+            </div>
+          ) : error.survey ? (
+            <div className="text-center py-8 text-destructive">
+              <p>Erro ao carregar questões: {error.survey}</p>
+            </div>
+          ) : !questions?.length ? (
+            <div className="text-center py-8">
+              <p>Nenhuma questão disponível.</p>
+            </div>
+          ) : (
+            <QuestionSection 
+              questions={questions.map(q => ({
+                id: q.id,
+                question: q.text,
+                competency: q.competency
+              }))}
+              answeredSet={answeredRef}
+              onAnswerUpdate={updateProgress}
+            />
+          )}
 
           <div className="flex justify-end pt-4">
             <Button
               onClick={handleSubmit}
-              disabled={progress < 100 || isSubmitting}
+              disabled={progress < 100 || isSubmitting || loading.survey}
               className="w-full sm:w-auto"
             >
               {isSubmitting ? "Enviando..." : "Finalizar Pesquisa"}

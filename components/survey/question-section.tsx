@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, MutableRefObject } from 'react';
+import { useState, MutableRefObject, useEffect } from 'react';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,6 +9,7 @@ import { useSurvey } from '@/resources/survey/survey-hook';
 import { SurveyResponses } from '@/resources/survey/survey-model';
 import { Button } from '@/components/ui/button';
 import { HelpCircle } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 import {
   Tooltip,
   TooltipContent,
@@ -59,8 +60,14 @@ const getContextualHint = (competency: string): string => {
 };
 
 export function QuestionSection({ questions, answeredSet, onAnswerUpdate }: QuestionSectionProps) {
-  const { surveyResponses, saveAnswers, isLoading } = useSurvey();
+  const { surveyResponses, saveAnswers } = useSurvey();
+  const { toast } = useToast();
   const [localAnswers, setLocalAnswers] = useState<Record<string, string>>(() => {
+    console.log('Inicializando respostas locais:', {
+      hasResponses: !!surveyResponses,
+      responses: surveyResponses
+    });
+    
     const initialAnswers: Record<string, string> = {};
     if (surveyResponses) {
       questions.forEach(q => {
@@ -72,18 +79,26 @@ export function QuestionSection({ questions, answeredSet, onAnswerUpdate }: Ques
         }
       });
     }
+    console.log('Respostas iniciais:', initialAnswers);
     return initialAnswers;
   });
 
   const handleAnswerChange = async (questionId: string, value: string) => {
     try {
+      console.log('Alterando resposta:', {
+        questionId,
+        value,
+        previousAnswers: localAnswers
+      });
+      
+      // Atualizar estado local imediatamente
       const newAnswers = { ...localAnswers, [questionId]: value };
       setLocalAnswers(newAnswers);
       
       answeredSet.current.add(questionId);
       onAnswerUpdate(questionId);
       
-      // Converter todas as respostas para números
+      // Converter respostas para números
       const numericAnswers = Object.entries(newAnswers).reduce<SurveyResponses>((acc, [key, val]) => {
         const numValue = parseInt(val, 10);
         if (!isNaN(numValue)) {
@@ -92,12 +107,29 @@ export function QuestionSection({ questions, answeredSet, onAnswerUpdate }: Ques
         return acc;
       }, {});
       
-      console.log('Salvando respostas numéricas:', numericAnswers);
-      await saveAnswers(numericAnswers);
+      // Salvar em segundo plano
+      saveAnswers(numericAnswers).catch(error => {
+        console.error('Erro ao salvar resposta:', error);
+        // Em caso de erro, manter a resposta local mas notificar o usuário
+        toast({
+          title: "Erro ao salvar resposta",
+          description: "Sua resposta foi registrada localmente, mas houve um erro ao salvá-la. As respostas serão sincronizadas automaticamente.",
+          variant: "destructive",
+        });
+      });
     } catch (error) {
-      console.error('Erro ao salvar resposta:', error);
+      console.error('Erro ao processar resposta:', error);
     }
   };
+
+  // Log quando as questões ou respostas mudarem
+  useEffect(() => {
+    console.log('Estado atual do QuestionSection:', {
+      questionsCount: questions.length,
+      answeredCount: Object.keys(localAnswers).length,
+      answeredSetSize: answeredSet.current.size
+    });
+  }, [questions, localAnswers]);
 
   return (
     <div className="space-y-8">
@@ -138,7 +170,6 @@ export function QuestionSection({ questions, answeredSet, onAnswerUpdate }: Ques
                 value={localAnswers[question.id] || ''}
                 onValueChange={(value) => handleAnswerChange(question.id, value)}
                 className="flex flex-col space-y-1 sm:flex-row sm:space-y-0 sm:space-x-4 flex-wrap"
-                disabled={isLoading}
               >
                 {likertOptions.map(option => (
                   <div key={option.value} className="flex items-center space-x-2 space-y-0 mb-2">

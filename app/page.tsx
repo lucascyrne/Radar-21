@@ -1,52 +1,103 @@
+"use client"
+
 import Link from "next/link"
+import { motion } from "framer-motion"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { ArrowRight, BarChart2, Users, Brain, Shield, Lock } from "lucide-react"
 import { Layout } from "@/components/layout"
 import { AuroraText } from "@/components/magicui/aurora-text"
 
-export default function Home() {
+const HeroSection = () => {
+  const container = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.2,
+        delayChildren: 0.3
+      }
+    }
+  }
+
+  const item = {
+    hidden: { opacity: 0, y: 20 },
+    show: { 
+      opacity: 1, 
+      y: 0,
+      transition: {
+        duration: 0.8,
+        ease: [0.04, 0.62, 0.23, 0.98]
+      }
+    }
+  }
+
   return (
-    <Layout>
-      {/* Hero Section - Redesenhada com gradiente e animação sutil */}
-      <section className="relative overflow-hidden py-32 px-4">
-        <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-secondary/20 -z-10" />
-        <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl flex flex-col items-center gap-1">
+    <motion.section 
+      className="relative overflow-hidden py-32 px-4"
+      initial="hidden"
+      animate="show"
+      variants={container}
+    >
+      <div className="absolute inset-0 -z-10" />
+      <div className="max-w-4xl mx-auto text-center">
+        <motion.h1 
+          className="text-5xl font-bold tracking-tight sm:text-6xl md:text-7xl flex flex-col items-center gap-1"
+          variants={container}
+        >
+          <motion.div variants={item} className="w-full">
             <AuroraText
               colors={["#1E40AF", "#3B82F6", "#1E3A8A"]}
               speed={0.4}
-              className="leading-tight font-extrabold text-center"
+              className="leading-tight font-extrabold text-center opacity-0 animate-fade-in"
             >
               A era da IA e da
             </AuroraText>
+          </motion.div>
+          <motion.div variants={item} className="w-full">
             <AuroraText
               colors={["#3B82F6", "#1E3A8A", "#1E40AF"]}
               speed={0.4}
-              className="leading-tight font-extrabold text-center"
+              className="leading-tight font-extrabold text-center opacity-0 animate-fade-in"
             >
               Indústria 4.0
             </AuroraText>
+          </motion.div>
+          <motion.div variants={item} className="w-full">
             <AuroraText
               colors={["#1E3A8A", "#1E40AF", "#3B82F6"]}
               speed={0.4}
-              className="leading-tight font-extrabold text-center text-4xl sm:text-5xl md:text-6xl"
+              className="leading-tight font-extrabold text-center text-4xl sm:text-5xl md:text-6xl opacity-0 animate-fade-in"
             >
               requer novas competências
             </AuroraText>
-          </h1>
-          <p className="mt-8 text-xl md:text-2xl text-muted-foreground leading-relaxed">
-            Descubra se você e sua equipe têm as competências e atitudes certas, e onde podem melhorar.
-          </p>
-          <div className="mt-12 flex items-center justify-center gap-4">
-            <Link href="/auth">
-              <Button size="lg" className="text-lg px-8 py-6 hover:scale-105 transition-transform">
-                Comece Agora <ArrowRight className="ml-2 h-5 w-5" />
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </section>
+          </motion.div>
+        </motion.h1>
+        <motion.p 
+          className="mt-8 text-xl md:text-2xl text-muted-foreground leading-relaxed"
+          variants={item}
+        >
+          Descubra se você e sua equipe têm as competências e atitudes certas, e onde podem melhorar.
+        </motion.p>
+        <motion.div 
+          className="mt-12 flex items-center justify-center gap-4"
+          variants={item}
+        >
+          <Link href="/auth">
+            <Button size="lg" className="text-lg px-8 py-6 hover:scale-105 transition-transform">
+              Comece Agora <ArrowRight className="ml-2 h-5 w-5" />
+            </Button>
+          </Link>
+        </motion.div>
+      </div>
+    </motion.section>
+  )
+}
+
+export default function Home() {
+  return (
+    <Layout>
+      <HeroSection />
 
       {/* Features Section - Cards mais visuais */}
       <section className="py-24">

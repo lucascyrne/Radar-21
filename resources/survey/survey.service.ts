@@ -93,30 +93,31 @@ export class SurveyService {
         .select('*')
         .eq('user_id', userId)
         .eq('team_id', teamId)
-        .single();
+        .maybeSingle();
 
-      if (error) return handleDataError(error);
-      
-      if (data) {
-        const responses: SurveyResponses = {};
-        for (let i = 1; i <= 12; i++) {
-          const key = `q${i}`;
-          if (data[key] !== null) {
-            responses[key] = data[key];
-          }
-        }
-        
-        return {
-          id: data.id,
-          user_id: data.user_id,
-          team_id: data.team_id,
-          created_at: data.created_at,
-          updated_at: data.updated_at,
-          responses
-        };
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao carregar respostas:', error);
+        return handleDataError(error);
       }
       
-      return null;
+      if (!data) return null;
+      
+      const responses: SurveyResponses = {};
+      for (let i = 1; i <= 12; i++) {
+        const key = `q${i}`;
+        if (data[key] !== null) {
+          responses[key] = data[key];
+        }
+      }
+      
+      return {
+        id: data.id,
+        user_id: data.user_id,
+        team_id: data.team_id,
+        created_at: data.created_at,
+        updated_at: data.updated_at,
+        responses
+      };
     } catch (error) {
       console.error('Erro ao carregar respostas:', error);
       return null;
@@ -153,9 +154,13 @@ export class SurveyService {
         .select('*')
         .eq('user_id', userId)
         .eq('team_id', teamId)
-        .single();
+        .maybeSingle();
 
-      if (error) return handleDataError(error);
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao carregar perguntas abertas:', error);
+        return handleDataError(error);
+      }
+
       return data;
     } catch (error) {
       console.error('Erro ao carregar perguntas abertas:', error);

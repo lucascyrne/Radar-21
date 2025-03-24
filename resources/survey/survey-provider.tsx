@@ -57,7 +57,7 @@ const initialState: SurveyState = {
 export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
   const [state, setState] = useState<SurveyState>(initialState);
   const { user } = useAuth();
-  const { selectedTeam, teamMembers, loadTeamMembers } = useTeam();
+  const { selectedTeam } = useTeam();
   
   // Estados adicionais para pesquisa
   const [questions, setQuestions] = useState<Question[]>([]);
@@ -356,26 +356,28 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
   // Salvar respostas
   const saveAnswers = useCallback(async (responses: SurveyResponses): Promise<boolean> => {
     try {
-      updateLoading('survey', true);
-      
       if (!state.userId || !state.teamId) {
         throw new Error('ID do usuário ou equipe não encontrado');
       }
 
-      await SurveyService.saveSurveyResponses(state.userId, state.teamId, responses);
-      
+      // Atualizar o estado imediatamente para manter a UI responsiva
       setState(prev => ({
         ...prev,
         surveyResponses: responses,
-        answers: responses
+        answers: responses,
+        error: {
+          ...prev.error,
+          survey: null
+        }
       }));
 
+      // Salvar no banco de dados em segundo plano
+      await SurveyService.saveSurveyResponses(state.userId, state.teamId, responses);
       return true;
     } catch (error: any) {
+      console.error('Erro ao salvar respostas:', error);
       updateError('survey', error.message || 'Erro ao salvar respostas');
       return false;
-    } finally {
-      updateLoading('survey', false);
     }
   }, [state.userId, state.teamId]);
 
@@ -395,6 +397,89 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
       console.error('Erro ao gerar dados do radar:', error);
     }
   }, [state.surveyResponses]);
+
+  // Carregar dados
+  const loadData = useCallback(async () => {
+    try {
+      console.log('Iniciando loadData com:', {
+        stateUserId: state.userId,
+        stateTeamId: state.teamId,
+        loading: state.loading
+      });
+      
+      if (!state.userId || !state.teamId) {
+        console.log('IDs ausentes, aguardando...');
+        return;
+      }
+
+      updateLoading('profile', true);
+      updateLoading('survey', true);
+      updateLoading('openQuestions', true);
+
+      const [profile, surveyResponses, openQuestions] = await Promise.all([
+        SurveyService.loadProfile(state.userId, state.teamId),
+        SurveyService.loadSurveyResponses(state.userId, state.teamId),
+        SurveyService.loadOpenQuestions(state.userId, state.teamId)
+      ]);
+
+      console.log('Dados carregados:', { profile, surveyResponses, openQuestions });
+
+      setState(prev => ({
+        ...prev,
+        profile,
+        surveyResponses: surveyResponses?.responses || null,
+        openQuestions,
+        answers: surveyResponses?.responses || null,
+        error: {
+          profile: null,
+          survey: null,
+          openQuestions: null
+        }
+      }));
+    } catch (error: any) {
+      console.error('Erro ao carregar dados:', error);
+      updateError('profile', error.message);
+      updateError('survey', error.message);
+      updateError('openQuestions', error.message);
+    } finally {
+      updateLoading('profile', false);
+      updateLoading('survey', false);
+      updateLoading('openQuestions', false);
+    }
+  }, [state.userId, state.teamId]);
+
+  // Carregar dados iniciais quando o usuário e a equipe estiverem disponíveis
+  useEffect(() => {
+    if (user?.id && selectedTeam?.id) {
+      console.log('Atualizando IDs no provider:', { 
+        userId: user.id, 
+        teamId: selectedTeam.id 
+      });
+      
+      setState(prev => ({
+        ...prev,
+        userId: user.id,
+        teamId: selectedTeam.id,
+        loading: {
+          ...prev.loading,
+          profile: true,
+          survey: true,
+          openQuestions: true
+        }
+      }));
+    }
+  }, [user?.id, selectedTeam?.id]);
+
+  // Carregar dados quando os IDs estiverem disponíveis no estado
+  useEffect(() => {
+    if (state.userId && state.teamId) {
+      console.log('IDs disponíveis, carregando dados:', {
+        userId: state.userId,
+        teamId: state.teamId
+      });
+      loadData();
+    }
+  }, [state.userId, state.teamId]);
 
   // Inicializar questões e seções
   useEffect(() => {
@@ -461,39 +546,12 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
       },
     ];
 
-
     setQuestions(questions);
+    setState(prev => ({
+      ...prev,
+      questions
+    }));
   }, []);
-
-  // Carregar dados
-  const loadData = useCallback(async () => {
-    if (!state.userId || !state.teamId) return;
-
-    try {
-      updateLoading('profile', true);
-      updateLoading('survey', true);
-      updateLoading('openQuestions', true);
-
-      const [profile, surveyResponses, openQuestions] = await Promise.all([
-        SurveyService.loadProfile(state.userId, state.teamId),
-        SurveyService.loadSurveyResponses(state.userId, state.teamId),
-        SurveyService.loadOpenQuestions(state.userId, state.teamId)
-      ]);
-
-      setState(prev => ({
-        ...prev,
-        profile,
-        surveyResponses: surveyResponses?.responses || null,
-        openQuestions,
-      }));
-    } catch (error: any) {
-      updateError('profile', error.message);
-    } finally {
-      updateLoading('profile', false);
-      updateLoading('survey', false);
-      updateLoading('openQuestions', false);
-    }
-  }, [state.userId, state.teamId]);
 
   const value = useMemo(() => ({
     ...state,

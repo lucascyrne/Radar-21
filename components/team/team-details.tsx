@@ -1,10 +1,12 @@
-
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { TeamStatusList } from './team-status-list';
 import { ContinueButton } from './continue-button';
 import { TeamMember } from '@/resources/team/team-model';
 import { useTeam } from '@/resources/team/team-hook';
 import InviteUserForm from './invite-user-form';
+import { TeamMembersList } from "./team-members-detail";
+import { SetupProgress } from "./setup-progress";
+import { withSurveyProgress, SurveyProgressState } from "../survey/survey-progress";
 
 interface TeamDetailsProps {
   teamId: string;
@@ -15,14 +17,23 @@ interface TeamDetailsProps {
   onInviteMessageChange: (message: string) => void;
   onSendInvite: (email: string) => Promise<void>;
   isSendingInvite: boolean;
-  onContinue: () => void;
+  surveyProgress?: SurveyProgressState;
+  onContinueSurvey?: () => void;
+  progressPercentage?: number;
 }
 
-export function TeamDetails({
+function TeamDetailsComponent({
   teamId,
   members,
   currentUserEmail,
-  onContinue
+  surveyStatus,
+  inviteMessage,
+  onInviteMessageChange,
+  onSendInvite,
+  isSendingInvite,
+  surveyProgress,
+  onContinueSurvey,
+  progressPercentage = 0
 }: TeamDetailsProps) {
   const { selectedTeam } = useTeam();
   const { loadTeamMembers } = useTeam();
@@ -37,37 +48,48 @@ export function TeamDetails({
     members.some(m => m.email === currentUserEmail && m.status === 'answered') : 
     false;
 
-
   return (
-    <div className="mt-6 space-y-6">
-      {/* Exibir seção de convite apenas para líderes */}
-      {isTeamLeader && selectedTeam && (
-        <InviteUserForm
-          teamId={teamId}
-          teamName={selectedTeam.name}
-          ownerEmail={currentUserEmail || ''}
-          onInviteSent={() => {
-            // Atualizar a lista de membros após o envio do convite
-            loadTeamMembers(teamId);
-          }}
-          existingMembers={members}
-        />
+    <div className="space-y-6">
+      {/* Progresso da pesquisa */}
+      {surveyProgress && !surveyProgress.isLoading && (
+        <div className="space-y-4">
+          <SetupProgress 
+            hasProfile={surveyProgress.hasProfile}
+            hasSurvey={surveyProgress.hasSurvey}
+            hasOpenQuestions={surveyProgress.hasOpenQuestions}
+            progress={progressPercentage}
+            onContinue={onContinueSurvey}
+          />
+        </div>
       )}
-      {/* Lista de status dos membros */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Membros da Equipe</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <TeamStatusList members={members} currentUserEmail={currentUserEmail} />
-        </CardContent>
-      </Card>
-      
-      {/* Botão para continuar para a próxima etapa */}
-      <ContinueButton 
-        onContinue={onContinue} 
-        hasCompletedSurvey={hasCompletedSurvey}
-      />
+
+      {/* Lista de membros */}
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold">Membros da Equipe</h3>
+        <TeamMembersList 
+          members={members}
+          currentUserEmail={currentUserEmail}
+        />
+      </div>
+
+      {/* Formulário de convite (apenas para líderes) */}
+      {isTeamLeader && selectedTeam && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold">Convidar Novos Membros</h3>
+          <InviteUserForm
+            teamId={teamId}
+            teamName={selectedTeam.name}
+            ownerEmail={currentUserEmail || ''}
+            onInviteSent={() => {
+              // Atualizar a lista de membros após o envio do convite
+              loadTeamMembers(teamId);
+            }}
+            existingMembers={members}
+          />
+        </div>
+      )}
     </div>
   );
-} 
+}
+
+export const TeamDetails = withSurveyProgress(TeamDetailsComponent); 

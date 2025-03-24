@@ -70,50 +70,60 @@ export const Header = memo(function Header() {
     </>
   )
 
-  // Conteúdo de autenticação
-  const AuthContent = () => (
-    <>
-      {isClient && (
-        <>
-          {user ? (
-            <div className="flex items-center space-x-4">
-              <span className="text-sm font-medium">
-                Bem-vindo, {getDisplayName(user.name)}
-              </span>
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <Avatar className="h-8 w-8 cursor-pointer">
-                    <AvatarFallback className="bg-primary text-primary-foreground">
-                      {getUserInitials(user.email)}
-                    </AvatarFallback>
-                  </Avatar>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end">
-                  <DropdownMenuItem onClick={() => router.push('/profile')} className="cursor-pointer">
-                    <Avatar className="mr-2 h-4 w-4" />
-                    <span>Meu Perfil</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                    <LogOut className="mr-2 h-4 w-4" />
-                    <span>Sair</span>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            </div>
-          ) : (
-            <div className="flex items-center space-x-2">
-              <Link href="/auth" onClick={() => setIsSheetOpen(false)}>
-                <Button variant="outline" size="sm">Login</Button>
-              </Link>
-              <Link href="/auth?tab=signup" onClick={() => setIsSheetOpen(false)}>
-                <Button size="sm">Signup</Button>
-              </Link>
-            </div>
-          )}
-        </>
-      )}
-    </>
+  // Placeholder para autenticação durante carregamento
+  const AuthPlaceholder = () => (
+    <div className="flex items-center space-x-2 opacity-0">
+      <div className="w-[70px] h-8" /> {/* Espaço para botão Login */}
+      <div className="w-[70px] h-8" /> {/* Espaço para botão Signup */}
+    </div>
   )
+
+  // Conteúdo de autenticação
+  const AuthContent = () => {
+    if (!isClient) {
+      return <AuthPlaceholder />
+    }
+
+    return (
+      <>
+        {user ? (
+          <div className="flex items-center space-x-4">
+            <span className="text-sm font-medium">
+              Bem-vindo, {getDisplayName(user.name)}
+            </span>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Avatar className="h-8 w-8 cursor-pointer">
+                  <AvatarFallback className="bg-primary text-primary-foreground">
+                    {getUserInitials(user.email)}
+                  </AvatarFallback>
+                </Avatar>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => router.push('/profile')} className="cursor-pointer">
+                  <Avatar className="mr-2 h-4 w-4" />
+                  <span>Meu Perfil</span>
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                  <LogOut className="mr-2 h-4 w-4" />
+                  <span>Sair</span>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        ) : (
+          <div className="flex items-center space-x-2">
+            <Link href="/auth" onClick={() => setIsSheetOpen(false)}>
+              <Button variant="outline" size="sm">Login</Button>
+            </Link>
+            <Link href="/auth?tab=signup" onClick={() => setIsSheetOpen(false)}>
+              <Button size="sm">Signup</Button>
+            </Link>
+          </div>
+        )}
+      </>
+    )
+  }
 
   return (
     <header className="bg-white shadow-sm">
@@ -125,12 +135,12 @@ export const Header = memo(function Header() {
           </Link>
           
           {/* Navegação para desktop */}
-          <nav className="hidden md:flex items-center space-x-4">
+          <nav className="hidden md:flex items-center space-x-4 min-w-[100px]">
             <NavContent />
           </nav>
           
           {/* Autenticação para desktop */}
-          <div className="hidden md:block">
+          <div className="hidden md:block min-w-[140px]">
             <AuthContent />
           </div>
           
