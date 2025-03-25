@@ -1,12 +1,9 @@
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { TeamStatusList } from './team-status-list';
-import { ContinueButton } from './continue-button';
 import { TeamMember } from '@/resources/team/team-model';
 import { useTeam } from '@/resources/team/team-hook';
 import InviteUserForm from './invite-user-form';
 import { TeamMembersList } from "./team-members-detail";
-import { SetupProgress } from "./setup-progress";
 import { withSurveyProgress, SurveyProgressState } from "../survey/survey-progress";
+import { SetupProgress } from './setup-progress';
 
 interface TeamDetailsProps {
   teamId: string;
@@ -26,11 +23,6 @@ function TeamDetailsComponent({
   teamId,
   members,
   currentUserEmail,
-  surveyStatus,
-  inviteMessage,
-  onInviteMessageChange,
-  onSendInvite,
-  isSendingInvite,
   surveyProgress,
   onContinueSurvey,
   progressPercentage = 0

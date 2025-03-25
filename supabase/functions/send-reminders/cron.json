@@ -1,0 +1,5 @@
+{
+  "enabled": true,
+  "schedule": "0 10 * * *",
+  "timezone": "America/Sao_Paulo"
+} 

@@ -7,6 +7,7 @@ import { useTeam } from '@/resources/team/team-hook';
 import { CreateTeamFormValues, Team } from '@/resources/team/team-model';
 import { SurveyService } from '@/resources/survey/survey.service';
 import { useToast } from '@/hooks/use-toast';
+import { ReminderService } from '@/resources/reminder/reminder.service';
 
 // Componentes UI
 import { Button } from '@/components/ui/button';
@@ -19,7 +20,6 @@ import { supabase } from '@/resources/auth/auth.service';
 import { Skeleton } from '@/components/ui/skeleton';
 
 // Componentes personalizados
-import { SetupProgress } from '@/components/team/setup-progress';
 import { CreateTeamForm } from '@/components/team/create-team-form';
 import { TeamList } from '@/components/team/team-list';
 import { TeamDetails } from '@/components/team/team-details';
@@ -283,19 +283,31 @@ export default function TeamSetupPage() {
                 </div>
 
                 {selectedTeam && (
-                  <div className="bg-card rounded-lg border shadow-sm p-6 space-y-6">
-                    <TeamDetails
-                      teamId={selectedTeam.id}
-                      members={teamMembers}
-                      currentUserEmail={user?.email || null}
-                      surveyStatus={surveyStatus}
-                      onContinue={handleNext}
-                      inviteMessage={inviteMessage}
-                      onInviteMessageChange={setInviteMessage}
-                      onSendInvite={handleSendInvite}
-                      isSendingInvite={isSendingInvite}
-                    />
-                  </div>
+                  <>
+                    <div className="bg-card rounded-lg border shadow-sm p-6 space-y-6">
+                      <TeamDetails
+                        teamId={selectedTeam.id}
+                        members={teamMembers}
+                        currentUserEmail={user?.email || null}
+                        surveyStatus={surveyStatus}
+                        onContinue={handleNext}
+                        inviteMessage={inviteMessage}
+                        onInviteMessageChange={setInviteMessage}
+                        onSendInvite={handleSendInvite}
+                        isSendingInvite={isSendingInvite}
+                      />
+                    </div>
+                    
+                    <div className="bg-card rounded-lg border shadow-sm">
+                      <InviteUserForm
+                        teamId={selectedTeam.id}
+                        teamName={selectedTeam.name}
+                        ownerEmail={user?.email || ''}
+                        onInviteSent={() => loadTeamMembers(selectedTeam.id)}
+                        existingMembers={teamMembers}
+                      />
+                    </div>
+                  </>
                 )}
               </div>
             )}
