@@ -4,6 +4,8 @@ import { useAuth } from '@/resources/auth/auth-hook';
 import { useTeam } from '@/resources/team/team-hook';
 import { SurveyService } from '@/resources/survey/survey.service';
 import { useToast } from '@/hooks/use-toast';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Card, CardContent } from '@/components/ui/card';
 
 export interface SurveyProgressState {
   hasProfile: boolean;
@@ -11,6 +13,25 @@ export interface SurveyProgressState {
   hasOpenQuestions: boolean;
   isLoading: boolean;
 }
+
+// Componente Skeleton para o progresso
+const SurveyProgressSkeleton = () => (
+  <Card className="w-full">
+    <CardContent className="p-6">
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <Skeleton className="h-4 w-[200px]" />
+          <Skeleton className="h-4 w-[100px]" />
+        </div>
+        <Skeleton className="h-2 w-full" />
+        <div className="flex gap-4">
+          <Skeleton className="h-9 w-[100px]" />
+          <Skeleton className="h-9 w-[100px]" />
+        </div>
+      </div>
+    </CardContent>
+  </Card>
+);
 
 export const withSurveyProgress = (WrappedComponent: React.ComponentType<any>) => {
   return function WithSurveyProgressComponent(props: any) {
@@ -80,6 +101,10 @@ export const withSurveyProgress = (WrappedComponent: React.ComponentType<any>) =
       const completedSteps = steps.filter(Boolean).length;
       return Math.round((completedSteps / steps.length) * 100);
     };
+
+    if (progress.isLoading) {
+      return <SurveyProgressSkeleton />;
+    }
 
     return (
       <WrappedComponent

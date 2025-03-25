@@ -4,13 +4,14 @@ import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/resources/auth/auth-hook';
 import { useTeam } from '@/resources/team/team-hook';
-import { CreateTeamFormValues } from '@/resources/team/team-model';
+import { CreateTeamFormValues, Team } from '@/resources/team/team-model';
+import { SurveyService } from '@/resources/survey/survey.service';
+import { useToast } from '@/hooks/use-toast';
 
 // Componentes UI
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { useToast } from '@/hooks/use-toast';
 import { Layout } from "@/components/layout"
 import { PlusCircleIcon } from "lucide-react"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -39,42 +40,28 @@ const TeamSkeleton = () => (
 
 export default function TeamSetupPage() {
   const router = useRouter();
-  const { user, isLoading: authLoading, isAuthenticated } = useAuth();
-  const { 
-    teams, 
-    selectedTeam, 
-    teamMembers, 
-    isLoading: teamLoading,
-    error: teamError,
-    loadTeams,
-    createTeam,
-    selectTeam,
-    generateInviteMessage,
-    resetTeamsLoaded,
-    resetMembersLoaded,
-    loadTeamMembers
-  } = useTeam();
-  
+  const { user, isLoading: authLoading } = useAuth();
+  const { teams, selectedTeam, teamMembers, createTeam, loadTeams, loadTeamMembers, generateInviteMessage, resetTeamsLoaded } = useTeam();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<string>("my-teams");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSendingInvite, setIsSendingInvite] = useState(false);
   const [inviteMessage, setInviteMessage] = useState('');
-  const [surveyStatus, setSurveyStatus] = useState<Record<string, boolean>>({});
+  const [surveyStatus, setSurveyStatus] = useState<'loading' | 'not_member' | 'error' | 'success'>('loading');
   
   // Efeito para redirecionar se não estiver autenticado
   useEffect(() => {
-    if (!authLoading && !isAuthenticated) {
+    if (!authLoading && !user) {
       router.push('/auth');
     }
-  }, [authLoading, isAuthenticated]);
+  }, [authLoading, user]);
 
   // Efeito para carregar equipes do usuário uma única vez
   useEffect(() => {
-    if (user?.id && isAuthenticated) {
+    if (user?.id) {
       loadTeams(user.id);
     }
-  }, [user?.id, isAuthenticated]);
+  }, [user?.id]);
 
   // Efeito para atualizar mensagem de convite
   useEffect(() => {
@@ -87,7 +74,10 @@ export default function TeamSetupPage() {
   // Efeito para verificar status da pesquisa
   useEffect(() => {
     const checkSurveyStatus = async () => {
-      if (!selectedTeam?.id || !user?.email) return;
+      if (!selectedTeam?.id || !user?.email) {
+        setSurveyStatus('loading');
+        return;
+      }
       
       try {
         const { data: memberData, error: memberError } = await supabase
@@ -99,22 +89,20 @@ export default function TeamSetupPage() {
 
         if (memberError) {
           if (memberError.code === 'PGRST116') {
-            // Usuário não é membro da equipe
-            setSurveyStatus(prev => ({
-              ...prev,
-              [selectedTeam.id]: false
-            }));
+            // Usuário não é membro da equipe - comportamento esperado
+            setSurveyStatus('not_member');
+            return;
           }
+          // Erro real do sistema
+          console.error('Erro ao verificar membro da equipe:', memberError);
+          setSurveyStatus('error');
           return;
         }
 
         // Verificar se o usuário já respondeu a pesquisa
         const hasAnswered = memberData.status === 'answered';
         
-        setSurveyStatus(prev => ({
-          ...prev,
-          [selectedTeam.id]: hasAnswered
-        }));
+        setSurveyStatus(hasAnswered ? 'success' : 'not_member');
 
         // Se o usuário está autenticado mas ainda não está registrado, atualizar para "invited"
         if (memberData.status === 'invited') {
@@ -125,6 +113,7 @@ export default function TeamSetupPage() {
         }
       } catch (error) {
         console.error('Erro ao verificar status da pesquisa:', error);
+        setSurveyStatus('error');
       }
     };
 
@@ -157,7 +146,7 @@ export default function TeamSetupPage() {
     } finally {
       setIsSubmitting(false);
     }
-  }, [user, createTeam, toast, resetTeamsLoaded]);
+  }, [user]);
 
   const handleSendInvite = useCallback(async (email: string) => {
     setIsSendingInvite(true);
@@ -180,8 +169,7 @@ export default function TeamSetupPage() {
       });
 
       // Forçar recarregamento dos membros
-      resetMembersLoaded(selectedTeam.id);
-      await loadTeamMembers(selectedTeam.id);
+      loadTeamMembers(selectedTeam.id);
       
       toast({
         title: "Convite enviado",
@@ -196,31 +184,36 @@ export default function TeamSetupPage() {
     } finally {
       setIsSendingInvite(false);
     }
-  }, [selectedTeam, user?.email, inviteMessage, toast, resetMembersLoaded, loadTeamMembers]);
+  }, [selectedTeam, user?.email, inviteMessage, toast, loadTeamMembers]);
 
   const handleTabChange = useCallback((value: string) => {
     setActiveTab(value);
   }, []);
 
-  const handleContinue = useCallback(() => {
-    if (selectedTeam) {
-      // Persistir o ID da equipe
-      localStorage.setItem("teamId", selectedTeam.id);
-      
-      // Encontrar o membro atual
-      const currentMember = teamMembers.find(m => m.email === user?.email);
-      
-      // Persistir o ID do membro se disponível
-      if (currentMember?.id) {
-        localStorage.setItem("teamMemberId", currentMember.id);
-      }
-      
-      const hasAnswered = currentMember?.status === 'answered';
-      
-      // Redirecionar com base no status
-      router.push(hasAnswered ? '/results' : '/profile-survey');
+  const handleNext = useCallback(async () => {
+    if (!selectedTeam?.id || !user?.id) return;
+
+    const surveyComplete = await SurveyService.checkSurveyCompletion(user.id, selectedTeam.id);
+    
+    if (surveyComplete) {
+      router.push('/open-questions');
+    } else {
+      router.push('/survey');
     }
-  }, [selectedTeam, teamMembers, user?.email, router]);
+  }, [selectedTeam?.id, user?.id, router]);
+
+  const handleTeamSelect = useCallback(async (teamId: string) => {
+    if (!user?.id) return;
+    
+    await loadTeams(user.id);
+    const surveyComplete = await SurveyService.checkSurveyCompletion(user.id, teamId);
+    
+    if (surveyComplete) {
+      router.push('/open-questions');
+    } else {
+      router.push('/survey');
+    }
+  }, [user?.id, router, loadTeams]);
 
   if (authLoading) {
     return (
@@ -248,14 +241,14 @@ export default function TeamSetupPage() {
             </TabsList>
           </div>
           
-          {teamError && (
+          {surveyStatus === 'error' && (
             <Alert variant="destructive" className="mt-4">
-              <AlertDescription>{teamError}</AlertDescription>
+              <AlertDescription>Ocorreu um erro ao verificar o status da pesquisa. Por favor, tente novamente mais tarde.</AlertDescription>
             </Alert>
           )}
           
           <TabsContent value="my-teams" className="space-y-6">
-            {teamLoading ? (
+            {surveyStatus === 'loading' ? (
               <div className="space-y-4">
                 <TeamSkeleton />
                 <TeamSkeleton />
@@ -285,7 +278,7 @@ export default function TeamSetupPage() {
                     teams={teams}
                     selectedTeamId={selectedTeam?.id}
                     userEmail={user?.email || null}
-                    onSelectTeam={selectTeam}
+                    onSelectTeam={handleTeamSelect}
                   />
                 </div>
 
@@ -296,7 +289,7 @@ export default function TeamSetupPage() {
                       members={teamMembers}
                       currentUserEmail={user?.email || null}
                       surveyStatus={surveyStatus}
-                      onContinue={handleContinue}
+                      onContinue={handleNext}
                       inviteMessage={inviteMessage}
                       onInviteMessageChange={setInviteMessage}
                       onSendInvite={handleSendInvite}

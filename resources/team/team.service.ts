@@ -564,24 +564,60 @@ export const TeamService = {
    */
   async getTeamSurveyResponses(teamId: string): Promise<any[]> {
     try {
-      const { data, error } = await supabase
-        .from('')
+      // Primeiro, buscar os membros da equipe que já responderam
+      const { data: members, error: membersError } = await supabase
+        .from('team_members')
         .select(`
-          team_member_id,
+          id,
+          team_id,
           user_id,
           email,
           role,
-          q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12
+          status
         `)
         .eq('team_id', teamId)
         .eq('status', 'answered');
 
-      if (error) {
-        console.error('Erro ao buscar respostas da equipe:', error);
-        throw error;
+      if (membersError) {
+        console.error('Erro ao buscar membros da equipe:', membersError);
+        throw membersError;
       }
 
-      return data || [];
+      if (!members || members.length === 0) {
+        return [];
+      }
+
+      // Buscar as respostas para cada membro
+      const responses = await Promise.all(
+        members.map(async (member) => {
+          const { data: surveyResponse, error: surveyError } = await supabase
+            .from('survey_responses')
+            .select('*')
+            .eq('user_id', member.user_id)
+            .eq('team_id', member.team_id)
+            .single();
+
+          if (surveyError) {
+            console.error(`Erro ao buscar respostas do membro ${member.email}:`, surveyError);
+            return null;
+          }
+
+          return {
+            team_member_id: member.id,
+            team_id: member.team_id,
+            user_id: member.user_id,
+            email: member.email,
+            role: member.role,
+            status: member.status,
+            ...surveyResponse,
+            response_created_at: surveyResponse.created_at,
+            response_updated_at: surveyResponse.updated_at
+          };
+        })
+      );
+
+      // Filtrar respostas nulas e retornar apenas as válidas
+      return responses.filter((response): response is NonNullable<typeof response> => response !== null);
     } catch (error) {
       console.error('Erro ao buscar respostas da equipe:', error);
       return [];

@@ -28,6 +28,7 @@ export function ProfileForm({ defaultValues, onSubmit }: ProfileFormProps) {
       birth_date: "",
       education: "",
       graduation_date: "",
+      graduation_university: "",
       employee_count: 0,
       organization: "",
       org_type: "",

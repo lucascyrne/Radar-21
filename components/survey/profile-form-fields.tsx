@@ -66,7 +66,9 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
           <FormItem>
             <FormLabel>Nível de escolaridade *</FormLabel>
             <Select 
-              onValueChange={field.onChange} 
+              onValueChange={(value) => {
+                field.onChange(value);
+              }} 
               value={field.value || undefined}
             >
               <FormControl>
@@ -85,6 +87,31 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
             <FormMessage />
           </FormItem>
         )}
+      />
+
+      <FormField
+          control={form.control}
+          name="graduation_university"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>
+                {`Qual a instituição de ensino que você estudou ${
+                  form.watch('education') === 'ensino_medio' ? 'o ensino médio' :
+                  form.watch('education') === 'graduacao' ? 'a graduação' :
+                  form.watch('education') === 'especializacao' ? 'a especialização' :
+                  form.watch('education') === 'mestrado' ? 'o mestrado' :
+                  'o doutorado'
+                }?`}
+              </FormLabel>
+              <FormControl>
+                <Input 
+                  placeholder="Nome da universidade"
+                  {...field}
+                />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
       />
 
       <FormField

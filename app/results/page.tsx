@@ -109,69 +109,87 @@ export default function ResultsPage() {
   useEffect(() => {
     const loadTeamData = async () => {
       try {
-        setIsLoading(true)
+        setIsLoading(true);
         
-        const teamId = selectedTeam?.id || localStorage.getItem("teamId")
-        const userId = user?.id
+        const teamId = selectedTeam?.id || localStorage.getItem("teamId");
+        const userId = user?.id;
         
         if (!teamId || !userId) {
-          console.error('IDs necessários não encontrados')
-          setIsLoading(false)
-          return
+          console.error('IDs necessários não encontrados');
+          setIsLoading(false);
+          return;
         }
         
         // Buscar respostas da equipe usando o contexto
-        const teamResponses = await loadTeamSurveyResponses(teamId)
+        const teamResponses = await loadTeamSurveyResponses(teamId);
+        console.log('Respostas da equipe carregadas:', teamResponses);
         
         if (teamResponses.length > 0) {
-          // Calcular média da equipe
-          const teamAverages = Object.keys(teamResponses[0])
+          // Separar respostas do líder e da equipe
+          const leaderResponse = teamResponses.find(member => member.role === 'leader');
+          const teamMemberResponses = teamResponses.filter(member => member.role === 'member');
+          
+          console.log('Respostas separadas:', {
+            leader: leaderResponse,
+            teamMembers: teamMemberResponses
+          });
+
+          // Calcular média da equipe (excluindo o líder)
+          const teamAverages = Object.keys(teamMemberResponses[0])
             .filter(key => key.startsWith('q'))
-            .map(questionId => ({
-              questionId,
-              average: teamResponses.reduce((sum: number, member: TeamSurveyResponse) => 
-                sum + (member[questionId as keyof TeamSurveyResponse] as number || 0), 0) / teamResponses.length
-            }))
+            .map(questionId => {
+              const sum = teamMemberResponses.reduce((acc: number, member: TeamSurveyResponse) => {
+                const value = member[questionId as keyof TeamSurveyResponse];
+                return acc + (typeof value === 'number' ? value : 0);
+              }, 0);
+              return {
+                questionId,
+                average: teamMemberResponses.length > 0 ? sum / teamMemberResponses.length : 0
+              };
+            });
 
-          // Identificar respostas do líder
-          const leaderResponses = teamResponses
-            .find((member: TeamSurveyResponse) => member.role === 'leader')
+          console.log('Médias calculadas:', teamAverages);
 
+          // Definir resultados da equipe
           setTeamResults(teamAverages.map(item => ({
             category: SurveyService.getCompetencyName(item.questionId),
-            value: item.average
-          })))
+            value: Number(item.average.toFixed(1))
+          })));
           
-          if (leaderResponses) {
-            setLeaderResults(Object.entries(leaderResponses)
+          // Definir resultados do líder se disponível
+          if (leaderResponse) {
+            const leaderDataPoints = Object.entries(leaderResponse)
               .filter(([key]) => key.startsWith('q'))
               .map(([key, value]) => ({
                 category: SurveyService.getCompetencyName(key),
                 value: Number(value)
-              })))
+              }));
+            
+            console.log('Dados do líder:', leaderDataPoints);
+            setLeaderResults(leaderDataPoints);
           }
         }
         
         // Carregar respostas abertas
-        const openQuestionsData = await SurveyService.loadOpenQuestions(userId, teamId)
-        setOpenQuestions(openQuestionsData)
+        const openQuestionsData = await SurveyService.loadOpenQuestions(userId, teamId);
+        setOpenQuestions(openQuestionsData);
         
-        setIsLoading(false)
+        setIsLoading(false);
       } catch (error) {
-        console.error('Erro ao carregar resultados:', error)
+        console.error('Erro ao carregar resultados:', error);
         toast({
           title: "Erro ao carregar resultados",
           description: "Não foi possível carregar os resultados da equipe.",
           variant: "destructive",
-        })
-        setIsLoading(false)
+        });
+        setIsLoading(false);
       }
-    }
+    };
     
     if (userResults.length > 0) {
-      loadTeamData()
+      loadTeamData();
     }
-  }, [userResults.length, selectedTeam?.id, user?.id])
+  }, [userResults.length, selectedTeam?.id, user?.id]);
 
   // Verificar se temos dados para exibir
   const hasUserData = userResults.length > 0

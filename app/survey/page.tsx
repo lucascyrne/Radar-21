@@ -8,11 +8,22 @@ import { Layout } from "@/components/layout"
 import { useToast } from "@/hooks/use-toast"
 import { useSurvey } from "@/resources/survey/survey-hook"
 import { QuestionSection } from "@/components/survey/question-section"
-import { SetupProgress } from '@/components/team/setup-progress'
 import { useTeam } from "@/resources/team/team-hook"
 import { useAuth } from "@/resources/auth/auth-hook"
+import { withSurveyProgress } from '@/components/survey/survey-progress'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 
-export default function SurveyPage() {
+interface SurveyPageProps {
+  surveyProgress?: {
+    hasProfile: boolean;
+    hasSurvey: boolean;
+    hasOpenQuestions: boolean;
+  };
+  progressPercentage?: number;
+  onContinueSurvey?: () => void;
+}
+
+function SurveyPage({ progressPercentage = 0, onContinueSurvey }: SurveyPageProps) {
   const router = useRouter()
   const { toast } = useToast()
   const { user } = useAuth()
@@ -22,7 +33,8 @@ export default function SurveyPage() {
     loading,
     error,
     answers,
-    saveAnswers
+    saveAnswers,
+    loadData
   } = useSurvey()
   
   const [progress, setProgress] = useState(0)
@@ -208,9 +220,37 @@ export default function SurveyPage() {
     });
   }, [questions, answeredCount, progress, loading]);
 
+  useEffect(() => {
+    if (!loading.survey) {
+      loadData();
+    }
+  }, []);
+
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8 space-y-8 max-w-4xl">
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle>Progresso do Questionário</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-sm text-muted-foreground">
+                {progressPercentage}% concluído
+              </span>
+              <span className="text-sm text-muted-foreground">
+                {Math.round(progressPercentage / 33.33)} de 3 etapas
+              </span>
+            </div>
+            <Progress value={progressPercentage} className="h-2" />
+            <div className="flex gap-4">
+              <Button onClick={onContinueSurvey} variant="outline">
+                Continuar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+
         <div className="space-y-4">
           <h1 className="text-3xl font-bold tracking-tight">Questionário de Competências</h1>
           <p className="text-muted-foreground">
@@ -266,4 +306,6 @@ export default function SurveyPage() {
     </Layout>
   )
 }
+
+export default withSurveyProgress(SurveyPage)
 

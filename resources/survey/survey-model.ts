@@ -2,16 +2,12 @@ import { z } from 'zod';
 
 // Esquema para o perfil do usuário
 export const profileSchema = z.object({
-  name: z.string().min(3, 'Nome deve ter pelo menos 3 caracteres'),
+  name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   birth_date: z.string().optional(),
   education: z.string().min(1, 'Selecione seu nível de escolaridade'),
   graduation_date: z.string().optional(),
-  graduation_course: z.string().optional(),
-  graduation_institution: z.string().optional(),
-  company: z.string().optional(),
-  position: z.string().optional(),
+  graduation_university: z.string().optional(),
   employee_count: z.number().min(0, 'Número de funcionários deve ser maior ou igual a 0'),
-  industry: z.string().optional(),
   organization: z.string().min(2, 'Nome da organização deve ter pelo menos 2 caracteres'),
   website: z.string().url('URL inválida').optional().or(z.literal('')),
   org_type: z.string().min(1, 'Selecione o tipo de organização'),
@@ -73,10 +69,21 @@ export interface SurveyState {
 export type TeamMemberStatus = 'invited' | 'answered';
 
 // Interface para o perfil do usuário
-export interface UserProfile extends ProfileFormValues {
+export interface UserProfile {
   id: string;
   user_id: string;
   team_id: string;
+  name: string;
+  birth_date?: string;
+  education: string;
+  graduation_university?: string;
+  employee_count: number;
+  organization: string;
+  website?: string;
+  org_type: string;
+  org_size: string;
+  city: string;
+  work_model: string;
   created_at: string;
   updated_at: string;
 }
@@ -89,6 +96,7 @@ export interface SurveyResponse {
   created_at: string;
   updated_at: string;
   responses: SurveyResponses;
+  is_complete: boolean;
 }
 
 // Interface para as respostas das perguntas abertas no banco de dados
@@ -103,9 +111,5 @@ export interface OpenQuestionResponse extends OpenQuestionsFormValues {
 export interface RadarDataPoint {
   category: string;
   value: number;
-}
-export interface RadarDataPoint {
-  category: string
-  value: number
 }
 

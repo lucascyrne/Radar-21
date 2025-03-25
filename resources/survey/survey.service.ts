@@ -57,9 +57,13 @@ export class SurveyService {
         .select('*')
         .eq('user_id', userId)
         .eq('team_id', teamId)
-        .single();
+        .maybeSingle();
 
-      if (error) return handleDataError(error);
+      if (error && error.code !== 'PGRST116') {
+        console.error('Erro ao carregar perfil:', error);
+        return handleDataError(error);
+      }
+
       return data;
     } catch (error) {
       console.error('Erro ao carregar perfil:', error);
@@ -116,6 +120,7 @@ export class SurveyService {
         team_id: data.team_id,
         created_at: data.created_at,
         updated_at: data.updated_at,
+        is_complete: data.is_complete,
         responses
       };
     } catch (error) {
@@ -126,10 +131,15 @@ export class SurveyService {
 
   static async saveSurveyResponses(userId: string, teamId: string, responses: SurveyResponses): Promise<boolean> {
     try {
+      // Verificar se todas as 12 questões foram respondidas
+      const isComplete = Array.from({ length: 12 }, (_, i) => `q${i + 1}`)
+        .every(q => responses[q] !== undefined && responses[q] !== null);
+
       const dbResponses = {
         user_id: userId,
         team_id: teamId,
         updated_at: new Date().toISOString(),
+        is_complete: isComplete,
         ...responses
       };
 
@@ -140,6 +150,12 @@ export class SurveyService {
         });
 
       if (error) return handleBooleanError(error);
+
+      // Se salvou com sucesso e está completo, atualizar o status do membro
+      if (isComplete) {
+        await this.updateMemberStatus(userId, 'answered');
+      }
+
       return true;
     } catch (error) {
       console.error('Erro ao salvar respostas:', error);
@@ -223,13 +239,15 @@ export class SurveyService {
 
   static async checkSurveyCompletion(userId: string, teamId: string): Promise<boolean> {
     try {
-      const [profile, surveyResponses, openQuestions] = await Promise.all([
-        this.loadProfile(userId, teamId),
-        this.loadSurveyResponses(userId, teamId),
-        this.loadOpenQuestions(userId, teamId)
-      ]);
+      const { data, error } = await supabase
+        .from('survey_responses')
+        .select('is_complete')
+        .eq('user_id', userId)
+        .eq('team_id', teamId)
+        .single();
 
-      return !!profile && !!surveyResponses && !!openQuestions;
+      if (error) return handleBooleanError(error);
+      return data?.is_complete || false;
     } catch (error) {
       console.error('Erro ao verificar conclusão do questionário:', error);
       return false;
