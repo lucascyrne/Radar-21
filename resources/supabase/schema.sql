@@ -245,3 +245,28 @@ FROM team_members tm
 LEFT JOIN survey_responses sr 
   ON sr.user_id = tm.user_id 
   AND sr.team_id = tm.team_id;
+
+-- Migração de correção para remover constraint problemática
+BEGIN;
+
+-- Remover a constraint que está causando o erro de duplicação
+ALTER TABLE survey_responses 
+  DROP CONSTRAINT IF EXISTS survey_responses_user_id_unique;
+
+-- Verificar se a constraint composta existe, se não existir, criar
+DO $$ 
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 
+    FROM pg_constraint 
+    WHERE conname = 'survey_responses_user_team_unique'
+  ) THEN
+    ALTER TABLE survey_responses 
+      ADD CONSTRAINT survey_responses_user_team_unique UNIQUE (user_id, team_id);
+  END IF;
+END $$;
+
+COMMIT;
+
+-- Remover todas as migrações anteriores relacionadas a essas constraints para evitar conflitos
+-- (você pode remover as migrações anteriores do arquivo que tentam criar essas constraints)

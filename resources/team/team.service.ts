@@ -565,7 +565,7 @@ export const TeamService = {
   async getTeamSurveyResponses(teamId: string): Promise<any[]> {
     try {
       const { data, error } = await supabase
-        .from('team_survey_responses')
+        .from('')
         .select(`
           team_member_id,
           user_id,
