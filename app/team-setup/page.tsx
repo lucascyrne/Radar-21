@@ -297,16 +297,6 @@ export default function TeamSetupPage() {
                         isSendingInvite={isSendingInvite}
                       />
                     </div>
-                    
-                    <div className="bg-card rounded-lg border shadow-sm">
-                      <InviteUserForm
-                        teamId={selectedTeam.id}
-                        teamName={selectedTeam.name}
-                        ownerEmail={user?.email || ''}
-                        onInviteSent={() => loadTeamMembers(selectedTeam.id)}
-                        existingMembers={teamMembers}
-                      />
-                    </div>
                   </>
                 )}
               </div>
