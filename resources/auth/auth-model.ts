@@ -1,6 +1,6 @@
-import { z } from 'zod';
-import { Session } from '@supabase/supabase-js';
-import { SurveyResponses } from '../survey/survey-model';
+import { Session } from "@supabase/supabase-js";
+import { z } from "zod";
+import { SurveyResponses } from "../survey/survey-model";
 
 // Tipos para autenticação e gerenciamento de usuários
 export interface User {
@@ -24,14 +24,16 @@ export interface User {
 }
 
 export enum UserRole {
-  ADMIN = 'admin',
-  MEMBER = 'member',
-  GUEST = 'guest'
+  COLLABORATOR = "COLLABORATOR",
+  LEADER = "LEADER",
+  ORGANIZATION = "ORGANIZATION",
+  ADMIN = "ADMIN",
+  SUPPORT = "SUPPORT",
 }
 
 export enum UserStatus {
-  INVITED = 'Convidado',
-  RESPONDED = 'Respondido'
+  INVITED = "Convidado",
+  RESPONDED = "Respondido",
 }
 
 export interface AuthState {
@@ -64,16 +66,25 @@ export interface AuthResponse {
 
 // Esquemas de validação Zod
 export const loginSchema = z.object({
-  email: z.string().email('Email inválido'),
-  password: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
+  email: z.string().email("Email inválido"),
+  password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres"),
 });
 
-export const registerSchema = loginSchema.extend({
-  confirmPassword: z.string().min(6, 'A senha deve ter pelo menos 6 caracteres'),
-}).refine((data) => data.password === data.confirmPassword, {
-  message: "As senhas não coincidem",
-  path: ["confirmPassword"],
-});
+export const registerSchema = z
+  .object({
+    email: z.string().email("Email inválido"),
+    password: z.string().min(6, "A senha deve ter pelo menos 6 caracteres"),
+    confirmPassword: z
+      .string()
+      .min(6, "A senha deve ter pelo menos 6 caracteres"),
+    role: z.enum(["COLLABORATOR", "LEADER"], {
+      required_error: "Selecione seu papel no sistema",
+    }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "As senhas não coincidem",
+    path: ["confirmPassword"],
+  });
 
 export type LoginFormValues = z.infer<typeof loginSchema>;
 export type RegisterFormValues = z.infer<typeof registerSchema>;

@@ -1,7 +1,7 @@
-import { createContext } from 'react';
-import { AuthState, InviteUserParams, User } from './auth-model';
-import { Session } from '@supabase/supabase-js';
-import { SurveyResponses } from '../survey/survey-model';
+import { Session } from "@supabase/supabase-js";
+import { createContext } from "react";
+import { SurveyResponses } from "../survey/survey-model";
+import { AuthState, InviteUserParams, User } from "./auth-model";
 
 export const initialState: AuthState = {
   user: null,
@@ -15,11 +15,20 @@ export const initialState: AuthState = {
 export interface AuthContextType extends AuthState {
   signInWithGoogle: () => Promise<void>;
   signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    role: string
+  ) => Promise<void>;
   signOut: () => Promise<void>;
   clearError: () => void;
-  inviteUser: (params: InviteUserParams) => Promise<{ success: boolean; error?: string }>;
-  updateFormProgress: (page: string, isComplete?: boolean) => Promise<{ success: boolean; error?: string }>;
+  inviteUser: (
+    params: InviteUserParams
+  ) => Promise<{ success: boolean; error?: string }>;
+  updateFormProgress: (
+    page: string,
+    isComplete?: boolean
+  ) => Promise<{ success: boolean; error?: string }>;
   getNextFormPage: () => string;
   hasCompletedForm: () => boolean;
   setUser: (user: User | null) => void;
@@ -39,7 +48,7 @@ const AuthContext = createContext<AuthContextType>({
   clearError: () => {},
   inviteUser: async () => ({ success: false }),
   updateFormProgress: async () => ({ success: false }),
-  getNextFormPage: () => '/form/step1',
+  getNextFormPage: () => "/form/step1",
   hasCompletedForm: () => false,
   setUser: () => {},
   setSession: () => {},

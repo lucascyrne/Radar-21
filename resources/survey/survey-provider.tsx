@@ -4,15 +4,13 @@ import { ReactNode, useCallback, useEffect, useState, useMemo } from 'react';
 import SurveyContext from './survey-context';
 import { SurveyService } from './survey.service';
 import { 
-  ProfileFormValues,
   OpenQuestionsFormValues,
   SurveyState,
   Question,
   SurveyFormValues,
   RadarDataPoint,
   SurveyResponses,
-  UserProfile,
-  OpenQuestionResponse
+  DemographicFormValues
 } from './survey-model';
 import { useAuth } from '@/resources/auth/auth-hook';
 import { useTeam } from '@/resources/team/team-hook';
@@ -22,36 +20,28 @@ interface SurveyProviderProps {
   children: ReactNode;
 }
 
-interface LoadingState {
-  profile: boolean;
-  survey: boolean;
-  openQuestions: boolean;
-  teamMember: boolean;
-  saving: boolean;
-}
-
 const initialState: SurveyState = {
   userId: null,
   teamId: null,
-  profile: null,
   surveyResponses: null,
   openQuestions: null,
   loading: {
-    profile: false,
     survey: false,
     openQuestions: false,
     teamMember: false,
-    saving: false
+    saving: false,
+    demographicData: false
   },
   error: {
-    profile: null,
     survey: null,
-    openQuestions: null
+    openQuestions: null,
+    demographicData: null
   },
   radarData: [],
   questions: [],
   answers: null,
-  isSaving: false
+  isSaving: false,
+  demographicData: null
 };
 
 export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
@@ -124,10 +114,10 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
     }
   }, []);
 
-  // Carregar dados do perfil do usuário
-  const loadProfile = useCallback(async () => {
+  // Carregar dados demográficos
+  const loadDemographicData = useCallback(async () => {
     try {
-      updateLoading('profile', true);
+      updateLoading('demographicData', true);
       
       if (!state.userId || !state.teamId) {
         const ids = await fetchTeamMemberId();
@@ -142,19 +132,19 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
         throw new Error("IDs do usuário e equipe não encontrados");
       }
       
-      const profile = await SurveyService.loadProfile(state.userId, state.teamId);
-      setState(prev => ({ ...prev, profile }));
-      return profile;
+      const demographicData = await SurveyService.loadDemographicData(state.userId, state.teamId);
+      setState(prev => ({ ...prev, demographicData }));
+      return demographicData;
     } catch (error: any) {
-      updateError('profile', error.message || 'Erro ao carregar perfil');
+      updateError('demographicData', error.message || 'Erro ao carregar dados demográficos');
       return null;
     } finally {
-      updateLoading('profile', false);
+      updateLoading('demographicData', false);
     }
   }, [state.userId, state.teamId]);
 
-  // Salvar perfil do usuário
-  const saveProfile = useCallback(async (data: ProfileFormValues): Promise<boolean> => {
+  // Salvar dados demográficos
+  const saveDemographicData = useCallback(async (data: DemographicFormValues): Promise<boolean> => {
     try {
       updateLoading('saving', true);
       
@@ -162,25 +152,25 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
         throw new Error('ID do usuário ou equipe não encontrado');
       }
       
-      await SurveyService.saveProfile(state.userId, state.teamId, data);
-      const savedProfile = await SurveyService.loadProfile(state.userId, state.teamId);
+      await SurveyService.saveDemographicData(state.userId, state.teamId, data);
+      const savedData = await SurveyService.loadDemographicData(state.userId, state.teamId);
       
       setState(prev => ({ 
         ...prev, 
-        profile: savedProfile,
-        error: { ...prev.error, profile: null }
+        demographicData: savedData,
+        error: { ...prev.error, demographicData: null }
       }));
       
       return true;
     } catch (error: any) {
-      updateError('profile', error.message || 'Erro ao salvar perfil');
+      updateError('demographicData', error.message || 'Erro ao salvar dados demográficos');
       return false;
     } finally {
       updateLoading('saving', false);
     }
   }, [state.userId, state.teamId]);
 
-  // Carregar respostas do questionário
+  // Carregar dados do perfil do usuário
   const loadSurveyResponses = useCallback(async () => {
     try {
       updateLoading('survey', true);
@@ -346,7 +336,7 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
       
       return isComplete;
     } catch (error: any) {
-      updateError('profile', error.message || 'Erro ao verificar conclusão das etapas');
+      updateError('demographicData', error.message || 'Erro ao verificar conclusão das etapas');
       return false;
     } finally {
       updateLoading('saving', false);
@@ -412,37 +402,37 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
         return;
       }
 
-      updateLoading('profile', true);
+      updateLoading('demographicData', true);
       updateLoading('survey', true);
       updateLoading('openQuestions', true);
 
-      const [profile, surveyResponses, openQuestions] = await Promise.all([
-        SurveyService.loadProfile(state.userId, state.teamId),
+      const [demographicData, surveyResponses, openQuestions] = await Promise.all([
+        SurveyService.loadDemographicData(state.userId, state.teamId),
         SurveyService.loadSurveyResponses(state.userId, state.teamId),
         SurveyService.loadOpenQuestions(state.userId, state.teamId)
       ]);
 
-      console.log('Dados carregados:', { profile, surveyResponses, openQuestions });
+      console.log('Dados carregados:', { demographicData, surveyResponses, openQuestions });
 
       setState(prev => ({
         ...prev,
-        profile,
+        demographicData,
         surveyResponses: surveyResponses?.responses || null,
         openQuestions,
         answers: surveyResponses?.responses || null,
         error: {
-          profile: null,
+          demographicData: null,
           survey: null,
           openQuestions: null
         }
       }));
     } catch (error: any) {
       console.error('Erro ao carregar dados:', error);
-      updateError('profile', error.message);
+      updateError('demographicData', error.message);
       updateError('survey', error.message);
       updateError('openQuestions', error.message);
     } finally {
-      updateLoading('profile', false);
+      updateLoading('demographicData', false);
       updateLoading('survey', false);
       updateLoading('openQuestions', false);
     }
@@ -462,7 +452,7 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
         teamId: selectedTeam.id,
         loading: {
           ...prev.loading,
-          profile: true,
+          demographicData: true,
           survey: true,
           openQuestions: true
         }
@@ -557,7 +547,7 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
     ...state,
     saveAnswers,
     generateRadarData,
-    saveProfile,
+    saveDemographicData,
     saveSurveyResponses,
     saveOpenQuestions,
     updateUserId,
@@ -565,12 +555,13 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
     updateError,
     updateLoading,
     loadData,
-    completeAllSteps
+    completeAllSteps,
+    loadDemographicData
   }), [
     state,
     saveAnswers,
     generateRadarData,
-    saveProfile,
+    saveDemographicData,
     saveSurveyResponses,
     saveOpenQuestions,
     updateUserId,
@@ -578,7 +569,8 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
     updateError,
     updateLoading,
     loadData,
-    completeAllSteps
+    completeAllSteps,
+    loadDemographicData
   ]);
 
   return (

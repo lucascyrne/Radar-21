@@ -1,13 +1,13 @@
 import { createClient } from '@supabase/supabase-js';
 import { 
-  UserProfile, 
+  DemographicData, 
   SurveyResponse, 
   OpenQuestionResponse, 
-  ProfileFormValues,
+  DemographicFormValues,
   SurveyResponses,
   OpenQuestionsFormValues,
-  TeamMemberStatus
 } from './survey-model';
+import { TeamMemberStatus } from '../team/team-model';
 
 // Configuração do cliente Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || '';
@@ -50,42 +50,42 @@ interface SurveyResponseData {
 }
 
 export class SurveyService {
-  static async loadProfile(userId: string, teamId: string): Promise<UserProfile | null> {
+  static async loadDemographicData(userId: string, teamId: string): Promise<DemographicData | null> {
     try {
       const { data, error } = await supabase
-        .from('user_profiles')
+        .from('demographic_data')
         .select('*')
         .eq('user_id', userId)
         .eq('team_id', teamId)
         .maybeSingle();
 
       if (error && error.code !== 'PGRST116') {
-        console.error('Erro ao carregar perfil:', error);
+        console.error('Erro ao carregar dados demográficos:', error);
         return handleDataError(error);
       }
 
       return data;
     } catch (error) {
-      console.error('Erro ao carregar perfil:', error);
+      console.error('Erro ao carregar dados demográficos:', error);
       return null;
     }
   }
 
-  static async saveProfile(userId: string, teamId: string, profile: ProfileFormValues): Promise<boolean> {
+  static async saveDemographicData(userId: string, teamId: string, data: DemographicFormValues): Promise<boolean> {
     try {
       const { error } = await supabase
-        .from('user_profiles')
+        .from('demographic_data')
         .upsert({
           user_id: userId,
           team_id: teamId,
-          ...profile,
+          ...data,
           updated_at: new Date().toISOString()
         });
 
       if (error) return handleBooleanError(error);
       return true;
     } catch (error) {
-      console.error('Erro ao salvar perfil:', error);
+      console.error('Erro ao salvar dados demográficos:', error);
       return false;
     }
   }

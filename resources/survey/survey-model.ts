@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-// Esquema para o perfil do usuário
-export const profileSchema = z.object({
+// Esquema para os dados demográficos (primeiro passo)
+export const demographicDataSchema = z.object({
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   birth_date: z.string().optional(),
   education: z.string().min(1, 'Selecione seu nível de escolaridade'),
@@ -16,7 +16,7 @@ export const profileSchema = z.object({
   work_model: z.string().min(1, 'Selecione o modelo de trabalho'),
 });
 
-export type ProfileFormValues = z.infer<typeof profileSchema>;
+export type DemographicFormValues = z.infer<typeof demographicDataSchema>;
 
 // Esquema para as perguntas abertas
 export const openQuestionsSchema = z.object({
@@ -44,18 +44,18 @@ export interface Question {
 export interface SurveyState {
   userId: string | null;
   teamId: string | null;
-  profile: UserProfile | null;
+  demographicData: DemographicData | null;
   surveyResponses: SurveyResponses | null;
   openQuestions: OpenQuestionResponse | null;
   loading: {
-    profile: boolean;
+    demographicData: boolean;
     survey: boolean;
     openQuestions: boolean;
     teamMember: boolean;
     saving: boolean;
   };
   error: {
-    profile: string | null;
+    demographicData: string | null;
     survey: string | null;
     openQuestions: string | null;
   };
@@ -65,11 +65,8 @@ export interface SurveyState {
   isSaving: boolean;
 }
 
-// Tipo para o status do membro da equipe
-export type TeamMemberStatus = 'invited' | 'answered';
-
-// Interface para o perfil do usuário
-export interface UserProfile {
+// Interface para os dados demográficos
+export interface DemographicData {
   id: string;
   user_id: string;
   team_id: string;
@@ -77,6 +74,7 @@ export interface UserProfile {
   birth_date?: string;
   education: string;
   graduation_university?: string;
+  graduation_date?: string;
   employee_count: number;
   organization: string;
   website?: string;

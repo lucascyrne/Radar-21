@@ -1,15 +1,14 @@
-'use client';
+"use client";
 
-import { ReactNode, useEffect, useState, useCallback } from 'react';
-import { Session } from '@supabase/supabase-js';
-import AuthContext, { initialState } from './auth-context';
-import { AuthService } from './auth.service';
-import { AuthState, User, InviteUserParams } from './auth-model';
-import { useRouter } from 'next/navigation';
-import { supabase } from './auth.service';
-import { TeamService } from '../team/team.service';
-import { InviteService } from '../invite/invite.service';
-import { SurveyResponses } from '../survey/survey-model';
+import { Session } from "@supabase/supabase-js";
+import { useRouter } from "next/navigation";
+import { ReactNode, useCallback, useEffect, useState } from "react";
+import { InviteService } from "../invite/invite.service";
+import { SurveyResponses } from "../survey/survey-model";
+import { TeamService } from "../team/team.service";
+import AuthContext, { initialState } from "./auth-context";
+import { AuthState, InviteUserParams, User } from "./auth-model";
+import { AuthService, supabase } from "./auth.service";
 
 interface AuthProviderProps {
   children: ReactNode;
@@ -20,28 +19,33 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const router = useRouter();
 
   const updateState = (updates: Partial<AuthState>) => {
-    setState(current => ({ ...current, ...updates }));
+    setState((current) => ({ ...current, ...updates }));
   };
 
   // Função para atualizar as respostas da pesquisa
-  const setSurveyResponses = useCallback((surveyResponses: SurveyResponses | null) => {
-    updateState({ surveyResponses });
-  }, []);
+  const setSurveyResponses = useCallback(
+    (surveyResponses: SurveyResponses | null) => {
+      updateState({ surveyResponses });
+    },
+    []
+  );
 
   const updateStateWithSession = (session: Session | null) => {
-    const user = session?.user ? {
-      id: session.user.id,
-      email: session.user.email || '',
-      name: session.user.user_metadata?.name,
-      avatar_url: session.user.user_metadata?.avatar_url,
-      created_at: session.user.created_at,
-      updated_at: session.user.updated_at,
-      team_id: session.user.user_metadata?.team_id,
-      role: session.user.user_metadata?.role,
-      status: session.user.user_metadata?.status,
-      last_form_page: session.user.user_metadata?.last_form_page,
-      has_completed_form: session.user.user_metadata?.has_completed_form,
-    } : null;
+    const user = session?.user
+      ? {
+          id: session.user.id,
+          email: session.user.email || "",
+          name: session.user.user_metadata?.name,
+          avatar_url: session.user.user_metadata?.avatar_url,
+          created_at: session.user.created_at,
+          updated_at: session.user.updated_at,
+          team_id: session.user.user_metadata?.team_id,
+          role: session.user.user_metadata?.role,
+          status: session.user.user_metadata?.status,
+          last_form_page: session.user.user_metadata?.last_form_page,
+          has_completed_form: session.user.user_metadata?.has_completed_form,
+        }
+      : null;
 
     updateState({
       session,
@@ -60,42 +64,47 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         const session = await AuthService.getSession();
         if (mounted) {
           updateStateWithSession(session);
-          
+
           if (session?.user) {
             await AuthService.processAuthenticatedUser(session.user);
           }
         }
       } catch (error) {
-        console.error('Erro ao inicializar autenticação:', error);
+        console.error("Erro ao inicializar autenticação:", error);
         if (mounted) {
-          updateState({ isLoading: false, error: 'Erro ao inicializar autenticação' });
+          updateState({
+            isLoading: false,
+            error: "Erro ao inicializar autenticação",
+          });
         }
       }
     };
 
     initialize();
 
-    const { data: { subscription } } = AuthService.onAuthStateChange(async (event, session) => {
+    const {
+      data: { subscription },
+    } = AuthService.onAuthStateChange(async (event, session) => {
       if (!mounted) return;
 
-      console.log('Auth state changed:', event);
+      console.log("Auth state changed:", event);
 
       switch (event) {
-        case 'SIGNED_IN':
+        case "SIGNED_IN":
           updateStateWithSession(session);
           if (session?.user) {
             await AuthService.processAuthenticatedUser(session.user);
             // Só redireciona para team-setup se o usuário estiver na página de autenticação
-            if (window.location.pathname === '/auth') {
-              router.push('/team-setup');
+            if (window.location.pathname === "/auth") {
+              router.push("/team-setup");
             }
           }
           break;
-        case 'SIGNED_OUT':
+        case "SIGNED_OUT":
           updateStateWithSession(null);
-          router.push('/auth');
+          router.push("/auth");
           break;
-        case 'USER_UPDATED':
+        case "USER_UPDATED":
           updateStateWithSession(session);
           break;
       }
@@ -112,7 +121,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     try {
       updateState({ isLoading: true, error: null });
       await AuthService.signInWithGoogle({
-        redirectTo: `${window.location.origin}/auth/callback`
+        redirectTo: `${window.location.origin}/auth/callback`,
       });
     } catch (error: any) {
       updateState({ error: error.message, isLoading: false });
@@ -123,8 +132,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const signInWithEmail = async (email: string, password: string) => {
     try {
       updateState({ isLoading: true, error: null });
-      const { user: supabaseUser } = await AuthService.signInWithEmail(email, password);
-      
+      const { user: supabaseUser } = await AuthService.signInWithEmail(
+        email,
+        password
+      );
+
       if (supabaseUser) {
         // Converter o usuário do Supabase para nosso modelo User
         const user: User = {
@@ -132,21 +144,21 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           email: supabaseUser.email || email,
           created_at: supabaseUser.created_at,
           updated_at: supabaseUser.updated_at,
-          ...supabaseUser.user_metadata
+          ...supabaseUser.user_metadata,
         };
 
         // Processar convite pendente ao fazer login
         const inviteProcessed = await processInvite(user);
-        
+
         updateState({
           user,
           isLoading: false,
-          error: null
+          error: null,
         });
 
         // Redirecionar com base no processamento do convite
         if (inviteProcessed) {
-          router.push('/team-setup');
+          router.push("/team-setup");
         }
       }
     } catch (error: any) {
@@ -161,14 +173,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       // Verificar se já existe um teamId associado ao usuário
       if (user.team_id) {
-        console.log('Usuário já possui uma equipe:', user.team_id);
+        console.log("Usuário já possui uma equipe:", user.team_id);
         return false;
       }
 
       // Verificar se há um convite pendente antes de tentar processar
-      const hasPendingInvite = await InviteService.checkPendingInvite(user.email);
+      const hasPendingInvite = await InviteService.checkPendingInvite(
+        user.email
+      );
       if (!hasPendingInvite) {
-        console.log('Nenhum convite pendente encontrado para:', user.email);
+        console.log("Nenhum convite pendente encontrado para:", user.email);
         return false;
       }
 
@@ -177,24 +191,32 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         // Atualizar o estado do usuário com a nova equipe
         const updatedUser = { ...user, team_id: teamId };
         updateState({ user: updatedUser });
-        
+
         // Sincronizar associações de equipe
         await TeamService.syncUserTeamMemberships(user.id, user.email);
         return true;
       }
       return false;
     } catch (error) {
-      console.error('Erro ao processar convite:', error);
+      console.error("Erro ao processar convite:", error);
       // Não atualizar o estado com erro para não afetar a experiência do usuário
       return false;
     }
   };
 
-  const signUpWithEmail = async (email: string, password: string) => {
+  const signUpWithEmail = async (
+    email: string,
+    password: string,
+    role: string
+  ) => {
     try {
       updateState({ isLoading: true, error: null });
-      const { user: supabaseUser } = await AuthService.signUpWithEmail(email, password);
-      
+      const { user: supabaseUser } = await AuthService.signUpWithEmail(
+        email,
+        password,
+        role
+      );
+
       if (supabaseUser) {
         // Converter o usuário do Supabase para nosso modelo User
         const user: User = {
@@ -202,22 +224,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           email: supabaseUser.email || email,
           created_at: supabaseUser.created_at,
           updated_at: supabaseUser.updated_at,
-          ...supabaseUser.user_metadata
+          ...supabaseUser.user_metadata,
         };
 
         // Processar convite pendente imediatamente após o registro
         const inviteProcessed = await processInvite(user);
-        
+
         if (inviteProcessed) {
           // Atualizar estado com informações da equipe
           updateState({
             user,
             isLoading: false,
-            error: null
+            error: null,
           });
-          
+
           // Redirecionar para team-setup após processamento bem-sucedido
-          router.push('/team-setup');
+          router.push("/team-setup");
         }
       }
     } catch (error: any) {
@@ -240,25 +262,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const updateFormProgress = async (page: string, isComplete = false) => {
     try {
       if (!state.user) {
-        return { success: false, error: 'Usuário não autenticado' };
+        return { success: false, error: "Usuário não autenticado" };
       }
 
       const { error } = await supabase
-        .from('users')
+        .from("users")
         .update({
           last_form_page: page,
           has_completed_form: isComplete,
         })
-        .eq('id', state.user.id);
+        .eq("id", state.user.id);
 
       if (error) throw error;
 
       updateState({
-        user: state.user ? {
-          ...state.user,
-          last_form_page: page,
-          has_completed_form: isComplete,
-        } : null
+        user: state.user
+          ? {
+              ...state.user,
+              last_form_page: page,
+              has_completed_form: isComplete,
+            }
+          : null,
       });
 
       return { success: true };
@@ -269,9 +293,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const inviteUser = async (params: InviteUserParams) => {
     try {
-      const response = await fetch('/api/send-invite', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/send-invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: params.email,
           inviteUrl: `${window.location.origin}/auth/accept-invite?team=${params.teamId}`,
@@ -290,20 +314,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // Utility Methods
   const getNextFormPage = () => {
-    if (!state.user?.last_form_page) return '/form/step1';
+    if (!state.user?.last_form_page) return "/form/step1";
 
     const formPages = [
-      '/form/step1',
-      '/form/step2',
-      '/form/step3',
-      '/form/step4',
-      '/form/step5',
-      '/resultados',
+      "/form/step1",
+      "/form/step2",
+      "/form/step3",
+      "/form/step4",
+      "/form/step5",
+      "/resultados",
     ];
 
     const currentIndex = formPages.indexOf(state.user.last_form_page);
     return currentIndex === -1 || currentIndex === formPages.length - 1
-      ? '/form/step1'
+      ? "/form/step1"
       : formPages[currentIndex + 1];
   };
 
@@ -326,9 +350,10 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         setUser: (user) => updateState({ user }),
         setSession: (session) => updateState({ session }),
         setIsLoading: (isLoading) => updateState({ isLoading }),
-        setIsAuthenticated: (isAuthenticated) => updateState({ isAuthenticated }),
+        setIsAuthenticated: (isAuthenticated) =>
+          updateState({ isAuthenticated }),
         setError: (error) => updateState({ error }),
-        setSurveyResponses
+        setSurveyResponses,
       }}
     >
       {children}

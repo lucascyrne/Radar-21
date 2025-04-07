@@ -2,10 +2,10 @@
 
 import { createContext } from 'react';
 import { 
-  ProfileFormValues,
+  DemographicFormValues,
   SurveyResponses,
   OpenQuestionsFormValues,
-  UserProfile,
+  DemographicData,
   Question,
   RadarDataPoint,
   OpenQuestionResponse,
@@ -15,18 +15,18 @@ import {
 export interface SurveyState {
   userId: string | null;
   teamId: string | null;
-  profile: UserProfile | null;
+  demographicData: DemographicData | null;
   surveyResponses: SurveyResponses | null;
   openQuestions: OpenQuestionResponse | null;
   loading: {
-    profile: boolean;
+    demographicData: boolean;
     survey: boolean;
     openQuestions: boolean;
     teamMember: boolean;
     saving: boolean;
   };
   error: {
-    profile: string | null;
+    demographicData: string | null;
     survey: string | null;
     openQuestions: string | null;
   };
@@ -39,7 +39,7 @@ export interface SurveyState {
 export interface SurveyContextType extends SurveyState {
   saveAnswers: (responses: SurveyResponses) => Promise<boolean>;
   generateRadarData: () => Promise<void>;
-  saveProfile: (data: ProfileFormValues) => Promise<boolean>;
+  saveDemographicData: (data: DemographicFormValues) => Promise<boolean>;
   saveSurveyResponses: (responses: SurveyResponses) => Promise<boolean>;
   saveOpenQuestions: (data: OpenQuestionsFormValues) => Promise<boolean>;
   updateUserId: (userId: string | null) => void;
@@ -51,18 +51,18 @@ export interface SurveyContextType extends SurveyState {
 export const initialState: SurveyState = {
   userId: null,
   teamId: null,
-  profile: null,
+  demographicData: null,
   surveyResponses: null,
   openQuestions: null,
   loading: {
-    profile: false,
+    demographicData: false,
     survey: false,
     openQuestions: false,
     teamMember: false,
     saving: false
   },
   error: {
-    profile: null,
+    demographicData: null,
     survey: null,
     openQuestions: null
   },
@@ -70,7 +70,6 @@ export const initialState: SurveyState = {
   questions: [],
   answers: null,
   isSaving: false,
-  
 };
 
 const SurveyContext = createContext<SurveyContextType>(initialState as SurveyContextType);

@@ -302,11 +302,11 @@ export function TeamProvider({ children }: TeamProviderProps) {
   // Selecionar uma equipe
   const selectTeam = useCallback((teamId: string) => {
     const team = state.teams.find(t => t.id === teamId);
-    if (team && team.id !== state.selectedTeam?.id) {
-      setState(prev => ({ ...prev, selectedTeam: team }));
+    setState(prev => ({ ...prev, selectedTeam: team || null }));
+    if (team) {
       loadTeamMembers(team.id);
     }
-  }, [state.teams, state.selectedTeam?.id]);
+  }, [state.teams]);
 
   // Atualizar status do membro
   const updateMemberStatus = useCallback(async (
