@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback } from 'react';
 import { Team } from '@/resources/team/team-model';
+import { useTeam } from '@/resources/team/team-hook';
 
 interface TeamListProps {
   teams: Team[];
@@ -9,21 +10,18 @@ interface TeamListProps {
 }
 
 export function TeamList({ teams, selectedTeamId, userEmail, onSelectTeam }: TeamListProps) {
-  const [localTeams, setLocalTeams] = useState<Team[]>(teams);
-
-  useEffect(() => {
-    setLocalTeams(teams);
-  }, [teams]);
+  const { selectTeam } = useTeam();
 
   const handleSelectTeam = useCallback((teamId: string) => {
+    selectTeam(teamId);
     onSelectTeam(teamId);
-  }, [onSelectTeam]);
+  }, []);
 
   return (
     <div className="space-y-4 p-6">
       <h2 className="text-2xl font-semibold">Minhas Equipes</h2>
       <div className="space-y-2">
-        {localTeams.map(team => (
+        {teams.map(team => (
           <div 
             key={team.id} 
             className={`p-4 rounded-lg border cursor-pointer transition-all ${

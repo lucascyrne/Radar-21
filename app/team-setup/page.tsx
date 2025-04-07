@@ -41,7 +41,7 @@ const TeamSkeleton = () => (
 export default function TeamSetupPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
-  const { teams, selectedTeam, teamMembers, createTeam, loadTeams, loadTeamMembers, generateInviteMessage, resetTeamsLoaded } = useTeam();
+  const { teams, selectedTeam, teamMembers, createTeam, loadTeams, loadTeamMembers, generateInviteMessage, resetTeamsLoaded, selectTeam } = useTeam();
   const { toast } = useToast();
   const [activeTab, setActiveTab] = useState<string>("my-teams");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -205,15 +205,13 @@ export default function TeamSetupPage() {
   const handleTeamSelect = useCallback(async (teamId: string) => {
     if (!user?.id) return;
     
-    await loadTeams(user.id);
-    const surveyComplete = await SurveyService.checkSurveyCompletion(user.id, teamId);
-    
-    if (surveyComplete) {
-      router.push('/open-questions');
-    } else {
-      router.push('/survey');
+    // Atualizar a equipe selecionada no contexto
+    const team = teams.find(t => t.id === teamId);
+    if (team) {
+      selectTeam(teamId);
+      await loadTeamMembers(teamId);
     }
-  }, [user?.id, router, loadTeams]);
+  }, [user?.id, teams]);
 
   if (authLoading) {
     return (
