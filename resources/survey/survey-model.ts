@@ -1,26 +1,30 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 // Esquema para os dados demográficos (primeiro passo)
 export const demographicDataSchema = z.object({
-  name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
+  name: z.string().min(2, "Nome deve ter pelo menos 2 caracteres"),
   birth_date: z.string().optional(),
-  education: z.string().min(1, 'Selecione seu nível de escolaridade'),
+  education: z.string().min(1, "Selecione seu nível de escolaridade"),
   graduation_date: z.string().optional(),
   graduation_university: z.string().optional(),
-  employee_count: z.number().min(0, 'Número de funcionários deve ser maior ou igual a 0'),
-  organization: z.string().min(2, 'Nome da organização deve ter pelo menos 2 caracteres'),
-  website: z.string().url('URL inválida').optional().or(z.literal('')),
-  org_type: z.string().min(1, 'Selecione o tipo de organização'),
-  org_size: z.string().min(1, 'Selecione o porte da organização'),
-  city: z.string().min(2, 'Cidade deve ter pelo menos 2 caracteres'),
-  work_model: z.string().min(1, 'Selecione o modelo de trabalho'),
+  employee_count: z
+    .number()
+    .min(0, "Número de funcionários deve ser maior ou igual a 0"),
+  organization: z
+    .string()
+    .min(2, "Nome da organização deve ter pelo menos 2 caracteres"),
+  website: z.string().url("URL inválida").optional().or(z.literal("")),
+  org_type: z.string().min(1, "Selecione o tipo de organização"),
+  org_size: z.string().min(1, "Selecione o porte da organização"),
+  city: z.string().min(2, "Cidade deve ter pelo menos 2 caracteres"),
+  work_model: z.string().min(1, "Selecione o modelo de trabalho"),
 });
 
 export type DemographicFormValues = z.infer<typeof demographicDataSchema>;
 
 // Esquema para as perguntas abertas
 export const openQuestionsSchema = z.object({
-  q13: z.string().min(1, 'Este campo é obrigatório'),
+  q13: z.string().min(1, "Este campo é obrigatório"),
   q14: z.string().optional(),
 });
 
@@ -111,3 +115,9 @@ export interface RadarDataPoint {
   value: number;
 }
 
+export interface CompetencyDetail {
+  topic: string;
+  userScore: number;
+  teamAverage: number;
+  difference: number;
+}

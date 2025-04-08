@@ -29,9 +29,18 @@ export function TeamList({
     return (
       <div className="space-y-4 p-6">
         <h2 className="text-2xl font-semibold">Minhas Equipes</h2>
-        <div className="p-6 text-center text-muted-foreground">
-          <p>Você ainda não participa de nenhuma equipe.</p>
-          <p className="mt-2">Crie uma nova equipe para começar.</p>
+        <div className="p-8 text-center bg-muted/10 rounded-lg border border-dashed">
+          <h3 className="text-lg font-medium mb-2">Bem-vindo ao Radar21!</h3>
+          <div className="text-muted-foreground space-y-2">
+            <p>Você ainda não participa de nenhuma equipe.</p>
+            <p>Para começar sua jornada, você pode:</p>
+            <ul className="mt-4 space-y-2 text-sm">
+              <li>
+                • Criar sua própria equipe clicando na aba "Criar Nova Equipe"
+              </li>
+              <li>• Aguardar um convite de um líder de equipe</li>
+            </ul>
+          </div>
         </div>
       </div>
     );

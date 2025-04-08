@@ -1,4 +1,3 @@
-import { InviteService } from "@/resources/invite/invite.service";
 import { AuthResponse, createClient, User } from "@supabase/supabase-js";
 
 // Inicializa o cliente Supabase
@@ -11,6 +10,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: true,
     flowType: "pkce",
+    storage: typeof window !== "undefined" ? window.localStorage : undefined,
   },
 });
 
@@ -61,14 +61,32 @@ export const AuthService = {
     }
   },
 
-  // Verificar sessão atual
+  // Verificar e obter sessão atual
   getSession: async () => {
     try {
-      // Forçar refresh da sessão
-      await supabase.auth.refreshSession();
-      const { data, error } = await supabase.auth.getSession();
+      // Recuperar sessão do storage
+      if (typeof window !== "undefined") {
+        const storedSession = localStorage.getItem(
+          LOCAL_STORAGE_KEYS.USER_SESSION
+        );
+        if (storedSession) {
+          const { access_token, refresh_token } = JSON.parse(storedSession);
+          if (access_token && refresh_token) {
+            await supabase.auth.setSession({
+              access_token,
+              refresh_token,
+            });
+          }
+        }
+      }
+
+      const {
+        data: { session },
+        error,
+      } = await supabase.auth.getSession();
       if (error) throw error;
-      return data.session;
+
+      return session;
     } catch (error) {
       console.error("Erro ao obter sessão:", error);
       return null;
@@ -90,33 +108,20 @@ export const AuthService = {
   // Logout
   signOut: async () => {
     try {
-      // Primeiro, limpar estado local
-      AuthService.clearLocalState();
+      // Limpar storage explicitamente
+      if (typeof window !== "undefined") {
+        localStorage.removeItem("supabase.auth.token");
+      }
 
-      // Fazer logout no Supabase
       const { error } = await supabase.auth.signOut({
         scope: "global",
       });
 
       if (error) throw error;
 
-      // Limpar cookies e storage
-      document.cookie.split(";").forEach((c) => {
-        document.cookie = c
-          .replace(/^ +/, "")
-          .replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
-      });
-
-      localStorage.clear();
-      sessionStorage.clear();
-
-      // Forçar recarregamento da página após logout
-      window.location.href = "/auth";
-
       return true;
     } catch (error) {
       console.error("Erro ao fazer logout:", error);
-      AuthService.clearLocalState();
       throw error;
     }
   },
@@ -128,12 +133,40 @@ export const AuthService = {
 
   // Login com Email/Senha
   signInWithEmail: async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    if (error) throw error;
-    return data;
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) throw error;
+
+      if (!data.user || !data.session) {
+        throw new Error("Dados de autenticação inválidos");
+      }
+
+      // Persistir a sessão
+      if (typeof window !== "undefined") {
+        localStorage.setItem(
+          LOCAL_STORAGE_KEYS.USER_SESSION,
+          JSON.stringify({
+            access_token: data.session.access_token,
+            refresh_token: data.session.refresh_token,
+            expires_at: data.session.expires_at,
+          })
+        );
+      }
+
+      // Atualizar a sessão no cliente Supabase
+      await supabase.auth.setSession({
+        access_token: data.session.access_token,
+        refresh_token: data.session.refresh_token,
+      });
+
+      return { session: data.session };
+    } catch (error) {
+      throw error;
+    }
   },
 
   // Registrar com Email/Senha
@@ -257,22 +290,17 @@ export const AuthService = {
     if (!user.email) return;
 
     try {
-      // Processar convite pendente se existir
-      const teamId = await InviteService.processInvite(user.id, user.email);
+      // Atualizar metadados do usuário se necessário
+      const { error: updateError } = await supabase.auth.updateUser({
+        data: {
+          email_confirmed: !!user.email_confirmed_at,
+        },
+      });
 
-      if (teamId) {
-        // Atualizar os metadados do usuário com o teamId
-        const { error } = await supabase.auth.updateUser({
-          data: {
-            team_id: teamId,
-            status: "pending_survey",
-          },
-        });
-
-        if (error) throw error;
-      }
+      if (updateError) throw updateError;
     } catch (error) {
       console.error("Erro ao processar usuário autenticado:", error);
+      throw error;
     }
   },
 
