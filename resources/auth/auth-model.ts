@@ -13,10 +13,12 @@ export interface User {
   team_id?: string;
   role?: UserRole;
   status?: UserStatus;
+  email_confirmed_at?: string | null;
   last_form_page?: string; // Última página do formulário que o usuário visitou
   has_completed_form?: boolean; // Indica se o usuário completou o formulário
   raw_app_meta_data?: {
     is_temp?: boolean;
+    email_confirmed?: boolean;
   };
   app_metadata?: Record<string, any>;
   user_metadata?: Record<string, any>;

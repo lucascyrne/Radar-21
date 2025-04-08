@@ -44,13 +44,16 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           status: session.user.user_metadata?.status,
           last_form_page: session.user.user_metadata?.last_form_page,
           has_completed_form: session.user.user_metadata?.has_completed_form,
+          email_confirmed_at: session.user.email_confirmed_at,
         }
       : null;
+
+    const isEmailConfirmed = !!session?.user?.email_confirmed_at;
 
     updateState({
       session,
       user,
-      isAuthenticated: !!session,
+      isAuthenticated: !!session && isEmailConfirmed,
       isLoading: false,
       error: null,
     });
@@ -65,7 +68,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         if (mounted) {
           updateStateWithSession(session);
 
-          if (session?.user) {
+          if (session?.user?.email_confirmed_at) {
             await AuthService.processAuthenticatedUser(session.user);
           }
         }
@@ -92,12 +95,15 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       switch (event) {
         case "SIGNED_IN":
           updateStateWithSession(session);
-          if (session?.user) {
+          if (session?.user?.email_confirmed_at) {
             await AuthService.processAuthenticatedUser(session.user);
             // Só redireciona para team-setup se o usuário estiver na página de autenticação
             if (window.location.pathname === "/auth") {
               router.push("/team-setup");
             }
+          } else {
+            // Se o email não estiver confirmado, redireciona para a página de verificação
+            router.push("/auth/verify-email");
           }
           break;
         case "SIGNED_OUT":
@@ -106,6 +112,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           break;
         case "USER_UPDATED":
           updateStateWithSession(session);
+          // Se o email foi confirmado, processa o usuário
+          if (session?.user?.email_confirmed_at) {
+            await AuthService.processAuthenticatedUser(session.user);
+            router.push("/team-setup");
+          }
           break;
       }
     });
@@ -211,37 +222,26 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   ) => {
     try {
       updateState({ isLoading: true, error: null });
-      const { user: supabaseUser } = await AuthService.signUpWithEmail(
+      const { error: signUpError } = await AuthService.signUpWithEmail(
         email,
         password,
         role
       );
 
-      if (supabaseUser) {
-        // Converter o usuário do Supabase para nosso modelo User
-        const user: User = {
-          id: supabaseUser.id,
-          email: supabaseUser.email || email,
-          created_at: supabaseUser.created_at,
-          updated_at: supabaseUser.updated_at,
-          ...supabaseUser.user_metadata,
-        };
-
-        // Processar convite pendente imediatamente após o registro
-        const inviteProcessed = await processInvite(user);
-
-        if (inviteProcessed) {
-          // Atualizar estado com informações da equipe
-          updateState({
-            user,
-            isLoading: false,
-            error: null,
-          });
-
-          // Redirecionar para team-setup após processamento bem-sucedido
-          router.push("/team-setup");
-        }
+      if (signUpError) {
+        const errorMessage =
+          signUpError instanceof Error
+            ? signUpError.message
+            : "Erro ao criar conta";
+        updateState({ error: errorMessage, isLoading: false });
+        throw new Error(errorMessage);
       }
+
+      // Sucesso, mas não autenticar automaticamente - o usuário precisa confirmar o email
+      updateState({ isLoading: false, error: null });
+
+      // Redirecionar para a página de verificação de email
+      router.push("/auth/verify-email");
     } catch (error: any) {
       updateState({ error: error.message, isLoading: false });
       throw error;

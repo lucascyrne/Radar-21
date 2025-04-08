@@ -1,11 +1,18 @@
 import { InviteService } from "@/resources/invite/invite.service";
-import { createClient, User } from "@supabase/supabase-js";
+import { AuthResponse, createClient, User } from "@supabase/supabase-js";
 
 // Inicializa o cliente Supabase
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
 
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    autoRefreshToken: true,
+    persistSession: true,
+    detectSessionInUrl: true,
+    flowType: "pkce",
+  },
+});
 
 const LOCAL_STORAGE_KEYS = {
   TEAM_ID: "teamId",
@@ -83,7 +90,7 @@ export const AuthService = {
   // Logout
   signOut: async () => {
     try {
-      // Primeiro, limpar estado local para evitar redirecionamentos indesejados
+      // Primeiro, limpar estado local
       AuthService.clearLocalState();
 
       // Fazer logout no Supabase
@@ -93,13 +100,22 @@ export const AuthService = {
 
       if (error) throw error;
 
-      // Aguardar para garantir que a sessão seja completamente limpa
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // Limpar cookies e storage
+      document.cookie.split(";").forEach((c) => {
+        document.cookie = c
+          .replace(/^ +/, "")
+          .replace(/=.*/, `=;expires=${new Date().toUTCString()};path=/`);
+      });
+
+      localStorage.clear();
+      sessionStorage.clear();
+
+      // Forçar recarregamento da página após logout
+      window.location.href = "/auth";
 
       return true;
     } catch (error) {
       console.error("Erro ao fazer logout:", error);
-      // Mesmo com erro, garantir que o estado local seja limpo
       AuthService.clearLocalState();
       throw error;
     }
@@ -125,19 +141,112 @@ export const AuthService = {
     email: string,
     password: string,
     role: string = "COLLABORATOR"
-  ) => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        data: {
-          role: role,
+  ): Promise<AuthResponse> => {
+    console.log(`Iniciando registro para ${email} com função ${role}`);
+
+    try {
+      const {
+        data: { user },
+        error,
+      } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: {
+            role,
+            email_confirmed: false,
+          },
         },
-      },
-    });
-    if (error) throw error;
-    return data;
+      });
+
+      if (error) {
+        console.error("Erro detalhado no registro:", {
+          message: error.message,
+          status: error.status,
+          name: error.name,
+          stack: error.stack,
+          timestamp: new Date().toISOString(),
+        });
+
+        // Verificar especificamente erros de limite de taxa
+        if (
+          error.status === 429 ||
+          error.message?.toLowerCase().includes("rate limit")
+        ) {
+          console.error("Limite de taxa do Supabase atingido:", {
+            email,
+            timestamp: new Date().toISOString(),
+            errorDetails: error,
+          });
+          throw new Error(
+            "Muitas tentativas de registro. Por favor, tente novamente mais tarde."
+          );
+        }
+
+        throw error;
+      }
+
+      if (!user) {
+        console.error("Usuário não criado:", {
+          email,
+          timestamp: new Date().toISOString(),
+        });
+        throw new Error("Falha ao criar usuário");
+      }
+
+      console.log("Usuário criado com sucesso:", {
+        userId: user.id,
+        email: user.email,
+        confirmationSent: user.confirmation_sent_at,
+        timestamp: new Date().toISOString(),
+      });
+
+      if (!user.confirmation_sent_at) {
+        console.warn("Email de confirmação não enviado:", {
+          userId: user.id,
+          email: user.email,
+          timestamp: new Date().toISOString(),
+        });
+      }
+
+      return {
+        data: {
+          user,
+          session: null,
+        },
+        error: null,
+      };
+    } catch (error: any) {
+      console.error("Erro não tratado no registro:", {
+        error,
+        email,
+        timestamp: new Date().toISOString(),
+      });
+
+      return {
+        data: {
+          user: null,
+          session: null,
+        },
+        error,
+      };
+    }
+  },
+
+  // Verificar email
+  verifyEmail: async (token: string) => {
+    try {
+      const { error } = await supabase.auth.verifyOtp({
+        token_hash: token,
+        type: "email",
+      });
+
+      if (error) throw error;
+      return true;
+    } catch (error) {
+      console.error("Erro ao verificar email:", error);
+      throw error;
+    }
   },
 
   /**
@@ -148,29 +257,7 @@ export const AuthService = {
     if (!user.email) return;
 
     try {
-      // Verificar se o usuário já tem um perfil
-      const { data: profile, error: profileError } = await supabase
-        .from("user_profiles")
-        .select("role")
-        .eq("id", user.id)
-        .single();
-
-      if (profileError && profileError.code !== "PGRST116") {
-        throw profileError;
-      }
-
-      // Se não tiver perfil, criar com role padrão
-      if (!profile) {
-        const { error: insertError } = await supabase
-          .from("user_profiles")
-          .insert({
-            id: user.id,
-            role: user.user_metadata?.role || "COLLABORATOR",
-          });
-
-        if (insertError) throw insertError;
-      }
-
+      // Processar convite pendente se existir
       const teamId = await InviteService.processInvite(user.id, user.email);
 
       if (teamId) {
