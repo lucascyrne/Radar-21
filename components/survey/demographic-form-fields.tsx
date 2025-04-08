@@ -1,26 +1,25 @@
-import { UseFormReturn } from 'react-hook-form';
 import {
+  FormControl,
   FormField,
   FormItem,
   FormLabel,
-  FormControl,
   FormMessage,
-} from '@/components/ui/form';
-import { Input } from '@/components/ui/input';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@/components/ui/select';
-import { ProfileFormValues } from '@/resources/survey/survey-model';
-
-interface ProfileFormFieldsProps {
-  form: UseFormReturn<ProfileFormValues>;
+} from "@/components/ui/select";
+import { DemographicData } from "@/resources/survey/survey-model";
+import { UseFormReturn } from "react-hook-form";
+interface DemographicFormFieldsProps {
+  form: UseFormReturn<DemographicData>;
 }
 
-export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
+export function DemographicFormFields({ form }: DemographicFormFieldsProps) {
   return (
     <>
       <FormField
@@ -44,9 +43,9 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
           <FormItem>
             <FormLabel>Data de nascimento</FormLabel>
             <FormControl>
-              <Input 
-                type="date" 
-                placeholder="AAAA-MM-DD" 
+              <Input
+                type="date"
+                placeholder="AAAA-MM-DD"
                 value={field.value || ""}
                 onChange={(e) => field.onChange(e.target.value)}
                 onBlur={field.onBlur}
@@ -65,10 +64,10 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Nível de escolaridade *</FormLabel>
-            <Select 
+            <Select
               onValueChange={(value) => {
                 field.onChange(value);
-              }} 
+              }}
               value={field.value || undefined}
             >
               <FormControl>
@@ -90,28 +89,29 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
       />
 
       <FormField
-          control={form.control}
-          name="graduation_university"
-          render={({ field }) => (
-            <FormItem>
-              <FormLabel>
-                {`Qual a instituição de ensino que você estudou ${
-                  form.watch('education') === 'ensino_medio' ? 'o ensino médio' :
-                  form.watch('education') === 'graduacao' ? 'a graduação' :
-                  form.watch('education') === 'especializacao' ? 'a especialização' :
-                  form.watch('education') === 'mestrado' ? 'o mestrado' :
-                  'o doutorado'
-                }?`}
-              </FormLabel>
-              <FormControl>
-                <Input 
-                  placeholder="Nome da universidade"
-                  {...field}
-                />
-              </FormControl>
-              <FormMessage />
-            </FormItem>
-          )}
+        control={form.control}
+        name="graduation_university"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>
+              {`Qual a instituição de ensino que você estudou ${
+                form.watch("education") === "ensino_medio"
+                  ? "o ensino médio"
+                  : form.watch("education") === "graduacao"
+                  ? "a graduação"
+                  : form.watch("education") === "especializacao"
+                  ? "a especialização"
+                  : form.watch("education") === "mestrado"
+                  ? "o mestrado"
+                  : "o doutorado"
+              }?`}
+            </FormLabel>
+            <FormControl>
+              <Input placeholder="Nome da universidade" {...field} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
       />
 
       <FormField
@@ -121,9 +121,9 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
           <FormItem>
             <FormLabel>Data de formação</FormLabel>
             <FormControl>
-              <Input 
-                type="date" 
-                placeholder="AAAA-MM-DD" 
+              <Input
+                type="date"
+                placeholder="AAAA-MM-DD"
                 value={field.value || ""}
                 onChange={(e) => field.onChange(e.target.value)}
                 onBlur={field.onBlur}
@@ -157,8 +157,8 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
           <FormItem>
             <FormLabel>Website</FormLabel>
             <FormControl>
-              <Input 
-                placeholder="https://www.exemplo.com.br" 
+              <Input
+                placeholder="https://www.exemplo.com.br"
                 value={field.value || ""}
                 onChange={field.onChange}
                 onBlur={field.onBlur}
@@ -177,8 +177,8 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Tipo de organização *</FormLabel>
-            <Select 
-              onValueChange={field.onChange} 
+            <Select
+              onValueChange={field.onChange}
               value={field.value || undefined}
             >
               <FormControl>
@@ -204,8 +204,8 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Porte da organização *</FormLabel>
-            <Select 
-              onValueChange={field.onChange} 
+            <Select
+              onValueChange={field.onChange}
               value={field.value || undefined}
             >
               <FormControl>
@@ -214,10 +214,18 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
                 </SelectTrigger>
               </FormControl>
               <SelectContent>
-                <SelectItem value="micro">Micro (até 19 funcionários)</SelectItem>
-                <SelectItem value="pequena">Pequena (20 a 99 funcionários)</SelectItem>
-                <SelectItem value="media">Média (100 a 499 funcionários)</SelectItem>
-                <SelectItem value="grande">Grande (500+ funcionários)</SelectItem>
+                <SelectItem value="micro">
+                  Micro (até 19 funcionários)
+                </SelectItem>
+                <SelectItem value="pequena">
+                  Pequena (20 a 99 funcionários)
+                </SelectItem>
+                <SelectItem value="media">
+                  Média (100 a 499 funcionários)
+                </SelectItem>
+                <SelectItem value="grande">
+                  Grande (500+ funcionários)
+                </SelectItem>
               </SelectContent>
             </Select>
             <FormMessage />
@@ -232,11 +240,13 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
           <FormItem>
             <FormLabel>Número de funcionários *</FormLabel>
             <FormControl>
-              <Input 
-                type="number" 
-                placeholder="Número aproximado" 
+              <Input
+                type="number"
+                placeholder="Número aproximado"
                 value={field.value || 0}
-                onChange={(e) => field.onChange(parseInt(e.target.value, 10) || 0)}
+                onChange={(e) =>
+                  field.onChange(parseInt(e.target.value, 10) || 0)
+                }
                 onBlur={field.onBlur}
                 name={field.name}
                 ref={field.ref}
@@ -254,8 +264,8 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
           <FormItem>
             <FormLabel>Cidade *</FormLabel>
             <FormControl>
-              <Input 
-                placeholder="Sua cidade" 
+              <Input
+                placeholder="Sua cidade"
                 value={field.value || ""}
                 onChange={field.onChange}
                 onBlur={field.onBlur}
@@ -274,8 +284,8 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
         render={({ field }) => (
           <FormItem>
             <FormLabel>Modelo de trabalho *</FormLabel>
-            <Select 
-              onValueChange={field.onChange} 
+            <Select
+              onValueChange={field.onChange}
               value={field.value || undefined}
             >
               <FormControl>
@@ -295,4 +305,4 @@ export function ProfileFormFields({ form }: ProfileFormFieldsProps) {
       />
     </>
   );
-} 
+}

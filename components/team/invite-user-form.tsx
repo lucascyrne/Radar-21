@@ -1,18 +1,23 @@
 "use client";
 
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/resources/auth/auth-hook';
-import { useTeam } from '@/resources/team/team-hook';
-import { TeamService } from '@/resources/team/team.service';
-import { supabase } from '@/resources/auth/auth.service';
+import { useAuth } from "@/resources/auth/auth-hook";
+import { supabase } from "@/resources/auth/auth.service";
+import { useTeam } from "@/resources/team/team-hook";
+import { TeamService } from "@/resources/team/team.service";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
+import { useForm } from "react-hook-form";
+import * as z from "zod";
 
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import {
   Form,
   FormControl,
@@ -20,8 +25,10 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
-} from '@/components/ui/form';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
+} from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 // Schema para validação do formulário
 const inviteFormSchema = z.object({
@@ -44,16 +51,16 @@ interface InviteUserFormProps {
   }>;
 }
 
-export default function InviteUserForm({ 
-  teamId, 
-  teamName, 
-  ownerEmail, 
+export default function InviteUserForm({
+  teamId,
+  teamName,
+  ownerEmail,
   onInviteSent,
-  existingMembers 
+  existingMembers,
 }: InviteUserFormProps) {
   const { user } = useAuth();
-  const { addTeamMember, loadTeamMembers, teamMembers, generateInviteMessage } = useTeam();
-  const { toast } = useToast();
+  const { addTeamMember, loadTeamMembers, teamMembers, generateInviteMessage } =
+    useTeam();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [resendingTo, setResendingTo] = useState<string | null>(null);
 
@@ -79,11 +86,7 @@ export default function InviteUserForm({
   // Enviar convite
   const onSubmit = async (data: InviteFormValues) => {
     if (!user || !teamId) {
-      toast({
-        title: "Erro",
-        description: "Informações de usuário ou equipe não disponíveis",
-        variant: "destructive",
-      });
+      toast.error("Informações de usuário ou equipe não disponíveis");
       return;
     }
 
@@ -96,10 +99,8 @@ export default function InviteUserForm({
       );
 
       if (existingMember) {
-        toast({
-          title: "Membro já existe",
+        toast.error("Membro já existe", {
           description: "Este email já foi convidado para a equipe.",
-          variant: "destructive",
         });
         setIsSubmitting(false);
         return;
@@ -109,7 +110,9 @@ export default function InviteUserForm({
       const userId = await checkUserExists(data.email);
 
       // Gerar URL de convite incluindo o email
-      const inviteUrl = `${window.location.origin}/auth?invite=${teamId}&email=${encodeURIComponent(data.email)}`;
+      const inviteUrl = `${
+        window.location.origin
+      }/auth?invite=${teamId}&email=${encodeURIComponent(data.email)}`;
 
       // Enviar convite via API
       const response = await fetch("/api/send-invite", {
@@ -144,19 +147,19 @@ export default function InviteUserForm({
         message: user ? generateInviteMessage(teamName, user.email) : "",
       });
 
-      toast({
-        title: "Convite enviado",
-        description: "O membro foi adicionado à equipe e recebeu um email de convite.",
+      toast.success("Convite enviado", {
+        description:
+          "O membro foi adicionado à equipe e recebeu um email de convite.",
       });
 
       // Chamar callback de sucesso, se fornecido
       onInviteSent();
     } catch (error: any) {
       console.error("Erro ao enviar convite:", error);
-      toast({
-        title: "Erro ao enviar convite",
-        description: error.message || "Ocorreu um erro ao enviar o convite. Tente novamente.",
-        variant: "destructive",
+      toast.error("Erro ao enviar convite", {
+        description:
+          error.message ||
+          "Ocorreu um erro ao enviar o convite. Tente novamente.",
       });
     } finally {
       setIsSubmitting(false);
@@ -166,13 +169,13 @@ export default function InviteUserForm({
   // Função para reenviar convite
   const handleResendInvite = async (email: string) => {
     setResendingTo(email);
-    
+
     try {
       // Enviar email de convite novamente
-      const response = await fetch('/api/send-invite', {
-        method: 'POST',
+      const response = await fetch("/api/send-invite", {
+        method: "POST",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           teamId,
@@ -183,31 +186,28 @@ export default function InviteUserForm({
           isResend: true,
         }),
       });
-      
+
       if (!response.ok) {
-        throw new Error('Falha ao reenviar convite');
+        throw new Error("Falha ao reenviar convite");
       }
-      
+
       // Notificar sucesso
-      toast({
-        title: "Convite reenviado",
+      toast.success("Convite reenviado", {
         description: `Um novo convite foi enviado para ${email}`,
       });
-      
+
       // Atualizar a data de envio do convite
       await supabase
-        .from('team_members')
+        .from("team_members")
         .update({ created_at: new Date().toISOString() })
-        .eq('team_id', teamId)
-        .eq('email', email);
-      
+        .eq("team_id", teamId)
+        .eq("email", email);
+
       onInviteSent(); // Atualizar a lista
     } catch (error: any) {
-      console.error('Erro ao reenviar convite:', error);
-      toast({
-        title: "Erro ao reenviar convite",
+      console.error("Erro ao reenviar convite:", error);
+      toast.error("Erro ao reenviar convite", {
         description: error.message || "Ocorreu um erro ao reenviar o convite.",
-        variant: "destructive",
       });
     } finally {
       setResendingTo(null);
@@ -216,37 +216,47 @@ export default function InviteUserForm({
 
   // Renderizar membros pendentes com opção de reenvio
   const renderPendingMembers = () => {
-    const pendingMembers = existingMembers.filter(member => 
-      member.status === 'enviado'
+    const pendingMembers = existingMembers.filter(
+      (member) => member.status === "enviado"
     );
-    
+
     if (pendingMembers.length === 0) return null;
-    
+
     return (
       <div className="mt-6">
         <h3 className="text-sm font-medium mb-2">Convites pendentes:</h3>
         <div className="space-y-2">
-          {pendingMembers.map(member => {
+          {pendingMembers.map((member) => {
             // Calcular tempo desde o envio do convite
             const sentDate = new Date(member.created_at);
             const now = new Date();
-            const daysSinceInvite = Math.floor((now.getTime() - sentDate.getTime()) / (1000 * 60 * 60 * 24));
-            
+            const daysSinceInvite = Math.floor(
+              (now.getTime() - sentDate.getTime()) / (1000 * 60 * 60 * 24)
+            );
+
             return (
-              <div key={member.id} className="flex items-center justify-between p-2 bg-gray-50 rounded-md">
+              <div
+                key={member.id}
+                className="flex items-center justify-between p-2 bg-gray-50 rounded-md"
+              >
                 <div>
                   <p className="text-sm font-medium">{member.email}</p>
                   <p className="text-xs text-gray-500">
-                    Enviado {daysSinceInvite === 0 ? 'hoje' : `há ${daysSinceInvite} dia${daysSinceInvite !== 1 ? 's' : ''}`}
+                    Enviado{" "}
+                    {daysSinceInvite === 0
+                      ? "hoje"
+                      : `há ${daysSinceInvite} dia${
+                          daysSinceInvite !== 1 ? "s" : ""
+                        }`}
                   </p>
                 </div>
-                <Button 
-                  variant="outline" 
+                <Button
+                  variant="outline"
                   size="sm"
                   onClick={() => handleResendInvite(member.email)}
                   disabled={resendingTo === member.email || daysSinceInvite < 1} // Permitir reenvio apenas após 1 dia
                 >
-                  {resendingTo === member.email ? 'Reenviando...' : 'Reenviar'}
+                  {resendingTo === member.email ? "Reenviando..." : "Reenviar"}
                 </Button>
               </div>
             );
@@ -300,11 +310,11 @@ export default function InviteUserForm({
             />
 
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? 'Enviando...' : 'Enviar Convite'}
+              {isSubmitting ? "Enviando..." : "Enviar Convite"}
             </Button>
           </form>
         </Form>
-        
+
         {renderPendingMembers()}
       </CardContent>
       <CardFooter className="text-xs text-gray-500">
@@ -312,4 +322,4 @@ export default function InviteUserForm({
       </CardFooter>
     </Card>
   );
-} 
+}

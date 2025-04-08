@@ -1,11 +1,16 @@
-import { useState, useEffect } from 'react';
-import { createClient } from '@/lib/supabase/client';
-import { User, UserStatus, UserRole } from '@/resources/auth/auth-model';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { TeamMember, TeamMemberStatus } from "@/resources/team/team-model"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { createClient } from "@/lib/supabase/client";
+import { TeamMember, TeamMemberStatus } from "@/resources/team/team-model";
+import { useEffect, useState } from "react";
 
 interface TeamMembersDetailProps {
   teamId: string;
@@ -18,11 +23,11 @@ const getInitials = (email: string) => {
 
 const getStatusBadge = (status: TeamMemberStatus) => {
   switch (status) {
-    case 'answered':
+    case "answered":
       return <Badge variant="default">Respondido</Badge>;
-    case 'pending_survey':
+    case "pending_survey":
       return <Badge variant="secondary">Pendente</Badge>;
-    case 'invited':
+    case "invited":
       return <Badge variant="outline">Convidado</Badge>;
     default:
       return null;
@@ -38,19 +43,19 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
   // Função para carregar os membros da equipe
   const loadTeamMembers = async () => {
     if (!teamId) return;
-    
+
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from('users')
-        .select('*')
-        .eq('team_id', teamId);
+        .from("users")
+        .select("*")
+        .eq("team_id", teamId);
 
       if (error) throw error;
 
       setMembers(data as TeamMember[]);
     } catch (error: any) {
-      console.error('Erro ao carregar membros da equipe:', error);
+      console.error("Erro ao carregar membros da equipe:", error);
       setError(error.message);
     } finally {
       setIsLoading(false);
@@ -69,13 +74,13 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
     if (!teamId) return;
 
     const channel = supabase
-      .channel('team-members')
+      .channel("team-members")
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: '*',
-          schema: 'public',
-          table: 'users',
+          event: "*",
+          schema: "public",
+          table: "users",
           filter: `team_id=eq.${teamId}`,
         },
         () => {
@@ -131,20 +136,20 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
   // Ordenar membros: líder primeiro, depois por status (respondido > pendente > convidado)
   const sortedMembers = [...members].sort((a: TeamMember, b: TeamMember) => {
     // Comparar roles
-    if (a.role === 'leader' && b.role === 'member') return -1;
-    if (a.role === 'member' && b.role === 'leader') return 1;
-    
+    if (a.role === "leader" && b.role === "member") return -1;
+    if (a.role === "member" && b.role === "leader") return 1;
+
     // Definir ordem dos status
     const statusOrder = {
-      'answered': 0,
-      'pending_survey': 1,
-      'invited': 2
+      answered: 0,
+      pending_survey: 1,
+      invited: 2,
     } as const;
-    
+
     // Garantir que status seja um dos valores válidos
     const aStatus = a.status as keyof typeof statusOrder;
     const bStatus = b.status as keyof typeof statusOrder;
-    
+
     return statusOrder[aStatus] - statusOrder[bStatus];
   });
 
@@ -153,16 +158,22 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
       <CardHeader>
         <CardTitle>Membros da Equipe</CardTitle>
         <CardDescription>
-          {members.length} {members.length === 1 ? 'membro' : 'membros'} na equipe
+          {members.length} {members.length === 1 ? "membro" : "membros"} na
+          equipe
         </CardDescription>
       </CardHeader>
       <CardContent>
         {members.length === 0 ? (
-          <p className="text-muted-foreground">Nenhum membro na equipe ainda.</p>
+          <p className="text-muted-foreground">
+            Nenhum membro na equipe ainda.
+          </p>
         ) : (
           <div className="space-y-4">
             {sortedMembers.map((member) => (
-              <div key={member.id} className="flex items-center justify-between p-2">
+              <div
+                key={member.id}
+                className="flex items-center justify-between p-2"
+              >
                 <div className="flex items-center gap-4">
                   <Avatar>
                     <AvatarFallback>{getInitials(member.email)}</AvatarFallback>
@@ -170,7 +181,7 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
                   <div>
                     <p className="text-sm font-medium">{member.email}</p>
                     <p className="text-sm text-muted-foreground">
-                      {member.role === 'leader' ? 'Líder' : 'Membro'}
+                      {member.role === "leader" ? "Líder" : "Membro"}
                     </p>
                   </div>
                 </div>
@@ -185,33 +196,52 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
 }
 
 interface TeamMembersListProps {
-  members: TeamMember[]
-  currentUserEmail: string | null
+  members: TeamMember[];
+  currentUserEmail: string | null;
 }
 
-export function TeamMembersList({ members, currentUserEmail }: TeamMembersListProps) {
+export function TeamMembersList({
+  members,
+  currentUserEmail,
+}: TeamMembersListProps) {
+  // Se não tiver membros, mostrar mensagem informativa
+  if (!members || members.length === 0) {
+    return (
+      <Card>
+        <CardContent className="p-6">
+          <div className="text-center text-muted-foreground p-4">
+            <p>Nenhum membro encontrado nesta equipe.</p>
+            <p className="text-sm mt-2">
+              Convide membros para participar da avaliação.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
   // Ordenar membros: líder primeiro, depois por status (respondido > pendente > convidado)
   const sortedMembers = [...members].sort((a, b) => {
-    if (a.role === 'leader' && b.role !== 'leader') return -1;
-    if (a.role !== 'leader' && b.role === 'leader') return 1;
-    
+    if (a.role === "leader" && b.role !== "leader") return -1;
+    if (a.role !== "leader" && b.role === "leader") return 1;
+
     const statusOrder = {
-      'answered': 0,
-      'pending_survey': 1,
-      'invited': 2
+      answered: 0,
+      pending_survey: 1,
+      invited: 2,
     };
-    
+
     return statusOrder[a.status] - statusOrder[b.status];
   });
 
   // Função para obter a cor do badge de status
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'answered':
+      case "answered":
         return <Badge variant="default">Respondido</Badge>;
-      case 'pending_survey':
+      case "pending_survey":
         return <Badge variant="secondary">Pendente</Badge>;
-      case 'invited':
+      case "invited":
         return <Badge variant="outline">Convidado</Badge>;
       default:
         return null;
@@ -237,21 +267,21 @@ export function TeamMembersList({ members, currentUserEmail }: TeamMembersListPr
                   <p className="text-sm font-medium">
                     {member.email}
                     {member.email === currentUserEmail && (
-                      <span className="ml-2 text-xs text-muted-foreground">(Você)</span>
+                      <span className="ml-2 text-xs text-muted-foreground">
+                        (Você)
+                      </span>
                     )}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {member.role === 'leader' ? 'Líder' : 'Membro'}
+                    {member.role === "leader" ? "Líder" : "Membro"}
                   </p>
                 </div>
               </div>
-              <div>
-                {getStatusBadge(member.status)}
-              </div>
+              <div>{getStatusBadge(member.status)}</div>
             </div>
           ))}
         </div>
       </CardContent>
     </Card>
   );
-} 
+}

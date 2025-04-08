@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuth } from '@/resources/auth/auth-hook';
-import { useTeam } from '@/resources/team/team-hook';
-import { SurveyService } from '@/resources/survey/survey.service';
-import { useToast } from '@/hooks/use-toast';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Card, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { useAuth } from "@/resources/auth/auth-hook";
+import { SurveyService } from "@/resources/survey/survey.service";
+import { useTeam } from "@/resources/team/team-hook";
+import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 export interface SurveyProgressState {
   hasProfile: boolean;
@@ -33,47 +33,46 @@ const SurveyProgressSkeleton = () => (
   </Card>
 );
 
-export const withSurveyProgress = (WrappedComponent: React.ComponentType<any>) => {
+export const withSurveyProgress = (
+  WrappedComponent: React.ComponentType<any>
+) => {
   return function WithSurveyProgressComponent(props: any) {
     const router = useRouter();
     const { user } = useAuth();
     const { selectedTeam } = useTeam();
-    const { toast } = useToast();
     const [progress, setProgress] = useState<SurveyProgressState>({
       hasProfile: false,
       hasSurvey: false,
       hasOpenQuestions: false,
-      isLoading: true
+      isLoading: true,
     });
 
     useEffect(() => {
       const checkProgress = async () => {
         try {
           if (!user?.id || !selectedTeam?.id) {
-            setProgress(prev => ({ ...prev, isLoading: false }));
+            setProgress((prev) => ({ ...prev, isLoading: false }));
             return;
           }
 
           const [profile, surveyResponses, openQuestions] = await Promise.all([
-            SurveyService.loadProfile(user.id, selectedTeam.id),
+            SurveyService.loadDemographicData(user.id, selectedTeam.id),
             SurveyService.loadSurveyResponses(user.id, selectedTeam.id),
-            SurveyService.loadOpenQuestions(user.id, selectedTeam.id)
+            SurveyService.loadOpenQuestions(user.id, selectedTeam.id),
           ]);
 
           setProgress({
             hasProfile: !!profile,
             hasSurvey: !!surveyResponses,
             hasOpenQuestions: !!openQuestions,
-            isLoading: false
+            isLoading: false,
           });
         } catch (error) {
-          console.error('Erro ao verificar progresso:', error);
-          toast({
-            title: "Erro ao verificar progresso",
-            description: "Não foi possível verificar o progresso da sua pesquisa.",
-            variant: "destructive"
-          });
-          setProgress(prev => ({ ...prev, isLoading: false }));
+          console.error("Erro ao verificar progresso:", error);
+          toast.error(
+            "Não foi possível verificar o progresso da sua pesquisa."
+          );
+          setProgress((prev) => ({ ...prev, isLoading: false }));
         }
       };
 
@@ -84,13 +83,13 @@ export const withSurveyProgress = (WrappedComponent: React.ComponentType<any>) =
       const { hasProfile, hasSurvey, hasOpenQuestions } = progress;
 
       if (!hasProfile) {
-        router.push('/profile-survey');
+        router.push("/profile-survey");
       } else if (!hasSurvey) {
-        router.push('/survey');
+        router.push("/survey");
       } else if (!hasOpenQuestions) {
-        router.push('/open-questions');
+        router.push("/open-questions");
       } else {
-        router.push('/results');
+        router.push("/results");
       }
     };
 
@@ -115,4 +114,4 @@ export const withSurveyProgress = (WrappedComponent: React.ComponentType<any>) =
       />
     );
   };
-}; 
+};

@@ -1,56 +1,68 @@
-import { TeamMember } from '@/resources/team/team-model';
-import { useTeam } from '@/resources/team/team-hook';
-import InviteUserForm from './invite-user-form';
+import { useTeam } from "@/resources/team/team-hook";
+import { TeamMember } from "@/resources/team/team-model";
+import {
+  SurveyProgressState,
+  withSurveyProgress,
+} from "../survey/survey-progress";
+import InviteUserForm from "./invite-user-form";
+import { SetupProgress } from "./setup-progress";
 import { TeamMembersList } from "./team-members-detail";
-import { withSurveyProgress, SurveyProgressState } from "../survey/survey-progress";
-import { SetupProgress } from './setup-progress';
 
 interface TeamDetailsProps {
   teamId: string;
   members: TeamMember[];
   currentUserEmail: string | null;
-  surveyStatus: Record<string, boolean>;
+  surveyStatus: string | Record<string, boolean>;
   inviteMessage: string;
   onInviteMessageChange: (message: string) => void;
   onSendInvite: (email: string) => Promise<void>;
   isSendingInvite: boolean;
   surveyProgress?: SurveyProgressState;
   onContinueSurvey?: () => void;
+  onContinue?: () => void;
   progressPercentage?: number;
 }
 
 function TeamDetailsComponent({
   teamId,
-  members,
+  members = [],
   currentUserEmail,
   surveyProgress,
   onContinueSurvey,
-  progressPercentage = 0
+  onContinue,
+  progressPercentage = 0,
 }: TeamDetailsProps) {
   const { selectedTeam } = useTeam();
   const { loadTeamMembers } = useTeam();
-  
+
+  // Verificar se temos dados válidos para renderizar
+  if (!teamId || !selectedTeam) {
+    return null;
+  }
+
   // Determinar se o usuário atual é líder da equipe
   const isTeamLeader = members.some(
-    m => m.email === currentUserEmail && m.role === 'leader'
+    (m) => m.email === currentUserEmail && m.role === "leader"
   );
-  
+
   // Determinar se o usuário atual completou a pesquisa
-  const hasCompletedSurvey = currentUserEmail ? 
-    members.some(m => m.email === currentUserEmail && m.status === 'answered') : 
-    false;
+  const hasCompletedSurvey = currentUserEmail
+    ? members.some(
+        (m) => m.email === currentUserEmail && m.status === "answered"
+      )
+    : false;
 
   return (
     <div className="space-y-6">
       {/* Progresso da pesquisa */}
       {surveyProgress && !surveyProgress.isLoading && (
         <div className="space-y-4">
-          <SetupProgress 
+          <SetupProgress
             hasProfile={surveyProgress.hasProfile}
             hasSurvey={surveyProgress.hasSurvey}
             hasOpenQuestions={surveyProgress.hasOpenQuestions}
             progress={progressPercentage}
-            onContinue={onContinueSurvey}
+            onContinue={onContinueSurvey || onContinue}
           />
         </div>
       )}
@@ -58,7 +70,7 @@ function TeamDetailsComponent({
       {/* Lista de membros */}
       <div className="space-y-4">
         <h3 className="text-lg font-semibold">Membros da Equipe</h3>
-        <TeamMembersList 
+        <TeamMembersList
           members={members}
           currentUserEmail={currentUserEmail}
         />
@@ -70,7 +82,7 @@ function TeamDetailsComponent({
           <InviteUserForm
             teamId={teamId}
             teamName={selectedTeam.name}
-            ownerEmail={currentUserEmail || ''}
+            ownerEmail={currentUserEmail || ""}
             onInviteSent={() => {
               // Atualizar a lista de membros após o envio do convite
               loadTeamMembers(teamId);
@@ -83,4 +95,4 @@ function TeamDetailsComponent({
   );
 }
 
-export const TeamDetails = withSurveyProgress(TeamDetailsComponent); 
+export const TeamDetails = withSurveyProgress(TeamDetailsComponent);
