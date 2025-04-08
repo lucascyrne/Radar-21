@@ -12,59 +12,47 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/resources/auth/auth-hook";
 import { InviteService } from "@/resources/invite/invite.service";
 import { Loader2 } from "lucide-react";
-import { useRouter, useSearchParams } from "next/navigation";
-import { Suspense, useEffect } from "react";
-import { toast } from "sonner";
+import { useSearchParams } from "next/navigation";
+import { Suspense, useEffect, useState } from "react";
 import { ErrorAlert } from "./components/auth-alerts";
 import { LoginForm, RegisterForm } from "./components/auth-forms";
 
+interface LoginFormData {
+  email: string;
+  password: string;
+}
+
 function AuthContent() {
-  const router = useRouter();
+  const { signInWithEmail } = useAuth();
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
   const searchParams = useSearchParams();
-  const {
-    signInWithEmail,
-    signUpWithEmail,
-    isLoading,
-    isAuthenticated,
-    error,
-    clearError,
-  } = useAuth();
 
-  // Redirecionar se autenticado
-  useEffect(() => {
-    if (isAuthenticated) {
-      router.push("/team-setup");
-    }
-  }, [isAuthenticated]);
+  const clearError = () => setError(null);
 
-  // Efeito para capturar parâmetros do convite
+  // Processar parâmetros de convite
   useEffect(() => {
-    const teamId = searchParams.get("invite");
+    const teamId = searchParams.get("teamId");
     const email = searchParams.get("email");
 
     if (teamId && email) {
+      console.log("Armazenando convite pendente:", { teamId, email });
       InviteService.storePendingInvite(teamId, email);
     }
   }, [searchParams]);
 
-  // Handlers
-  const handleLoginSubmit = async (data: any) => {
+  const handleLoginSubmit = async (data: LoginFormData) => {
     try {
-      await signInWithEmail(data.email, data.password);
-    } catch (error: any) {
-      // O erro já está sendo gerenciado pelo AuthProvider
-    }
-  };
+      setIsLoading(true);
+      setError(null);
 
-  const handleSignupSubmit = async (data: any) => {
-    try {
-      await signUpWithEmail(data.email, data.password, data.role);
-      toast.success("Cadastro realizado com sucesso!", {
-        description:
-          "Sua conta foi criada. Você será redirecionado em instantes.",
-      });
+      await signInWithEmail(data.email, data.password);
+
+      // O redirecionamento é feito pelo AuthProvider após o login bem-sucedido
     } catch (error: any) {
-      // O erro já está sendo gerenciado pelo AuthProvider
+      console.error("Erro no login:", error);
+      setError(error.message);
+      setIsLoading(false);
     }
   };
 

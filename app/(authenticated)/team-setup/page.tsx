@@ -290,7 +290,7 @@ export default function TeamSetupPage() {
           )}
 
           <TabsContent value="my-teams" className="space-y-6">
-            {teamsLoading ? (
+            {teamsLoading && !teamsLoaded ? (
               <div className="space-y-4">
                 <TeamSkeleton />
                 <TeamSkeleton />

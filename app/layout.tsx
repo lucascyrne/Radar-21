@@ -15,6 +15,9 @@ export const metadata: Metadata = {
     "Plataforma para avaliação de competências de liderança 4.0 em equipes",
 };
 
+// Configuração adicional para RSC
+export const dynamic = "force-dynamic";
+
 export default function RootLayout({
   children,
 }: {

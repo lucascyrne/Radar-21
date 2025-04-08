@@ -206,6 +206,7 @@ export default function Home() {
                   <Link
                     href="/privacy"
                     className="text-primary hover:underline"
+                    prefetch={false}
                   >
                     política de privacidade
                   </Link>
@@ -243,6 +244,7 @@ export default function Home() {
                             key={i}
                             href={link.url}
                             target="_blank"
+                            rel="noopener noreferrer"
                             className="text-primary hover:text-primary/80 transition-colors"
                           >
                             {link.label}
