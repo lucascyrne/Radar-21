@@ -93,11 +93,12 @@ export function RegisterForm() {
       setIsLoading(true);
       const { email, password, role } = values;
       await signUpWithEmail(email, password, role);
-      toast.success("Registro realizado com sucesso!");
-      router.push("/auth/verify-email");
-    } catch (error) {
+      toast.success("Registro realizado com sucesso!", {
+        description: "Um email de confirmação foi enviado para você.",
+      });
+    } catch (error: any) {
       console.error("Erro ao registrar:", error);
-      toast.error("Erro ao registrar");
+      toast.error(error.message || "Erro ao registrar");
     } finally {
       setIsLoading(false);
     }

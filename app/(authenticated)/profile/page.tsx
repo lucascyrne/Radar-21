@@ -3,17 +3,16 @@
 import { useCallback, useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Layout } from "@/components/layout"
-import { useToast } from "@/hooks/use-toast"
 import { useAuth } from "@/resources/auth/auth-hook"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { supabase } from "@/resources/auth/auth.service"
+import { toast } from "sonner"
 
 export default function ProfilePage() {
   const router = useRouter()
-  const { toast } = useToast()
   const { user } = useAuth()
   const [isLoading, setIsLoading] = useState(false)
   const [formData, setFormData] = useState({
@@ -43,17 +42,15 @@ export default function ProfilePage() {
 
       if (error) throw error
 
-      toast({
-        title: "Perfil atualizado",
+      toast.success("Perfil atualizado", {
         description: "Suas informações foram atualizadas com sucesso.",
-      })
+      });
     } catch (error: any) {
-      console.error("Erro ao atualizar perfil:", error)
-      toast({
-        title: "Erro ao atualizar perfil",
-        description: error.message || "Ocorreu um erro ao atualizar suas informações.",
-        variant: "destructive",
-      })
+      console.error("Erro ao atualizar perfil:", error);
+      toast.error("Erro ao atualizar perfil", {
+        description:
+          error.message || "Ocorreu um erro ao atualizar suas informações.",
+      });
     } finally {
       setIsLoading(false)
     }

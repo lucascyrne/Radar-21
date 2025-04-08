@@ -1,35 +1,47 @@
-"use client"
+"use client";
 
-import { Suspense, useEffect } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useAuth } from '@/resources/auth/auth-hook';
-import { InviteService } from '@/resources/invite/invite.service';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { useToast } from '@/hooks/use-toast';
-import { Layout } from '@/components/layout';
-import { LoginForm, RegisterForm } from './components/auth-forms';
-import { ErrorAlert } from './components/auth-alerts';
-import { Loader2 } from 'lucide-react';
+import { Layout } from "@/components/layout";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useAuth } from "@/resources/auth/auth-hook";
+import { InviteService } from "@/resources/invite/invite.service";
+import { Loader2 } from "lucide-react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useEffect } from "react";
+import { toast } from "sonner";
+import { ErrorAlert } from "./components/auth-alerts";
+import { LoginForm, RegisterForm } from "./components/auth-forms";
 
 function AuthContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { toast } = useToast();
-  const { signInWithEmail, signUpWithEmail, isLoading, isAuthenticated, error, clearError } = useAuth();
+  const {
+    signInWithEmail,
+    signUpWithEmail,
+    isLoading,
+    isAuthenticated,
+    error,
+    clearError,
+  } = useAuth();
 
   // Redirecionar se autenticado
   useEffect(() => {
     if (isAuthenticated) {
-      router.push('/team-setup');
+      router.push("/team-setup");
     }
   }, [isAuthenticated]);
 
   // Efeito para capturar parâmetros do convite
   useEffect(() => {
-    const teamId = searchParams.get('invite');
-    const email = searchParams.get('email');
-    
+    const teamId = searchParams.get("invite");
+    const email = searchParams.get("email");
+
     if (teamId && email) {
       InviteService.storePendingInvite(teamId, email);
     }
@@ -46,10 +58,10 @@ function AuthContent() {
 
   const handleSignupSubmit = async (data: any) => {
     try {
-      await signUpWithEmail(data.email, data.password);
-      toast({
-        title: "Cadastro realizado com sucesso!",
-        description: "Sua conta foi criada. Você será redirecionado em instantes.",
+      await signUpWithEmail(data.email, data.password, data.role);
+      toast.success("Cadastro realizado com sucesso!", {
+        description:
+          "Sua conta foi criada. Você será redirecionado em instantes.",
       });
     } catch (error: any) {
       // O erro já está sendo gerenciado pelo AuthProvider
@@ -65,10 +77,10 @@ function AuthContent() {
       </Layout>
     );
   }
-  
+
   return (
     <Layout>
-      <div className="container max-w-md mx-auto py-10">
+      <div className="w-full max-w-md mx-auto px-4 py-20">
         <Card>
           <CardHeader>
             <CardTitle>Acesso ao Sistema</CardTitle>
@@ -78,19 +90,19 @@ function AuthContent() {
           </CardHeader>
           <CardContent>
             <ErrorAlert error={error} />
-            
+
             <Tabs defaultValue="login" onValueChange={() => clearError()}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="login">Login</TabsTrigger>
                 <TabsTrigger value="register">Registro</TabsTrigger>
               </TabsList>
-              
+
               <TabsContent value="login">
                 <LoginForm onSubmit={handleLoginSubmit} isLoading={isLoading} />
               </TabsContent>
-              
+
               <TabsContent value="register">
-                <RegisterForm onSubmit={handleSignupSubmit} isLoading={isLoading} />
+                <RegisterForm />
               </TabsContent>
             </Tabs>
           </CardContent>
@@ -103,11 +115,13 @@ function AuthContent() {
 // Componente principal com Suspense
 export default function AuthPage() {
   return (
-    <Suspense fallback={
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    }>
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      }
+    >
       <AuthContent />
     </Suspense>
   );
