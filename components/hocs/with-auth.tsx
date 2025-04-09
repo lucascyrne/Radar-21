@@ -3,22 +3,17 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export function withAuth<P extends object>(
-  WrappedComponent: React.ComponentType<P>,
-  requireEmailConfirmation: boolean = true
+  WrappedComponent: React.ComponentType<P>
 ) {
   return function WithAuthComponent(props: P) {
-    const { user, isLoading } = useAuth();
+    const { isLoading, isAuthenticated } = useAuth();
     const router = useRouter();
 
     useEffect(() => {
-      if (!isLoading) {
-        if (!user) {
-          router.push("/auth");
-        } else if (requireEmailConfirmation && !user.email_confirmed_at) {
-          router.push("/auth/verify-email");
-        }
+      if (!isLoading && !isAuthenticated) {
+        router.push("/auth");
       }
-    }, [user, isLoading]);
+    }, [isLoading, isAuthenticated, router]);
 
     if (isLoading) {
       return (
@@ -28,7 +23,7 @@ export function withAuth<P extends object>(
       );
     }
 
-    if (!user || (requireEmailConfirmation && !user.email_confirmed_at)) {
+    if (!isAuthenticated) {
       return null;
     }
 

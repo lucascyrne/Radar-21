@@ -21,13 +21,14 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { memo, useEffect, useState } from "react";
 
-// Lista de rotas que precisam do link de Team Setup
-const TEAM_ROUTES = [
+// Lista de rotas que são consideradas autenticadas
+const AUTHENTICATED_ROUTES = [
   "/team-setup",
-  "/profile-survey",
+  "/demographic-data",
   "/survey",
   "/open-questions",
   "/results",
+  "/profile",
 ];
 
 // Componente memoizado para evitar renderizações desnecessárias
@@ -38,10 +39,16 @@ export const Header = memo(function Header() {
   const [isClient, setIsClient] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
 
-  // Verificar se a rota atual precisa de dados de equipe
-  const showTeamSetupLink = TEAM_ROUTES.some((route) =>
+  // Verificar se estamos em uma rota autenticada
+  const isAuthenticatedRoute = AUTHENTICATED_ROUTES.some((route) =>
     pathname?.startsWith(route)
   );
+
+  // Mostrar link para Team Setup apenas em rotas autenticadas
+  const showTeamSetupLink = isAuthenticatedRoute;
+
+  // Mostra informações do usuário apenas em rotas autenticadas
+  const showUserInfo = isClient && isAuthenticated && isAuthenticatedRoute;
 
   // Garantir que o componente só acesse o contexto de autenticação no cliente
   useEffect(() => {
@@ -50,7 +57,7 @@ export const Header = memo(function Header() {
 
   const handleLogout = async () => {
     setIsSheetOpen(false);
-    router.push("/logout");
+    router.push("/auth/logout");
   };
 
   // Obter as iniciais do email do usuário
@@ -80,7 +87,7 @@ export const Header = memo(function Header() {
         Home
       </Link>
 
-      {isClient && isAuthenticated && (
+      {showTeamSetupLink && (
         <Link
           href="/team-setup"
           className="text-sm font-medium hover:text-primary transition-colors"
@@ -92,32 +99,24 @@ export const Header = memo(function Header() {
     </>
   );
 
-  // Placeholder para autenticação durante carregamento
-  const AuthPlaceholder = () => (
-    <div className="flex items-center space-x-2 opacity-0">
-      <div className="w-[70px] h-8" /> {/* Espaço para botão Login */}
-      <div className="w-[70px] h-8" /> {/* Espaço para botão Signup */}
-    </div>
-  );
-
   // Conteúdo de autenticação
   const AuthContent = () => {
     if (!isClient) {
-      return <AuthPlaceholder />;
+      return null;
     }
 
     return (
       <>
-        {user && isAuthenticated ? (
+        {showUserInfo ? (
           <div className="flex items-center space-x-4">
             <span className="text-sm font-medium">
-              Bem-vindo, {getDisplayName(user.name, user.email)}
+              Bem-vindo, {getDisplayName(user?.name, user?.email)}
             </span>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Avatar className="h-8 w-8 cursor-pointer">
                   <AvatarFallback className="bg-primary text-primary-foreground">
-                    {getUserInitials(user.email)}
+                    {getUserInitials(user?.email)}
                   </AvatarFallback>
                 </Avatar>
               </DropdownMenuTrigger>
@@ -142,12 +141,7 @@ export const Header = memo(function Header() {
         ) : (
           <div className="flex items-center space-x-2">
             <Link href="/auth" onClick={() => setIsSheetOpen(false)}>
-              <Button variant="outline" size="sm">
-                Login
-              </Button>
-            </Link>
-            <Link href="/auth?tab=signup" onClick={() => setIsSheetOpen(false)}>
-              <Button size="sm">Signup</Button>
+              <Button size="sm">Get Started</Button>
             </Link>
           </div>
         )}
@@ -191,16 +185,16 @@ export const Header = memo(function Header() {
                     <NavContent />
                   </div>
                   <div className="pt-4 border-t">
-                    {user && isAuthenticated ? (
+                    {showUserInfo ? (
                       <div className="flex flex-col space-y-4">
                         <div className="flex items-center space-x-2">
                           <Avatar className="h-8 w-8">
                             <AvatarFallback className="bg-primary text-primary-foreground">
-                              {getUserInitials(user.email)}
+                              {getUserInitials(user?.email)}
                             </AvatarFallback>
                           </Avatar>
                           <span className="font-medium">
-                            {getDisplayName(user.name, user.email)}
+                            {getDisplayName(user?.name, user?.email)}
                           </span>
                         </div>
                         <Button
@@ -229,15 +223,7 @@ export const Header = memo(function Header() {
                           href="/auth"
                           onClick={() => setIsSheetOpen(false)}
                         >
-                          <Button variant="outline" className="w-full">
-                            Login
-                          </Button>
-                        </Link>
-                        <Link
-                          href="/auth?tab=signup"
-                          onClick={() => setIsSheetOpen(false)}
-                        >
-                          <Button className="w-full">Signup</Button>
+                          <Button className="w-full">Get Started</Button>
                         </Link>
                       </div>
                     )}

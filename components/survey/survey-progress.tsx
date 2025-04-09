@@ -83,7 +83,7 @@ export const withSurveyProgress = (
       const { hasProfile, hasSurvey, hasOpenQuestions } = progress;
 
       if (!hasProfile) {
-        router.push("/profile-survey");
+        router.push("/demographic-data");
       } else if (!hasSurvey) {
         router.push("/survey");
       } else if (!hasOpenQuestions) {
