@@ -11,6 +11,7 @@ export interface User {
   created_at?: string;
   updated_at?: string;
   team_id?: string;
+  organization_id?: string;
   role?: UserRole;
   status?: UserStatus;
   email_confirmed_at?: string | null;
@@ -90,3 +91,8 @@ export const registerSchema = z
 
 export type LoginFormValues = z.infer<typeof loginSchema>;
 export type RegisterFormValues = z.infer<typeof registerSchema>;
+
+export interface UpdateProfileParams {
+  name?: string;
+  avatar_url?: string;
+}

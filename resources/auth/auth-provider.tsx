@@ -1,11 +1,10 @@
 "use client";
 
 import { Session } from "@supabase/supabase-js";
-import { useRouter } from "next/navigation";
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import { SurveyResponses } from "../survey/survey-model";
 import AuthContext, { initialState } from "./auth-context";
-import { AuthState, InviteUserParams, User } from "./auth-model";
+import { AuthState, UpdateProfileParams, User } from "./auth-model";
 import { AuthService, supabase } from "./auth.service";
 
 interface AuthProviderProps {
@@ -14,117 +13,72 @@ interface AuthProviderProps {
 
 export const AuthProvider = ({ children }: AuthProviderProps) => {
   const [state, setState] = useState<AuthState>(initialState);
-  const router = useRouter();
 
   const updateState = useCallback((updates: Partial<AuthState>) => {
     setState((current) => ({ ...current, ...updates }));
   }, []);
 
-  const handleAuthStateChange = useCallback(
-    async (event: string, session: Session | null) => {
-      console.log("Auth state changed:", event);
-
-      if (!session?.user) {
-        console.log("Sem sessão, limpando estado");
-        updateState({
-          user: null,
-          session: null,
-          isAuthenticated: false,
-          isLoading: false,
-        });
-        return;
-      }
-
-      const user: User = {
-        id: session.user.id,
-        email: session.user.email || "",
-        role: session.user.user_metadata?.role || "COLLABORATOR",
-        email_confirmed_at: session.user.email_confirmed_at,
-      };
-
-      const isEmailConfirmed = !!session.user.email_confirmed_at;
-
-      console.log("Atualizando estado com:", {
-        isEmailConfirmed,
-        user: user.email,
-        event,
-      });
-
+  const setSession = useCallback((session: Session | null) => {
+    if (!session) {
       updateState({
-        user,
-        session,
-        isAuthenticated: isEmailConfirmed,
+        user: null,
+        session: null,
+        isAuthenticated: false,
         isLoading: false,
+        error: null,
+        surveyResponses: null,
       });
+      return null;
+    }
 
-      // Redirecionar apenas em eventos específicos
-      if (["SIGNED_IN", "INITIAL_SESSION"].includes(event)) {
-        console.log("Evento de autenticação detectado:", event);
-        if (isEmailConfirmed) {
-          console.log("Email confirmado, redirecionando para /team-setup");
-          await router.push("/team-setup");
-        } else {
-          console.log("Email não confirmado, redirecionando para verificação");
-          await router.push("/auth/verify-email");
-        }
-      }
-    },
-    [router, updateState]
-  );
-
-  useEffect(() => {
-    let mounted = true;
-    console.log("Inicializando AuthProvider effect");
-
-    const initialize = async () => {
-      try {
-        console.log("Inicializando AuthProvider");
-        updateState({ isLoading: true });
-        const session = await AuthService.getSession();
-
-        if (mounted) {
-          await handleAuthStateChange("INITIAL_SESSION", session);
-        }
-      } catch (error) {
-        console.error("Erro na inicialização:", error);
-        if (mounted) {
-          updateState({ isLoading: false, error: "Erro na inicialização" });
-        }
-      }
+    const user: User = {
+      id: session.user.id,
+      email: session.user.email || "",
+      role: session.user.user_metadata?.role || "COLLABORATOR",
+      email_confirmed_at: session.user.email_confirmed_at,
     };
 
-    initialize();
+    updateState({
+      user,
+      session,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
 
+    return user;
+  }, []);
+
+  // Monitorar mudanças na autenticação
+  useEffect(() => {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (mounted) {
-        await handleAuthStateChange(event, session);
+      if (event === "SIGNED_OUT") {
+        // Forçar limpeza completa do estado
+        setState(initialState);
+        // Limpar cookies e localStorage
+        document.cookie.split(";").forEach(function (c) {
+          document.cookie = c
+            .replace(/^ +/, "")
+            .replace(
+              /=.*/,
+              "=;expires=" + new Date().toUTCString() + ";path=/"
+            );
+        });
+        localStorage.clear();
+      } else {
+        setSession(session);
       }
     });
 
     return () => {
-      mounted = false;
       subscription?.unsubscribe();
     };
-  }, [handleAuthStateChange, updateState]);
-
-  // Auth Methods
-  const signInWithGoogle = async () => {
-    try {
-      updateState({ isLoading: true, error: null });
-      await AuthService.signInWithGoogle({
-        redirectTo: `${window.location.origin}/auth/callback`,
-      });
-    } catch (error: any) {
-      updateState({ error: error.message, isLoading: false });
-      throw error;
-    }
-  };
+  }, []);
 
   const signInWithEmail = async (email: string, password: string) => {
     try {
-      console.log("Iniciando login com email:", email);
       updateState({ isLoading: true, error: null });
       const { session } = await AuthService.signInWithEmail(email, password);
 
@@ -132,9 +86,32 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         throw new Error("Erro ao fazer login");
       }
 
-      await handleAuthStateChange("SIGNED_IN", session);
+      setSession(session);
+      return session;
     } catch (error: any) {
       console.error("Erro no login:", error);
+      updateState({ error: error.message, isLoading: false });
+      throw error;
+    }
+  };
+
+  const signOut = async () => {
+    try {
+      updateState({ isLoading: true, error: null });
+      await AuthService.signOut();
+      setState(initialState);
+    } catch (error: any) {
+      updateState({ error: error.message, isLoading: false });
+    }
+  };
+
+  const signInWithGoogle = async () => {
+    try {
+      updateState({ isLoading: true, error: null });
+      await AuthService.signInWithGoogle({
+        redirectTo: `${window.location.origin}/auth/callback`,
+      });
+    } catch (error: any) {
       updateState({ error: error.message, isLoading: false });
       throw error;
     }
@@ -156,104 +133,40 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       if (signUpError) throw signUpError;
 
       updateState({ isLoading: false });
-      router.push("/auth/verify-email");
     } catch (error: any) {
       updateState({ error: error.message, isLoading: false });
       throw error;
     }
   };
 
-  const signOut = async () => {
+  const updateProfile = async (params: UpdateProfileParams) => {
     try {
       updateState({ isLoading: true, error: null });
-      await AuthService.signOut();
-      updateState({
-        user: null,
-        session: null,
-        isAuthenticated: false,
-        isLoading: false,
+
+      const { data, error } = await supabase.auth.updateUser({
+        data: {
+          name: params.name,
+          avatar_url: params.avatar_url,
+        },
       });
-      router.push("/auth");
-    } catch (error: any) {
-      updateState({ error: error.message, isLoading: false });
-    }
-  };
-
-  // User Management Methods
-  const updateFormProgress = async (page: string, isComplete = false) => {
-    try {
-      if (!state.user) {
-        return { success: false, error: "Usuário não autenticado" };
-      }
-
-      const { error } = await supabase
-        .from("users")
-        .update({
-          last_form_page: page,
-          has_completed_form: isComplete,
-        })
-        .eq("id", state.user.id);
 
       if (error) throw error;
 
-      updateState({
-        user: state.user
-          ? {
-              ...state.user,
-              last_form_page: page,
-              has_completed_form: isComplete,
-            }
-          : null,
-      });
-
-      return { success: true };
+      if (data.user) {
+        const updatedUser: User = {
+          ...state.user!,
+          name: params.name || state.user?.name,
+          avatar_url: params.avatar_url || state.user?.avatar_url,
+        };
+        updateState({ user: updatedUser });
+      }
     } catch (error: any) {
-      return { success: false, error: error.message };
+      updateState({ error: error.message });
+      throw error;
+    } finally {
+      updateState({ isLoading: false });
     }
   };
-
-  const inviteUser = async (params: InviteUserParams) => {
-    try {
-      const response = await fetch("/api/send-invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email: params.email,
-          inviteUrl: `${window.location.origin}/auth/accept-invite?team=${params.teamId}`,
-          message: params.message,
-          teamId: params.teamId,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      return { success: true };
-    } catch (error: any) {
-      return { success: false, error: error.message };
-    }
-  };
-
-  // Utility Methods
-  const getNextFormPage = () => {
-    if (!state.user?.last_form_page) return "/form/step1";
-
-    const formPages = [
-      "/form/step1",
-      "/form/step2",
-      "/form/step3",
-      "/form/step4",
-      "/form/step5",
-      "/resultados",
-    ];
-
-    const currentIndex = formPages.indexOf(state.user.last_form_page);
-    return currentIndex === -1 || currentIndex === formPages.length - 1
-      ? "/form/step1"
-      : formPages[currentIndex + 1];
-  };
-
-  const hasCompletedForm = () => !!state.user?.has_completed_form;
-  const clearError = () => updateState({ error: null });
 
   return (
     <AuthContext.Provider
@@ -263,19 +176,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         signInWithEmail,
         signUpWithEmail,
         signOut,
-        clearError,
-        inviteUser,
-        updateFormProgress,
-        getNextFormPage,
-        hasCompletedForm,
+        clearError: () => updateState({ error: null }),
+        inviteUser: async () => ({ success: false }),
+        updateFormProgress: async () => ({ success: false }),
+        getNextFormPage: () => "/form/step1",
+        hasCompletedForm: () => false,
         setUser: (user) => updateState({ user }),
-        setSession: (session) => updateState({ session }),
+        setSession,
         setIsLoading: (isLoading) => updateState({ isLoading }),
         setIsAuthenticated: (isAuthenticated) =>
           updateState({ isAuthenticated }),
         setError: (error) => updateState({ error }),
         setSurveyResponses: (surveyResponses: SurveyResponses | null) =>
           updateState({ surveyResponses }),
+        updateProfile,
       }}
     >
       {children}

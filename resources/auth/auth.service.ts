@@ -9,8 +9,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: true,
-    flowType: "pkce",
-    storage: typeof window !== "undefined" ? window.localStorage : undefined,
   },
 });
 
@@ -64,27 +62,15 @@ export const AuthService = {
   // Verificar e obter sessão atual
   getSession: async () => {
     try {
-      // Recuperar sessão do storage
-      if (typeof window !== "undefined") {
-        const storedSession = localStorage.getItem(
-          LOCAL_STORAGE_KEYS.USER_SESSION
-        );
-        if (storedSession) {
-          const { access_token, refresh_token } = JSON.parse(storedSession);
-          if (access_token && refresh_token) {
-            await supabase.auth.setSession({
-              access_token,
-              refresh_token,
-            });
-          }
-        }
-      }
-
       const {
         data: { session },
         error,
       } = await supabase.auth.getSession();
-      if (error) throw error;
+
+      if (error) {
+        console.error("Erro ao obter sessão:", error);
+        throw error;
+      }
 
       return session;
     } catch (error) {
@@ -108,16 +94,33 @@ export const AuthService = {
   // Logout
   signOut: async () => {
     try {
-      // Limpar storage explicitamente
-      if (typeof window !== "undefined") {
-        localStorage.removeItem("supabase.auth.token");
-      }
+      // Primeiro, limpar o estado local
+      AuthService.clearLocalState();
 
+      // Depois, fazer logout no Supabase
       const { error } = await supabase.auth.signOut({
-        scope: "global",
+        scope: "local",
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Erro no logout:", error);
+        throw error;
+      }
+
+      // Limpar cookies de sessão
+      document.cookie.split(";").forEach(function (c) {
+        document.cookie = c
+          .replace(/^ +/, "")
+          .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+      });
+
+      // Forçar uma nova verificação de sessão
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (session) {
+        throw new Error("Sessão ainda ativa após logout");
+      }
 
       return true;
     } catch (error) {
@@ -139,32 +142,17 @@ export const AuthService = {
         password,
       });
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
       if (!data.user || !data.session) {
         throw new Error("Dados de autenticação inválidos");
       }
 
-      // Persistir a sessão
-      if (typeof window !== "undefined") {
-        localStorage.setItem(
-          LOCAL_STORAGE_KEYS.USER_SESSION,
-          JSON.stringify({
-            access_token: data.session.access_token,
-            refresh_token: data.session.refresh_token,
-            expires_at: data.session.expires_at,
-          })
-        );
-      }
-
-      // Atualizar a sessão no cliente Supabase
-      await supabase.auth.setSession({
-        access_token: data.session.access_token,
-        refresh_token: data.session.refresh_token,
-      });
-
       return { session: data.session };
     } catch (error) {
+      console.error("Erro no login:", error);
       throw error;
     }
   },

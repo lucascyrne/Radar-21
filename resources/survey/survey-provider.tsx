@@ -1,20 +1,20 @@
-'use client';
+"use client";
 
-import { ReactNode, useCallback, useEffect, useState, useMemo } from 'react';
-import SurveyContext from './survey-context';
-import { SurveyService } from './survey.service';
-import { 
+import { useAuth } from "@/resources/auth/auth-hook";
+import { useTeam } from "@/resources/team/team-hook";
+import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "../auth/auth.service";
+import SurveyContext from "./survey-context";
+import {
+  DemographicFormValues,
   OpenQuestionsFormValues,
-  SurveyState,
   Question,
-  SurveyFormValues,
   RadarDataPoint,
+  SurveyFormValues,
   SurveyResponses,
-  DemographicFormValues
-} from './survey-model';
-import { useAuth } from '@/resources/auth/auth-hook';
-import { useTeam } from '@/resources/team/team-hook';
-import { supabase } from '../auth/auth.service';
+  SurveyState,
+} from "./survey-model";
+import { SurveyService } from "./survey.service";
 
 interface SurveyProviderProps {
   children: ReactNode;
@@ -30,68 +30,76 @@ const initialState: SurveyState = {
     openQuestions: false,
     teamMember: false,
     saving: false,
-    demographicData: false
+    demographicData: false,
   },
   error: {
     survey: null,
     openQuestions: null,
-    demographicData: null
+    demographicData: null,
   },
   radarData: [],
   questions: [],
   answers: null,
   isSaving: false,
-  demographicData: null
+  demographicData: null,
 };
 
 export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
   const [state, setState] = useState<SurveyState>(initialState);
   const { user } = useAuth();
   const { selectedTeam } = useTeam();
-  
+
   // Estados adicionais para pesquisa
   const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [radarData, setRadarData] = useState<RadarDataPoint[]>([]);
 
   // Métodos centralizados para atualização de estado
-  const updateError = useCallback((type: keyof SurveyState['error'], message: string | null) => {
-    setState(prev => ({
-      ...prev,
-      error: { ...prev.error, [type]: message }
-    }));
-  }, []);
+  const updateError = useCallback(
+    (type: keyof SurveyState["error"], message: string | null) => {
+      setState((prev) => ({
+        ...prev,
+        error: { ...prev.error, [type]: message },
+      }));
+    },
+    []
+  );
 
-  const updateLoading = useCallback((type: keyof SurveyState['loading'], isLoading: boolean) => {
-    setState(prev => ({
-      ...prev,
-      loading: { ...prev.loading, [type]: isLoading }
-    }));
-  }, []);
+  const updateLoading = useCallback(
+    (type: keyof SurveyState["loading"], isLoading: boolean) => {
+      setState((prev) => ({
+        ...prev,
+        loading: { ...prev.loading, [type]: isLoading },
+      }));
+    },
+    []
+  );
 
   // Função para atualizar o ID do usuário
   const updateUserId = useCallback((userId: string | null) => {
-    setState(prev => ({ ...prev, userId }));
+    setState((prev) => ({ ...prev, userId }));
   }, []);
 
   // Função para atualizar o ID da equipe
   const updateTeamId = useCallback((teamId: string | null) => {
-    setState(prev => ({ ...prev, teamId }));
+    setState((prev) => ({ ...prev, teamId }));
   }, []);
 
   // Buscar IDs do usuário e equipe
   const fetchTeamMemberId = useCallback(async () => {
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+
       if (!user?.email) {
         throw new Error("Email do usuário não encontrado");
       }
 
       let { data: teamMembers } = await supabase
-        .from('team_members')
-        .select('user_id, team_id')
-        .eq('email', user.email)
+        .from("team_members")
+        .select("user_id, team_id")
+        .eq("email", user.email)
         .single();
 
       if (!teamMembers) {
@@ -109,7 +117,7 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
 
       return null;
     } catch (error: any) {
-      console.error('Erro ao buscar IDs:', error);
+      console.error("Erro ao buscar IDs:", error);
       return null;
     }
   }, []);
@@ -117,8 +125,8 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
   // Carregar dados demográficos
   const loadDemographicData = useCallback(async () => {
     try {
-      updateLoading('demographicData', true);
-      
+      updateLoading("demographicData", true);
+
       if (!state.userId || !state.teamId) {
         const ids = await fetchTeamMemberId();
         if (!ids) {
@@ -127,54 +135,73 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
         updateUserId(ids.userId);
         updateTeamId(ids.teamId);
       }
-      
+
       if (!state.userId || !state.teamId) {
         throw new Error("IDs do usuário e equipe não encontrados");
       }
-      
-      const demographicData = await SurveyService.loadDemographicData(state.userId, state.teamId);
-      setState(prev => ({ ...prev, demographicData }));
+
+      const demographicData = await SurveyService.loadDemographicData(
+        state.userId,
+        state.teamId
+      );
+      setState((prev) => ({ ...prev, demographicData }));
       return demographicData;
     } catch (error: any) {
-      updateError('demographicData', error.message || 'Erro ao carregar dados demográficos');
+      updateError(
+        "demographicData",
+        error.message || "Erro ao carregar dados demográficos"
+      );
       return null;
     } finally {
-      updateLoading('demographicData', false);
+      updateLoading("demographicData", false);
     }
   }, [state.userId, state.teamId]);
 
   // Salvar dados demográficos
-  const saveDemographicData = useCallback(async (data: DemographicFormValues): Promise<boolean> => {
-    try {
-      updateLoading('saving', true);
-      
-      if (!state.userId || !state.teamId) {
-        throw new Error('ID do usuário ou equipe não encontrado');
+  const saveDemographicData = useCallback(
+    async (data: DemographicFormValues): Promise<boolean> => {
+      try {
+        updateLoading("saving", true);
+
+        if (!state.userId || !state.teamId) {
+          throw new Error("ID do usuário ou equipe não encontrado");
+        }
+
+        await SurveyService.saveDemographicData(
+          state.userId,
+          state.teamId,
+          data
+        );
+        const savedData = await SurveyService.loadDemographicData(
+          state.userId,
+          state.teamId
+        );
+
+        setState((prev) => ({
+          ...prev,
+          demographicData: savedData,
+          error: { ...prev.error, demographicData: null },
+        }));
+
+        return true;
+      } catch (error: any) {
+        updateError(
+          "demographicData",
+          error.message || "Erro ao salvar dados demográficos"
+        );
+        return false;
+      } finally {
+        updateLoading("saving", false);
       }
-      
-      await SurveyService.saveDemographicData(state.userId, state.teamId, data);
-      const savedData = await SurveyService.loadDemographicData(state.userId, state.teamId);
-      
-      setState(prev => ({ 
-        ...prev, 
-        demographicData: savedData,
-        error: { ...prev.error, demographicData: null }
-      }));
-      
-      return true;
-    } catch (error: any) {
-      updateError('demographicData', error.message || 'Erro ao salvar dados demográficos');
-      return false;
-    } finally {
-      updateLoading('saving', false);
-    }
-  }, [state.userId, state.teamId]);
+    },
+    [state.userId, state.teamId]
+  );
 
   // Carregar dados do perfil do usuário
   const loadSurveyResponses = useCallback(async () => {
     try {
-      updateLoading('survey', true);
-      
+      updateLoading("survey", true);
+
       if (!state.userId || !state.teamId) {
         const ids = await fetchTeamMemberId();
         if (!ids) {
@@ -183,138 +210,170 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
         updateUserId(ids.userId);
         updateTeamId(ids.teamId);
       }
-      
+
       if (!state.userId || !state.teamId) {
         throw new Error("IDs do usuário e equipe não encontrados");
       }
-      
-      const surveyResponse = await SurveyService.loadSurveyResponses(state.userId, state.teamId);
-      
+
+      const surveyResponse = await SurveyService.loadSurveyResponses(
+        state.userId,
+        state.teamId
+      );
+
       if (surveyResponse) {
-        setState(prev => ({ 
-          ...prev, 
+        setState((prev) => ({
+          ...prev,
           surveyResponses: surveyResponse.responses,
-          error: { ...prev.error, survey: null }
+          error: { ...prev.error, survey: null },
         }));
         setAnswers(surveyResponse.responses);
       }
-      
+
       return surveyResponse;
     } catch (error: any) {
-      updateError('survey', error.message || 'Erro ao carregar respostas');
+      updateError("survey", error.message || "Erro ao carregar respostas");
       return null;
     } finally {
-      updateLoading('survey', false);
+      updateLoading("survey", false);
     }
   }, [state.userId, state.teamId]);
 
   // Salvar respostas do questionário
-  const saveSurveyResponses = useCallback(async (data: SurveyFormValues): Promise<boolean> => {
-    try {
-      updateLoading('saving', true);
-      
-      if (!state.userId || !state.teamId) {
-        throw new Error('IDs do usuário e equipe não encontrados');
-      }
-      
-      await SurveyService.saveSurveyResponses(state.userId, state.teamId, data);
-      
-      setState(prev => ({ 
-        ...prev, 
-        surveyResponses: data,
-        error: { ...prev.error, survey: null }
-      }));
+  const saveSurveyResponses = useCallback(
+    async (data: SurveyFormValues): Promise<boolean> => {
+      try {
+        updateLoading("saving", true);
 
-      return true;
-    } catch (error: any) {
-      updateError('survey', error.message || 'Erro ao salvar respostas');
-      return false;
-    } finally {
-      updateLoading('saving', false);
-    }
-  }, [state.userId, state.teamId]);
+        if (!state.userId || !state.teamId) {
+          throw new Error("IDs do usuário e equipe não encontrados");
+        }
+
+        await SurveyService.saveSurveyResponses(
+          state.userId,
+          state.teamId,
+          data
+        );
+
+        setState((prev) => ({
+          ...prev,
+          surveyResponses: data,
+          error: { ...prev.error, survey: null },
+        }));
+
+        return true;
+      } catch (error: any) {
+        updateError("survey", error.message || "Erro ao salvar respostas");
+        return false;
+      } finally {
+        updateLoading("saving", false);
+      }
+    },
+    [state.userId, state.teamId]
+  );
 
   // Carregar respostas das perguntas abertas
   const loadOpenQuestions = useCallback(async () => {
     try {
-      updateLoading('openQuestions', true);
-      
+      updateLoading("openQuestions", true);
+
       if (!state.userId || !state.teamId) {
         const result = await fetchTeamMemberId();
         if (!result) {
           throw new Error("IDs do usuário e equipe não encontrados");
         }
       }
-      
+
       if (!state.userId || !state.teamId) {
         throw new Error("IDs do usuário e equipe não encontrados");
       }
-      
-      const openQuestions = await SurveyService.loadOpenQuestions(state.userId, state.teamId);
-      
+
+      const openQuestions = await SurveyService.loadOpenQuestions(
+        state.userId,
+        state.teamId
+      );
+
       if (openQuestions) {
-        setState(prev => ({ ...prev, openQuestions }));
+        setState((prev) => ({ ...prev, openQuestions }));
       }
-      
+
       return openQuestions;
     } catch (error: any) {
-      console.error('Erro ao carregar respostas das perguntas abertas:', error);
-      updateError('openQuestions', error.message || 'Erro ao carregar respostas das perguntas abertas');
+      console.error("Erro ao carregar respostas das perguntas abertas:", error);
+      updateError(
+        "openQuestions",
+        error.message || "Erro ao carregar respostas das perguntas abertas"
+      );
       return null;
     } finally {
-      updateLoading('openQuestions', false);
+      updateLoading("openQuestions", false);
     }
   }, [state.userId, state.teamId, fetchTeamMemberId]);
 
   // Salvar respostas das perguntas abertas
-  const saveOpenQuestions = useCallback(async (data: OpenQuestionsFormValues): Promise<boolean> => {
-    try {
-      updateLoading('saving', true);
-      
-      if (!state.userId || !state.teamId) {
-        const result = await fetchTeamMemberId();
-        if (!result) {
+  const saveOpenQuestions = useCallback(
+    async (data: OpenQuestionsFormValues): Promise<boolean> => {
+      try {
+        updateLoading("saving", true);
+
+        if (!state.userId || !state.teamId) {
+          const result = await fetchTeamMemberId();
+          if (!result) {
+            throw new Error("IDs do usuário e equipe não encontrados");
+          }
+        }
+
+        if (!state.userId || !state.teamId) {
           throw new Error("IDs do usuário e equipe não encontrados");
         }
-      }
-      
-      if (!state.userId || !state.teamId) {
-        throw new Error("IDs do usuário e equipe não encontrados");
-      }
-      
-      const success = await SurveyService.saveOpenQuestions(state.userId, state.teamId, data);
-      
-      if (success) {
-        const savedData = await SurveyService.loadOpenQuestions(state.userId, state.teamId);
-        if (savedData) {
-          setState(prev => ({ 
-            ...prev, 
-            openQuestions: savedData,
-            error: { ...prev.error, openQuestions: null }
-          }));
+
+        const success = await SurveyService.saveOpenQuestions(
+          state.userId,
+          state.teamId,
+          data
+        );
+
+        if (success) {
+          const savedData = await SurveyService.loadOpenQuestions(
+            state.userId,
+            state.teamId
+          );
+          if (savedData) {
+            setState((prev) => ({
+              ...prev,
+              openQuestions: savedData,
+              error: { ...prev.error, openQuestions: null },
+            }));
+          }
+
+          const isComplete = await SurveyService.checkSurveyCompletion(
+            state.userId,
+            state.teamId
+          );
+
+          if (isComplete) {
+            await SurveyService.updateMemberStatus(state.userId, "answered");
+          }
         }
-        
-        const isComplete = await SurveyService.checkSurveyCompletion(state.userId, state.teamId);
-        
-        if (isComplete) {
-          await SurveyService.updateMemberStatus(state.userId, 'answered');
-        }
+
+        return success;
+      } catch (error: any) {
+        updateError(
+          "openQuestions",
+          error.message || "Erro ao salvar respostas"
+        );
+        return false;
+      } finally {
+        updateLoading("saving", false);
       }
-      
-      return success;
-    } catch (error: any) {
-      updateError('openQuestions', error.message || 'Erro ao salvar respostas');
-      return false;
-    } finally {
-      updateLoading('saving', false);
-    }
-  }, [state.userId, state.teamId, fetchTeamMemberId]);
-  
+    },
+    [state.userId, state.teamId, fetchTeamMemberId]
+  );
+
   // Função para marcar todas as etapas como concluídas
   const completeAllSteps = useCallback(async () => {
     try {
-      updateLoading('saving', true);
-      
+      updateLoading("saving", true);
+
       if (!state.userId || !state.teamId) {
         const ids = await fetchTeamMemberId();
         if (!ids) {
@@ -323,98 +382,117 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
         updateUserId(ids.userId);
         updateTeamId(ids.teamId);
       }
-      
+
       if (!state.userId || !state.teamId) {
         throw new Error("IDs do usuário e equipe não encontrados");
       }
-      
-      const isComplete = await SurveyService.checkSurveyCompletion(state.userId, state.teamId);
-      
+
+      const isComplete = await SurveyService.checkSurveyCompletion(
+        state.userId,
+        state.teamId
+      );
+
       if (isComplete) {
-        await SurveyService.updateMemberStatus(state.userId, 'answered');
+        await SurveyService.updateMemberStatus(state.userId, "answered");
       }
-      
+
       return isComplete;
     } catch (error: any) {
-      updateError('demographicData', error.message || 'Erro ao verificar conclusão das etapas');
+      updateError(
+        "demographicData",
+        error.message || "Erro ao verificar conclusão das etapas"
+      );
       return false;
     } finally {
-      updateLoading('saving', false);
+      updateLoading("saving", false);
     }
   }, [state.userId, state.teamId]);
 
   // Salvar respostas
-  const saveAnswers = useCallback(async (responses: SurveyResponses): Promise<boolean> => {
-    try {
-      if (!state.userId || !state.teamId) {
-        throw new Error('ID do usuário ou equipe não encontrado');
-      }
-
-      // Atualizar o estado imediatamente para manter a UI responsiva
-      setState(prev => ({
-        ...prev,
-        surveyResponses: responses,
-        answers: responses,
-        error: {
-          ...prev.error,
-          survey: null
+  const saveAnswers = useCallback(
+    async (responses: SurveyResponses): Promise<boolean> => {
+      try {
+        if (!state.userId || !state.teamId) {
+          throw new Error("ID do usuário ou equipe não encontrado");
         }
-      }));
 
-      // Salvar no banco de dados em segundo plano
-      await SurveyService.saveSurveyResponses(state.userId, state.teamId, responses);
-      return true;
-    } catch (error: any) {
-      console.error('Erro ao salvar respostas:', error);
-      updateError('survey', error.message || 'Erro ao salvar respostas');
-      return false;
-    }
-  }, [state.userId, state.teamId]);
+        // Atualizar o estado imediatamente para manter a UI responsiva
+        setState((prev) => ({
+          ...prev,
+          surveyResponses: responses,
+          answers: responses,
+          error: {
+            ...prev.error,
+            survey: null,
+          },
+        }));
+
+        // Salvar no banco de dados em segundo plano
+        await SurveyService.saveSurveyResponses(
+          state.userId,
+          state.teamId,
+          responses
+        );
+        return true;
+      } catch (error: any) {
+        console.error("Erro ao salvar respostas:", error);
+        updateError("survey", error.message || "Erro ao salvar respostas");
+        return false;
+      }
+    },
+    [state.userId, state.teamId]
+  );
 
   // Função para gerar dados do radar
   const generateRadarData = useCallback(async () => {
     try {
       if (!state.surveyResponses) return;
-      
-      const radarPoints = Object.entries(state.surveyResponses)
-        .map(([key, value]) => ({
+
+      const radarPoints = Object.entries(state.surveyResponses).map(
+        ([key, value]) => ({
           category: SurveyService.getCompetencyName(key),
-          value
-        }));
-      
+          value,
+        })
+      );
+
       setRadarData(radarPoints);
     } catch (error) {
-      console.error('Erro ao gerar dados do radar:', error);
+      console.error("Erro ao gerar dados do radar:", error);
     }
   }, [state.surveyResponses]);
 
   // Carregar dados
   const loadData = useCallback(async () => {
     try {
-      console.log('Iniciando loadData com:', {
+      console.log("Iniciando loadData com:", {
         stateUserId: state.userId,
         stateTeamId: state.teamId,
-        loading: state.loading
+        loading: state.loading,
       });
-      
+
       if (!state.userId || !state.teamId) {
-        console.log('IDs ausentes, aguardando...');
+        console.log("IDs ausentes, aguardando...");
         return;
       }
 
-      updateLoading('demographicData', true);
-      updateLoading('survey', true);
-      updateLoading('openQuestions', true);
+      updateLoading("demographicData", true);
+      updateLoading("survey", true);
+      updateLoading("openQuestions", true);
 
-      const [demographicData, surveyResponses, openQuestions] = await Promise.all([
-        SurveyService.loadDemographicData(state.userId, state.teamId),
-        SurveyService.loadSurveyResponses(state.userId, state.teamId),
-        SurveyService.loadOpenQuestions(state.userId, state.teamId)
-      ]);
+      const [demographicData, surveyResponses, openQuestions] =
+        await Promise.all([
+          SurveyService.loadDemographicData(state.userId, state.teamId),
+          SurveyService.loadSurveyResponses(state.userId, state.teamId),
+          SurveyService.loadOpenQuestions(state.userId, state.teamId),
+        ]);
 
-      console.log('Dados carregados:', { demographicData, surveyResponses, openQuestions });
+      console.log("Dados carregados:", {
+        demographicData,
+        surveyResponses,
+        openQuestions,
+      });
 
-      setState(prev => ({
+      setState((prev) => ({
         ...prev,
         demographicData,
         surveyResponses: surveyResponses?.responses || null,
@@ -423,30 +501,30 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
         error: {
           demographicData: null,
           survey: null,
-          openQuestions: null
-        }
+          openQuestions: null,
+        },
       }));
     } catch (error: any) {
-      console.error('Erro ao carregar dados:', error);
-      updateError('demographicData', error.message);
-      updateError('survey', error.message);
-      updateError('openQuestions', error.message);
+      console.error("Erro ao carregar dados:", error);
+      updateError("demographicData", error.message);
+      updateError("survey", error.message);
+      updateError("openQuestions", error.message);
     } finally {
-      updateLoading('demographicData', false);
-      updateLoading('survey', false);
-      updateLoading('openQuestions', false);
+      updateLoading("demographicData", false);
+      updateLoading("survey", false);
+      updateLoading("openQuestions", false);
     }
   }, [state.userId, state.teamId]);
 
   // Carregar dados iniciais quando o usuário e a equipe estiverem disponíveis
   useEffect(() => {
     if (user?.id && selectedTeam?.id) {
-      console.log('Atualizando IDs no provider:', { 
-        userId: user.id, 
-        teamId: selectedTeam.id 
+      console.log("Atualizando IDs no provider:", {
+        userId: user.id,
+        teamId: selectedTeam.id,
       });
-      
-      setState(prev => ({
+
+      setState((prev) => ({
         ...prev,
         userId: user.id,
         teamId: selectedTeam.id,
@@ -454,8 +532,8 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
           ...prev.loading,
           demographicData: true,
           survey: true,
-          openQuestions: true
-        }
+          openQuestions: true,
+        },
       }));
     }
   }, [user?.id, selectedTeam?.id]);
@@ -463,9 +541,9 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
   // Carregar dados quando os IDs estiverem disponíveis no estado
   useEffect(() => {
     if (state.userId && state.teamId) {
-      console.log('IDs disponíveis, carregando dados:', {
+      console.log("IDs disponíveis, carregando dados:", {
         userId: state.userId,
-        teamId: state.teamId
+        teamId: state.teamId,
       });
       loadData();
     }
@@ -537,45 +615,46 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
     ];
 
     setQuestions(questions);
-    setState(prev => ({
+    setState((prev) => ({
       ...prev,
-      questions
+      questions,
     }));
   }, []);
 
-  const value = useMemo(() => ({
-    ...state,
-    saveAnswers,
-    generateRadarData,
-    saveDemographicData,
-    saveSurveyResponses,
-    saveOpenQuestions,
-    updateUserId,
-    updateTeamId,
-    updateError,
-    updateLoading,
-    loadData,
-    completeAllSteps,
-    loadDemographicData
-  }), [
-    state,
-    saveAnswers,
-    generateRadarData,
-    saveDemographicData,
-    saveSurveyResponses,
-    saveOpenQuestions,
-    updateUserId,
-    updateTeamId,
-    updateError,
-    updateLoading,
-    loadData,
-    completeAllSteps,
-    loadDemographicData
-  ]);
+  const value = useMemo(
+    () => ({
+      ...state,
+      saveAnswers,
+      generateRadarData,
+      saveDemographicData,
+      saveSurveyResponses,
+      saveOpenQuestions,
+      updateUserId,
+      updateTeamId,
+      updateError,
+      updateLoading,
+      loadData,
+      completeAllSteps,
+      loadDemographicData,
+    }),
+    [
+      state,
+      saveAnswers,
+      generateRadarData,
+      saveDemographicData,
+      saveSurveyResponses,
+      saveOpenQuestions,
+      updateUserId,
+      updateTeamId,
+      updateError,
+      updateLoading,
+      loadData,
+      completeAllSteps,
+      loadDemographicData,
+    ]
+  );
 
   return (
-    <SurveyContext.Provider value={value}>
-      {children}
-    </SurveyContext.Provider>
+    <SurveyContext.Provider value={value}>{children}</SurveyContext.Provider>
   );
-}; 
+};

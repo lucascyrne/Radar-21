@@ -41,13 +41,35 @@ CREATE TABLE "public"."teams" (
     CONSTRAINT "teams_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES user_profiles(id)
 );
 
+-- Habilitar RLS nas tabelas
+ALTER TABLE "public"."teams" ENABLE ROW LEVEL SECURITY;
+
+-- Políticas de segurança para teams
+CREATE POLICY "leader_create_teams" ON "public"."teams"
+    FOR INSERT WITH CHECK (
+        (auth.jwt() ->> 'role' = 'LEADER' OR auth.jwt() ->> 'role' = 'leader')
+        AND owner_id = auth.uid()
+    );
+
+CREATE POLICY "leader_update_own_teams" ON "public"."teams"
+    FOR UPDATE USING (
+        (auth.jwt() ->> 'role' = 'LEADER' OR auth.jwt() ->> 'role' = 'leader')
+        AND owner_id = auth.uid()
+    );
+
+CREATE POLICY "leader_delete_own_teams" ON "public"."teams"
+    FOR DELETE USING (
+        (auth.jwt() ->> 'role' = 'LEADER' OR auth.jwt() ->> 'role' = 'leader')
+        AND owner_id = auth.uid()
+    );
+
 -- 1.3 Membros da equipe
 CREATE TABLE "public"."team_members" (
     "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
     "team_id" uuid NOT NULL,
     "user_id" uuid,
     "email" text NOT NULL,
-    "role" user_role NOT NULL DEFAULT 'COLLABORATOR',
+    "role" text NOT NULL CHECK (role IN ('leader', 'member')),
     "status" text NOT NULL,
     "created_at" timestamp with time zone DEFAULT now(),
     "updated_at" timestamp with time zone,
@@ -56,8 +78,14 @@ CREATE TABLE "public"."team_members" (
     CONSTRAINT "team_members_team_id_fkey" FOREIGN KEY ("team_id") REFERENCES teams(id) ON DELETE CASCADE,
     CONSTRAINT "team_members_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES auth.users(id) ON DELETE SET NULL,
     CONSTRAINT "team_members_status_check" CHECK (status IN ('invited', 'answered', 'pending_survey')),
-    CONSTRAINT "unique_team_member_email" UNIQUE (team_id, email)
+    CONSTRAINT "unique_team_member_email" UNIQUE (team_id, email),
+    CONSTRAINT "unique_team_leader" UNIQUE (team_id, role)
 );
+
+-- Criar índice parcial para garantir apenas um líder por equipe
+CREATE UNIQUE INDEX idx_unique_team_leader 
+ON team_members (team_id) 
+WHERE role = 'leader';
 
 -- 2. Tabelas da pesquisa
 -- 2.1 Dados demográficos (primeiro passo)
@@ -172,9 +200,14 @@ SELECT
     sr.q11,
     sr.q12,
     sr.created_at AS response_created_at,
-    sr.updated_at AS response_updated_at
+    sr.updated_at AS response_updated_at,
+    CASE 
+        WHEN tm.role = 'leader' THEN true
+        ELSE false
+    END as is_leader
 FROM team_members tm
-LEFT JOIN survey_responses sr ON (sr.user_id = tm.user_id AND sr.team_id = tm.team_id);
+LEFT JOIN survey_responses sr ON (sr.user_id = tm.user_id AND sr.team_id = tm.team_id)
+WHERE tm.status = 'answered';
 
 -- 5. Triggers
 CREATE TRIGGER update_demographic_data_updated_at 
