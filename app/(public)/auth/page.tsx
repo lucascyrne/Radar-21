@@ -1,116 +1,46 @@
 "use client";
 
 import { Layout } from "@/components/layout";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/resources/auth/auth-hook";
-import { InviteService } from "@/resources/invite/invite.service";
-import { Loader2 } from "lucide-react";
-import { useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
-import { ErrorAlert } from "./components/auth-alerts";
-import { LoginForm, RegisterForm } from "./components/auth-forms";
+import { useRouter } from "next/navigation";
+import { useEffect } from "react";
 
-interface LoginFormData {
-  email: string;
-  password: string;
-}
+export default function AuthPage() {
+  const { isAuthenticated } = useAuth();
+  const router = useRouter();
 
-function AuthContent() {
-  const { signInWithEmail } = useAuth();
-  const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const searchParams = useSearchParams();
-
-  const clearError = () => setError(null);
-
-  // Processar parâmetros de convite
   useEffect(() => {
-    const teamId = searchParams.get("teamId");
-    const email = searchParams.get("email");
-
-    if (teamId && email) {
-      console.log("Armazenando convite pendente:", { teamId, email });
-      InviteService.storePendingInvite(teamId, email);
+    if (isAuthenticated) {
+      router.push("/team-setup");
     }
-  }, [searchParams]);
-
-  const handleLoginSubmit = async (data: LoginFormData) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      await signInWithEmail(data.email, data.password);
-
-      // O redirecionamento é feito pelo AuthProvider após o login bem-sucedido
-    } catch (error: any) {
-      console.error("Erro no login:", error);
-      setError(error.message);
-      setIsLoading(false);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <Layout>
-        <div className="flex items-center justify-center">
-          <Loader2 className="animate-spin" />
-        </div>
-      </Layout>
-    );
-  }
+  }, [isAuthenticated]);
 
   return (
     <Layout>
-      <div className="w-full max-w-md mx-auto px-4 py-20">
-        <Card>
-          <CardHeader>
-            <CardTitle>Acesso ao Sistema</CardTitle>
-            <CardDescription>
-              Faça login ou crie uma conta para acessar a plataforma.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <ErrorAlert error={error} />
-
-            <Tabs defaultValue="login" onValueChange={() => clearError()}>
-              <TabsList className="grid w-full grid-cols-2">
-                <TabsTrigger value="login">Login</TabsTrigger>
-                <TabsTrigger value="register">Registro</TabsTrigger>
-              </TabsList>
-
-              <TabsContent value="login">
-                <LoginForm onSubmit={handleLoginSubmit} isLoading={isLoading} />
-              </TabsContent>
-
-              <TabsContent value="register">
-                <RegisterForm />
-              </TabsContent>
-            </Tabs>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="w-full max-w-md p-8 space-y-8">
+          <div className="text-center">
+            <h1 className="text-2xl font-bold">Bem-vindo ao Radar21</h1>
+            <p className="mt-2 text-muted-foreground">
+              Escolha como deseja continuar
+            </p>
+          </div>
+          <div className="space-y-4">
+            <button
+              onClick={() => router.push("/auth/login")}
+              className="w-full py-2 px-4 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-primary hover:bg-primary/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+            >
+              Entrar
+            </button>
+            <button
+              onClick={() => router.push("/auth/register")}
+              className="w-full py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+            >
+              Registrar
+            </button>
+          </div>
+        </div>
       </div>
     </Layout>
-  );
-}
-
-// Componente principal com Suspense
-export default function AuthPage() {
-  return (
-    <Suspense
-      fallback={
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-        </div>
-      }
-    >
-      <AuthContent />
-    </Suspense>
   );
 }

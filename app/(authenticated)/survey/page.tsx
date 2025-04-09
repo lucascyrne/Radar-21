@@ -20,12 +20,10 @@ interface SurveyPageProps {
     hasOpenQuestions: boolean;
   };
   progressPercentage?: number;
-  onContinueSurvey?: () => void;
 }
 
 function SurveyPage({
   progressPercentage = 0,
-  onContinueSurvey,
 }: SurveyPageProps) {
   const router = useRouter();
   const { user } = useAuth();
@@ -228,11 +226,6 @@ function SurveyPage({
               </span>
             </div>
             <Progress value={progressPercentage} className="h-2" />
-            <div className="flex gap-4">
-              <Button onClick={onContinueSurvey} variant="outline">
-                Continuar
-              </Button>
-            </div>
           </CardContent>
         </Card>
 

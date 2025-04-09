@@ -11,7 +11,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/resources/auth/auth-hook";
 import { useSurvey } from "@/resources/survey/survey-hook";
 import {
-  OpenQuestionResponse,
   RadarDataPoint,
   SurveyResponses,
 } from "@/resources/survey/survey-model";
@@ -20,44 +19,42 @@ import { useTeam } from "@/resources/team/team-hook";
 import { TeamSurveyResponse } from "@/resources/team/team-model";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+
 const competencyDescriptions: Record<string, string> = {
-  Liderança:
-    "Capacidade de influenciar e guiar equipes, promovendo um ambiente colaborativo e alcançando resultados através das pessoas.",
-  Comunicação:
-    "Habilidade de transmitir ideias de forma clara e efetiva, além de escutar ativamente e promover diálogo construtivo.",
-  "Trabalho em Equipe":
-    "Capacidade de colaborar efetivamente com outros, contribuindo para objetivos comuns e promovendo sinergia no grupo.",
-  "Resolução de Problemas":
-    "Habilidade de identificar, analisar e resolver desafios de forma estruturada e eficiente.",
-  Inovação:
-    "Capacidade de pensar criativamente e implementar novas ideias que agregam valor ao trabalho e à organização.",
+  Abertura:
+    "Facilidade em dar e receber feedback construtivo entre líder e equipe.",
+  Agilidade:
+    "Capacidade de agir e reagir rapidamente, assumir riscos, experimentar e aprender com falhas.",
+  Confiança:
+    "Crença na existência de uma relação profissional baseada na confiança mútua entre líder e equipe.",
+  Empatia:
+    "Compreensão e consideração pela perspectiva e sentimentos dos outros em relações profissionais.",
+  Articulação:
+    "Potencialização e utilização eficaz das conexões entre competências internas e externas à equipe.",
   Adaptabilidade:
-    "Flexibilidade para lidar com mudanças e capacidade de se ajustar a novos contextos e demandas.",
-  "Gestão do Tempo":
-    "Habilidade de priorizar tarefas, gerenciar prazos e utilizar recursos de forma eficiente.",
-  "Pensamento Crítico":
-    "Capacidade de analisar situações de forma objetiva, avaliar diferentes perspectivas e tomar decisões fundamentadas.",
-  "Ética Profissional":
-    "Comprometimento com valores e princípios éticos no ambiente profissional.",
-  "Conhecimento Técnico":
-    "Domínio das habilidades e ferramentas necessárias para executar o trabalho com excelência.",
-  "Aprendizado Contínuo":
-    "Disposição e capacidade de buscar constantemente novos conhecimentos e desenvolver novas habilidades.",
-  "Orientação a Resultados":
-    "Foco em alcançar objetivos e metas, mantendo altos padrões de qualidade e eficiência.",
+    "Capacidade de se adaptar rapidamente e responder a adversidades em situações não planejadas.",
+  Inovação:
+    "Ambiente que favorece, estimula e desenvolve a busca por inovação nos indivíduos.",
+  Comunicação:
+    "Comunicação facilitada e fluida, interna e externamente, através de diversos canais.",
+  Descentralização:
+    "Tomada de decisão participativa e compartilhada entre gestão e equipe.",
+  "Auto-organização":
+    "Capacidade da equipe de se auto-organizar para resolver tarefas complexas ou desafios inesperados.",
+  Colaboração:
+    "Tratamento colaborativo de desafios, aproveitando as competências individuais da equipe.",
+  Resiliência:
+    "Manutenção de uma atitude positiva, proativa e de aprendizado diante de obstáculos e fracassos.",
 };
 
 export default function ResultsPage() {
   const { user } = useAuth();
   const { selectedTeam } = useTeam();
-  const { surveyResponses, answers } = useSurvey();
+  const { surveyResponses, answers, openQuestions, loading } = useSurvey();
   const { loadTeamSurveyResponses } = useTeam();
   const [userResults, setUserResults] = useState<RadarDataPoint[]>([]);
   const [teamResults, setTeamResults] = useState<RadarDataPoint[]>([]);
   const [leaderResults, setLeaderResults] = useState<RadarDataPoint[]>([]);
-  const [openQuestions, setOpenQuestions] =
-    useState<OpenQuestionResponse | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [userResponses, setUserResponses] = useState<SurveyResponses | null>(
     null
   );
@@ -123,14 +120,11 @@ export default function ResultsPage() {
   useEffect(() => {
     const loadTeamData = async () => {
       try {
-        setIsLoading(true);
-
         const teamId = selectedTeam?.id || localStorage.getItem("teamId");
         const userId = user?.id;
 
         if (!teamId || !userId) {
           console.error("IDs necessários não encontrados");
-          setIsLoading(false);
           return;
         }
 
@@ -195,37 +189,33 @@ export default function ResultsPage() {
             setLeaderResults(leaderDataPoints);
           }
         }
-
-        // Carregar respostas abertas
-        const openQuestionsData = await SurveyService.loadOpenQuestions(
-          userId,
-          teamId
-        );
-        setOpenQuestions(openQuestionsData);
-
-        setIsLoading(false);
       } catch (error) {
         console.error("Erro ao carregar resultados:", error);
         toast.error("Não foi possível carregar os resultados da equipe.");
-        setIsLoading(false);
       }
     };
 
-    if (userResults.length > 0) {
+    if (selectedTeam?.id && user?.id) {
       loadTeamData();
     }
-  }, [userResults.length, selectedTeam?.id, user?.id]);
+  }, [selectedTeam?.id, user?.id, loadTeamSurveyResponses]);
+
+  // Determinar estado de carregamento usando o contexto
+  const isPageLoading =
+    loading.survey ||
+    loading.openQuestions ||
+    loading.demographicData ||
+    loading.teamMember;
 
   // Verificar se temos dados para exibir
   const hasUserData = userResults.length > 0;
-  const hasTeamData = teamResults.length > 0;
-  const hasLeaderData = leaderResults.length > 0;
 
   console.log("Estado atual dos dados:", {
     hasUserData,
-    hasTeamData,
-    hasLeaderData,
-    isLoading,
+    teamResults,
+    leaderResults,
+    openQuestions,
+    isPageLoading,
   });
 
   return (
@@ -251,7 +241,7 @@ export default function ResultsPage() {
           </div>
 
           <TabsContent value="overview" className="space-y-6">
-            {isLoading || !hasUserData ? (
+            {isPageLoading || !hasUserData ? (
               <div className="space-y-6">
                 <Card>
                   <CardContent className="p-6">
@@ -309,7 +299,7 @@ export default function ResultsPage() {
                 <h2 className="text-xl font-semibold mb-4">
                   Detalhamento por Competência
                 </h2>
-                {isLoading || !hasUserData ? (
+                {isPageLoading || !hasUserData ? (
                   <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                     {[...Array(12)].map((_, i) => (
                       <Skeleton key={i} className="h-[180px] w-full" />
@@ -347,7 +337,7 @@ export default function ResultsPage() {
                 <h2 className="text-xl font-semibold mb-4">
                   Respostas Dissertativas
                 </h2>
-                {isLoading ? (
+                {isPageLoading ? (
                   <div className="space-y-4">
                     <Skeleton className="h-[100px] w-full" />
                     <Skeleton className="h-[100px] w-full" />

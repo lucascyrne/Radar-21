@@ -45,6 +45,16 @@ const TeamSkeleton = () => (
 export default function TeamSetupPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
+
+  // Verificar autenticação antes de prosseguir
+  if (!user || authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+      </div>
+    );
+  }
+
   const {
     teams,
     selectedTeam,
@@ -66,12 +76,14 @@ export default function TeamSetupPage() {
   >("not_member");
   const [teamsLoaded, setTeamsLoaded] = useState(false);
 
+  const hasOrganization = !!user.organization_id;
+
   // Efeito para redirecionar se não estiver autenticado
   useEffect(() => {
-    if (!authLoading && !user) {
+    if (!user) {
       router.push("/auth");
     }
-  }, [authLoading, user, router]);
+  }, [user]);
 
   // Efeito para carregar equipes do usuário uma única vez
   useEffect(() => {
@@ -246,14 +258,6 @@ export default function TeamSetupPage() {
     [user?.id, teams]
   );
 
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
   return (
     <Layout>
       <div className="container mx-auto px-4 py-8 space-y-8 max-w-3xl">
@@ -329,9 +333,38 @@ export default function TeamSetupPage() {
                     <CardHeader className="space-y-2">
                       <CardTitle>Bem-vindo ao Radar21!</CardTitle>
                       <p className="text-muted-foreground text-sm">
-                        {user?.role === "LEADER"
-                          ? "Para começar, crie sua primeira equipe e convide membros para participar da avaliação."
-                          : "Você ainda não faz parte de nenhuma equipe. Você pode criar sua própria equipe ou aguardar um convite de um líder."}
+                        {user?.role === "LEADER" ? (
+                          <>
+                            {hasOrganization ? (
+                              <>
+                                Você está vinculado a uma organização. Aguarde
+                                seu gestor atribuí-lo a uma equipe para começar
+                                a avaliação.
+                                <br />
+                                <br />
+                                Se você é líder de uma pequena equipe e deseja
+                                criar sua própria equipe independente, entre em
+                                contato com o suporte para ajustar seu perfil.
+                              </>
+                            ) : (
+                              <>
+                                Como líder, você pode criar sua própria equipe e
+                                convidar membros para participar da avaliação.
+                                <br />
+                                <br />
+                                <span className="font-bold text-red-400">
+                                  Atenção:
+                                </span>{" "}
+                                Se você faz parte de uma organização maior, é
+                                recomendado que seu gestor (usuário com papel de
+                                Organização) crie a equipe e atribua você como
+                                líder.
+                              </>
+                            )}
+                          </>
+                        ) : (
+                          "Você ainda não faz parte de nenhuma equipe. Você pode criar sua própria equipe ou aguardar um convite de um líder."
+                        )}
                       </p>
                     </CardHeader>
                     <CardContent className="space-y-4">
@@ -339,16 +372,33 @@ export default function TeamSetupPage() {
                         <h3 className="font-semibold mb-2">Próximos passos:</h3>
                         <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
                           {user?.role === "LEADER" ? (
-                            <>
-                              <li>
-                                Crie uma nova equipe clicando no botão abaixo
-                              </li>
-                              <li>
-                                Convide membros para participar da sua equipe
-                              </li>
-                              <li>Aguarde as respostas dos membros</li>
-                              <li>Analise os resultados da avaliação</li>
-                            </>
+                            hasOrganization ? (
+                              <>
+                                <li>
+                                  Aguarde seu gestor atribuí-lo a uma equipe
+                                </li>
+                                <li>
+                                  Após ser atribuído, você poderá gerenciar sua
+                                  equipe
+                                </li>
+                                <li>
+                                  Convide membros para participar da avaliação
+                                </li>
+                                <li>Aguarde as respostas dos membros</li>
+                                <li>Analise os resultados da avaliação</li>
+                              </>
+                            ) : (
+                              <>
+                                <li>
+                                  Crie uma nova equipe clicando no botão abaixo
+                                </li>
+                                <li>
+                                  Convide membros para participar da sua equipe
+                                </li>
+                                <li>Aguarde as respostas dos membros</li>
+                                <li>Analise os resultados da avaliação</li>
+                              </>
+                            )
                           ) : (
                             <>
                               <li>
@@ -366,13 +416,15 @@ export default function TeamSetupPage() {
                       </div>
                     </CardContent>
                     <CardFooter className="pt-6">
-                      <Button
-                        onClick={() => setActiveTab("create-team")}
-                        className="w-full sm:w-auto"
-                      >
-                        <PlusCircleIcon className="mr-2 h-4 w-4" />
-                        Criar Nova Equipe
-                      </Button>
+                      {user?.role === "LEADER" && !hasOrganization && (
+                        <Button
+                          onClick={() => setActiveTab("create-team")}
+                          className="w-full sm:w-auto"
+                        >
+                          <PlusCircleIcon className="mr-2 h-4 w-4" />
+                          Criar Nova Equipe
+                        </Button>
+                      )}
                     </CardFooter>
                   </Card>
                 )}

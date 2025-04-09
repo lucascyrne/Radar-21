@@ -33,9 +33,19 @@ export function LoginForm({ onSubmit, isLoading }: AuthFormProps) {
     defaultValues: { email: "", password: "" },
   });
 
+  const handleSubmit = async (data: LoginFormValues) => {
+    try {
+      await onSubmit(data);
+      // Não fazemos redirecionamento aqui - AuthProvider cuidará disso
+    } catch (error) {
+      // Erros já são tratados pelo componente pai
+      console.error("Erro no login:", error);
+    }
+  };
+
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
         <FormField
           control={form.control}
           name="email"
@@ -43,7 +53,13 @@ export function LoginForm({ onSubmit, isLoading }: AuthFormProps) {
             <FormItem>
               <FormLabel>Email</FormLabel>
               <FormControl>
-                <Input placeholder="seu@email.com" {...field} />
+                <Input
+                  placeholder="seu@email.com"
+                  type="email"
+                  autoComplete="email"
+                  disabled={isLoading}
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
@@ -57,7 +73,13 @@ export function LoginForm({ onSubmit, isLoading }: AuthFormProps) {
             <FormItem>
               <FormLabel>Senha</FormLabel>
               <FormControl>
-                <Input type="password" placeholder="******" {...field} />
+                <Input
+                  type="password"
+                  placeholder="******"
+                  autoComplete="current-password"
+                  disabled={isLoading}
+                  {...field}
+                />
               </FormControl>
               <FormMessage />
             </FormItem>
