@@ -31,10 +31,13 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       return null;
     }
 
+    // Obter o role do usuário dos metadados
+    const userRole = session.user.user_metadata?.role || "COLLABORATOR";
+
     const user: User = {
       id: session.user.id,
       email: session.user.email || "",
-      role: session.user.user_metadata?.role || "COLLABORATOR",
+      role: userRole,
       email_confirmed_at: session.user.email_confirmed_at,
     };
 

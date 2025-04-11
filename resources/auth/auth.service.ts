@@ -163,9 +163,24 @@ export const AuthService = {
     password: string,
     role: string = "COLLABORATOR"
   ): Promise<AuthResponse> => {
-    console.log(`Iniciando registro para ${email} com função ${role}`);
-
     try {
+      console.log("Iniciando registro de usuário:", { email, role });
+
+      // Validar o role antes de prosseguir
+      const normalizedRole = role.toUpperCase();
+      if (
+        ![
+          "COLLABORATOR",
+          "LEADER",
+          "ORGANIZATION",
+          "ADMIN",
+          "SUPPORT",
+        ].includes(normalizedRole)
+      ) {
+        throw new Error("Papel de usuário inválido");
+      }
+
+      // Criar o usuário no Supabase Auth
       const {
         data: { user },
         error,
@@ -174,60 +189,62 @@ export const AuthService = {
         password,
         options: {
           data: {
-            role,
+            role: normalizedRole,
             email_confirmed: false,
           },
+          emailRedirectTo: `${window.location.origin}/auth/callback?type=signup`,
         },
       });
 
       if (error) {
-        console.error("Erro detalhado no registro:", {
-          message: error.message,
-          status: error.status,
-          name: error.name,
-          stack: error.stack,
-          timestamp: new Date().toISOString(),
-        });
-
-        // Verificar especificamente erros de limite de taxa
-        if (
-          error.status === 429 ||
-          error.message?.toLowerCase().includes("rate limit")
-        ) {
-          console.error("Limite de taxa do Supabase atingido:", {
-            email,
-            timestamp: new Date().toISOString(),
-            errorDetails: error,
-          });
-          throw new Error(
-            "Muitas tentativas de registro. Por favor, tente novamente mais tarde."
-          );
-        }
-
+        console.error("Erro ao criar usuário no Auth:", error);
         throw error;
       }
 
       if (!user) {
-        console.error("Usuário não criado:", {
-          email,
-          timestamp: new Date().toISOString(),
-        });
+        console.error("Usuário não foi criado");
         throw new Error("Falha ao criar usuário");
       }
 
-      console.log("Usuário criado com sucesso:", {
+      console.log("Usuário criado no Auth:", {
         userId: user.id,
         email: user.email,
-        confirmationSent: user.confirmation_sent_at,
-        timestamp: new Date().toISOString(),
       });
 
-      if (!user.confirmation_sent_at) {
-        console.warn("Email de confirmação não enviado:", {
-          userId: user.id,
-          email: user.email,
-          timestamp: new Date().toISOString(),
+      // Aguardar um momento para o trigger ser executado
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Verificar se o perfil foi criado corretamente
+      const { data: createdProfile, error: checkError } = await supabase
+        .from("user_profiles")
+        .select("*")
+        .eq("id", user.id)
+        .single();
+
+      if (checkError) {
+        console.error("Erro ao verificar perfil:", checkError);
+        throw new Error(
+          `Falha ao verificar perfil do usuário: ${checkError.message}`
+        );
+      }
+
+      if (!createdProfile) {
+        console.error("Perfil não encontrado após criação");
+        throw new Error("Falha ao verificar perfil do usuário");
+      }
+
+      console.log("Perfil criado com sucesso:", {
+        userId: createdProfile.id,
+        role: createdProfile.role,
+      });
+
+      // Verificar se o role foi definido corretamente
+      if (createdProfile.role !== normalizedRole) {
+        console.error("Role não corresponde:", {
+          expected: normalizedRole,
+          actual: createdProfile.role,
         });
+        throw new Error("Papel do usuário não foi definido corretamente");
       }
 
       return {
@@ -238,12 +255,7 @@ export const AuthService = {
         error: null,
       };
     } catch (error: any) {
-      console.error("Erro não tratado no registro:", {
-        error,
-        email,
-        timestamp: new Date().toISOString(),
-      });
-
+      console.error("Erro ao registrar usuário:", error);
       return {
         data: {
           user: null,
