@@ -1,11 +1,10 @@
 "use client";
 
+import supabase from "@/lib/supabase/client";
 import { useAuth } from "@/resources/auth/auth-hook";
-import { supabase } from "@/resources/auth/auth.service";
 import { useTeam } from "@/resources/team/team-hook";
-import { TeamService } from "@/resources/team/team.service";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import * as z from "zod";
 
@@ -69,14 +68,42 @@ export default function InviteUserForm({
     resolver: zodResolver(inviteFormSchema),
     defaultValues: {
       email: "",
-      message: user ? generateInviteMessage(teamName, user.email) : "",
+      message: "",
     },
   });
+
+  // Atualizar mensagem quando user ou teamName mudarem
+  useEffect(() => {
+    if (user?.email) {
+      form.setValue("message", generateInviteMessage(teamName, user.email));
+    }
+  }, [user?.email, teamName]);
 
   // Verificar se o usuário já existe no Supabase
   const checkUserExists = async (email: string) => {
     try {
-      return await TeamService.getUserByEmail(email);
+      // Primeiro verificar se o usuário já é membro da equipe
+      const existingMember = teamMembers.find(
+        (member) => member.email === email
+      );
+
+      if (existingMember) {
+        return existingMember.user_id;
+      }
+
+      // Se não for membro, verificar se existe no sistema
+      const { data, error } = await supabase
+        .from("user_profiles")
+        .select("id")
+        .eq("email", email)
+        .maybeSingle();
+
+      if (error) {
+        console.error("Erro ao verificar usuário:", error);
+        return null;
+      }
+
+      return data?.id || null;
     } catch (error) {
       console.error("Erro ao verificar usuário:", error);
       return null;
@@ -89,6 +116,13 @@ export default function InviteUserForm({
       toast.error("Informações de usuário ou equipe não disponíveis");
       return;
     }
+
+    console.log("Enviando convite:", {
+      email: data.email,
+      teamId,
+      teamName,
+      currentUser: user.email,
+    });
 
     setIsSubmitting(true);
 
@@ -114,6 +148,13 @@ export default function InviteUserForm({
         window.location.origin
       }/auth?invite=${teamId}&email=${encodeURIComponent(data.email)}`;
 
+      console.log("Enviando requisição para /api/send-invite com payload:", {
+        email: data.email,
+        inviteUrl,
+        teamId,
+        teamName,
+      });
+
       // Enviar convite via API
       const response = await fetch("/api/send-invite", {
         method: "POST",
@@ -126,17 +167,51 @@ export default function InviteUserForm({
           message: data.message,
           teamId,
           teamName,
+          invitedBy: user.email || ownerEmail,
         }),
       });
 
+      // Verificar se a resposta não é um JSON válido (erro de API)
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        console.error("Resposta não-JSON recebida:", await response.text());
+        throw new Error(
+          `Erro no servidor: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const responseData = await response.json();
+      console.log("Resposta da API:", responseData);
+
       if (!response.ok) {
-        const errorData = await response.json();
-        console.error("Resposta de erro:", errorData);
-        throw new Error(errorData.error || "Erro ao enviar convite");
+        console.error("Resposta de erro:", responseData);
+
+        // Tratamento especial para erro de política de segurança
+        if (
+          responseData.error &&
+          responseData.error.includes("row-level security policy")
+        ) {
+          throw new Error(
+            "Você não tem permissão para convidar membros para esta equipe. Entre em contato com o administrador."
+          );
+        }
+
+        throw new Error(
+          responseData.message ||
+            responseData.details?.message ||
+            responseData.details?.hint ||
+            responseData.error ||
+            "Erro ao enviar convite"
+        );
       }
 
       // Adicionar membro à equipe com status 'invited'
-      await addTeamMember(teamId, userId, data.email, "member", "invited");
+      try {
+        await addTeamMember(teamId, userId, data.email, "member", "invited");
+      } catch (memberError: any) {
+        console.error("Erro ao adicionar membro localmente:", memberError);
+        // Mesmo com erro aqui, continuamos pois o convite já foi enviado
+      }
 
       // Recarregar membros da equipe para mostrar o novo membro
       await loadTeamMembers(teamId);
@@ -144,7 +219,7 @@ export default function InviteUserForm({
       // Limpar formulário
       form.reset({
         email: "",
-        message: user ? generateInviteMessage(teamName, user.email) : "",
+        message: generateInviteMessage(teamName, user.email || ""),
       });
 
       toast.success("Convite enviado", {
@@ -171,6 +246,11 @@ export default function InviteUserForm({
     setResendingTo(email);
 
     try {
+      // Gerar URL de convite atualizado
+      const inviteUrl = `${
+        window.location.origin
+      }/auth?invite=${teamId}&email=${encodeURIComponent(email)}`;
+
       // Enviar email de convite novamente
       const response = await fetch("/api/send-invite", {
         method: "POST",
@@ -178,17 +258,27 @@ export default function InviteUserForm({
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
+          email: email,
           teamId,
           teamName,
-          ownerEmail,
-          recipientEmail: email,
+          invitedBy: user?.email || ownerEmail,
+          inviteUrl,
           message: `Olá! Este é um lembrete para participar da equipe "${teamName}" no Radar21, uma plataforma para avaliação de competências de liderança.`,
-          isResend: true,
         }),
       });
 
+      // Verificar se a resposta não é um JSON válido (erro de API)
+      const contentType = response.headers.get("content-type");
+      if (!contentType || !contentType.includes("application/json")) {
+        throw new Error(
+          `Erro no servidor: ${response.status} ${response.statusText}`
+        );
+      }
+
+      const responseData = await response.json();
+
       if (!response.ok) {
-        throw new Error("Falha ao reenviar convite");
+        throw new Error(responseData.error || "Falha ao reenviar convite");
       }
 
       // Notificar sucesso

@@ -8,7 +8,7 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
-import { createClient } from "@/lib/supabase/client";
+import supabase from "@/lib/supabase/client";
 import { TeamMember, TeamMemberStatus } from "@/resources/team/team-model";
 import { useEffect, useState } from "react";
 
@@ -38,7 +38,6 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const supabase = createClient();
 
   // Função para carregar os membros da equipe
   const loadTeamMembers = async () => {
@@ -47,9 +46,11 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
     setIsLoading(true);
     try {
       const { data, error } = await supabase
-        .from("users")
+        .from("team_members")
         .select("*")
-        .eq("team_id", teamId);
+        .eq("team_id", teamId)
+        .order("role", { ascending: false }) // Líderes primeiro
+        .order("status", { ascending: true }); // Respondidos primeiro
 
       if (error) throw error;
 
@@ -62,25 +63,22 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
     }
   };
 
-  // Carregar membros da equipe quando o componente for montado
-  // useEffect(() => {
-  //   if (teamId) {
-  //     loadTeamMembers();
-  //   }
-  // }, [teamId]);
-
   // Configurar um listener para atualizações em tempo real
   useEffect(() => {
     if (!teamId) return;
 
+    // Carregar membros inicialmente
+    loadTeamMembers();
+
+    // Configurar listener para mudanças
     const channel = supabase
-      .channel("team-members")
+      .channel("team-members-changes")
       .on(
         "postgres_changes",
         {
           event: "*",
           schema: "public",
-          table: "users",
+          table: "team_members",
           filter: `team_id=eq.${teamId}`,
         },
         () => {

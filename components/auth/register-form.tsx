@@ -69,24 +69,26 @@ export function RegisterForm({ onSubmit }: RegisterFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
     setError(null);
 
     if (!validateForm()) {
-      setIsLoading(false);
       return;
     }
 
+    setIsLoading(true);
+
     try {
-      const result = await onSubmit({
+      const errorMessage = await onSubmit({
         email: email.trim().toLowerCase(),
         password,
         role,
       });
 
-      if (result) {
-        setError(result);
+      if (errorMessage) {
+        // Se recebemos uma mensagem de erro, exibimos
+        setError(errorMessage);
       }
+      // Se não recebemos erro, o redirecionamento será feito pelo componente pai
     } catch (error: any) {
       setError(error.message || "Erro ao registrar usuário");
     } finally {
@@ -112,6 +114,7 @@ export function RegisterForm({ onSubmit }: RegisterFormProps) {
           required
           placeholder="seu@email.com"
           className="lowercase"
+          disabled={isLoading}
         />
       </div>
       <div className="space-y-2">
@@ -130,6 +133,7 @@ export function RegisterForm({ onSubmit }: RegisterFormProps) {
           required
           minLength={6}
           placeholder="******"
+          disabled={isLoading}
         />
       </div>
       <div className="space-y-2">
@@ -148,6 +152,7 @@ export function RegisterForm({ onSubmit }: RegisterFormProps) {
           required
           minLength={6}
           placeholder="******"
+          disabled={isLoading}
         />
       </div>
       <div className="space-y-2">
@@ -161,7 +166,7 @@ export function RegisterForm({ onSubmit }: RegisterFormProps) {
             setRole(value);
             setError(null);
           }}
-          required
+          disabled={isLoading}
         >
           <SelectTrigger>
             <SelectValue placeholder="Selecione seu papel" />

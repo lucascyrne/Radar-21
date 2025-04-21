@@ -36,8 +36,8 @@ export const Header = memo(function Header() {
   const { user, isAuthenticated } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const [isClient, setIsClient] = useState(false);
   const [isSheetOpen, setIsSheetOpen] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
   // Verificar se estamos em uma rota autenticada
   const isAuthenticatedRoute = AUTHENTICATED_ROUTES.some((route) =>
@@ -47,12 +47,9 @@ export const Header = memo(function Header() {
   // Mostrar link para Team Setup apenas em rotas autenticadas
   const showTeamSetupLink = isAuthenticatedRoute;
 
-  // Mostra informações do usuário apenas em rotas autenticadas
-  const showUserInfo = isClient && isAuthenticated && isAuthenticatedRoute;
-
-  // Garantir que o componente só acesse o contexto de autenticação no cliente
+  // Garantir que o componente só gere elementos interativos no cliente
   useEffect(() => {
-    setIsClient(true);
+    setIsMounted(true);
   }, []);
 
   const handleLogout = async () => {
@@ -99,56 +96,7 @@ export const Header = memo(function Header() {
     </>
   );
 
-  // Conteúdo de autenticação
-  const AuthContent = () => {
-    if (!isClient) {
-      return null;
-    }
-
-    return (
-      <>
-        {showUserInfo ? (
-          <div className="flex items-center space-x-4">
-            <span className="text-sm font-medium">
-              Bem-vindo, {getDisplayName(user?.name, user?.email)}
-            </span>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Avatar className="h-8 w-8 cursor-pointer">
-                  <AvatarFallback className="bg-primary text-primary-foreground">
-                    {getUserInitials(user?.email)}
-                  </AvatarFallback>
-                </Avatar>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onClick={() => router.push("/profile")}
-                  className="cursor-pointer"
-                >
-                  <Avatar className="mr-2 h-4 w-4" />
-                  <span>Meu Perfil</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onClick={handleLogout}
-                  className="cursor-pointer"
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  <span>Sair</span>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        ) : (
-          <div className="flex items-center space-x-2">
-            <Link href="/auth" onClick={() => setIsSheetOpen(false)}>
-              <Button size="sm">Get Started</Button>
-            </Link>
-          </div>
-        )}
-      </>
-    );
-  };
-
+  // Renderização de conteúdo sensível à autenticação
   return (
     <header className="bg-white shadow-sm">
       <div className="container mx-auto px-4">
@@ -165,7 +113,55 @@ export const Header = memo(function Header() {
 
           {/* Autenticação para desktop */}
           <div className="hidden md:block min-w-[140px]">
-            <AuthContent />
+            {isMounted && isAuthenticatedRoute && isAuthenticated ? (
+              <div className="flex items-center space-x-4">
+                <span className="text-sm font-medium">
+                  Bem-vindo, {getDisplayName(user?.name, user?.email)}
+                </span>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Avatar className="h-8 w-8 cursor-pointer">
+                      <AvatarFallback className="bg-primary text-primary-foreground">
+                        {getUserInitials(user?.email)}
+                      </AvatarFallback>
+                    </Avatar>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={() => router.push("/profile")}
+                      className="cursor-pointer"
+                    >
+                      <Avatar className="mr-2 h-4 w-4" />
+                      <span>Meu Perfil</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      onClick={handleLogout}
+                      className="cursor-pointer"
+                    >
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Sair</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <div className="flex items-center space-x-2">
+                <Link href="/auth/login" onClick={() => setIsSheetOpen(false)}>
+                  <Button size="sm" variant="default">
+                    Acessar
+                  </Button>
+                </Link>
+                <a
+                  href="https://org.radar21.com.br/auth/login"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <Button size="sm" variant="outline">
+                    Área da Organização
+                  </Button>
+                </a>
+              </div>
+            )}
           </div>
 
           {/* Menu para mobile */}
@@ -185,7 +181,7 @@ export const Header = memo(function Header() {
                     <NavContent />
                   </div>
                   <div className="pt-4 border-t">
-                    {showUserInfo ? (
+                    {isMounted && isAuthenticatedRoute && isAuthenticated ? (
                       <div className="flex flex-col space-y-4">
                         <div className="flex items-center space-x-2">
                           <Avatar className="h-8 w-8">
@@ -220,11 +216,21 @@ export const Header = memo(function Header() {
                     ) : (
                       <div className="flex flex-col space-y-2">
                         <Link
-                          href="/auth"
+                          href="/auth/login"
                           onClick={() => setIsSheetOpen(false)}
                         >
-                          <Button className="w-full">Get Started</Button>
+                          <Button className="w-full">Acessar</Button>
                         </Link>
+                        <a
+                          href="https://org.radar21.com.br/auth/login"
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="w-full"
+                        >
+                          <Button className="w-full" variant="outline">
+                            Área da Organização
+                          </Button>
+                        </a>
                       </div>
                     )}
                   </div>
