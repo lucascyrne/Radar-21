@@ -106,6 +106,19 @@ export async function POST(request: NextRequest) {
   } catch (error: any) {
     console.error("Erro ao processar convite:", error);
 
+    // Melhorar mensagem de erro para problemas de permissão
+    if (error.message && error.message.includes("row-level security policy")) {
+      return NextResponse.json(
+        {
+          error: "Erro de permissão",
+          message:
+            "Você não tem permissão para adicionar membros a esta equipe.",
+          details: error.message,
+        },
+        { status: 403 }
+      );
+    }
+
     return NextResponse.json(
       { error: error.message || "Erro ao processar convite" },
       { status: 500 }
