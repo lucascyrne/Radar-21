@@ -63,9 +63,6 @@ const nextConfig = {
   webpack: (config) => {
     return config;
   },
-  experimental: {
-    serverActions: true,
-  },
 };
 
 module.exports = nextConfig;
