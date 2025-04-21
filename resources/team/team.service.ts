@@ -1,10 +1,6 @@
+import supabase from "@/lib/supabase/client";
 import { createClient } from "@supabase/supabase-js";
-import { Team, TeamMember, TeamMemberStatus } from "./team-model";
-
-// Configuração do cliente Supabase
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "";
-const supabase = createClient(supabaseUrl, supabaseKey);
+import { Team, TeamMember, TeamMemberStatus, TeamSurveyResponse } from "./team-model";
 
 // Cache para armazenar resultados de requisições
 const cache = {
@@ -24,36 +20,23 @@ export const TeamService = {
    */
   async getUserByEmail(email: string): Promise<string | null> {
     try {
-      // Verificar se há dados em cache e se ainda são válidos
-      const cacheKey = `user_${email}`;
-      const cachedData = cache.users.get(cacheKey);
-      if (cachedData) {
-        const now = Date.now();
-        if (now - cachedData.timestamp < CACHE_EXPIRATION) {
-          return cachedData.data;
-        }
-      }
-
+      // Buscar usuário pelo email no perfil
       const { data, error } = await supabase
-        .from("users")
-        .select("*")
+        .from("user_profiles")
+        .select("id")
         .eq("email", email)
-        .maybeSingle();
+        .single();
 
-      if (error && error.code !== "PGRST116") {
+      if (error) {
+        if (error.code === "PGRST116") {
+          // Usuário não encontrado
+          return null;
+        }
         console.error("Erro ao buscar usuário:", error);
         return null;
       }
 
-      const userId = data?.id || null;
-
-      // Armazenar resultado em cache
-      cache.users.set(cacheKey, {
-        data: userId,
-        timestamp: Date.now(),
-      });
-
-      return userId;
+      return data?.id || null;
     } catch (error) {
       console.error("Erro ao buscar usuário:", error);
       return null;
@@ -83,28 +66,6 @@ export const TeamService = {
         teamSize,
       });
 
-      // Verificar a sessão atual
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      console.log("Sessão atual:", {
-        userId: session?.user?.id,
-        userRole: session?.user?.user_metadata?.role,
-        jwt: session?.access_token,
-      });
-
-      // Verificar o perfil do usuário
-      const { data: userProfile, error: profileError } = await supabase
-        .from("user_profiles")
-        .select("role")
-        .eq("id", ownerId)
-        .single();
-
-      console.log("Perfil do usuário:", {
-        userProfile,
-        profileError,
-      });
-
       const { data, error } = await supabase
         .from("teams")
         .insert({
@@ -113,7 +74,7 @@ export const TeamService = {
           owner_email: ownerEmail,
           team_size: teamSize,
         })
-        .select("*")
+        .select()
         .single();
 
       if (error) {
@@ -163,10 +124,7 @@ export const TeamService = {
 
       if (existingMember) {
         // Se o membro já existe, não rebaixar seu status
-        // Por exemplo, não mudar de "answered" para "invited"
         let newStatus = status;
-
-        // Lógica para não rebaixar status
         if (existingMember.status === "answered" && status !== "answered") {
           newStatus = "answered";
         } else if (
@@ -177,8 +135,6 @@ export const TeamService = {
         }
 
         const updates: any = { status: newStatus };
-
-        // Atualizar user_id apenas se for fornecido e diferente do atual
         if (
           userId &&
           (!existingMember.user_id || existingMember.user_id !== userId)
@@ -192,23 +148,83 @@ export const TeamService = {
           .eq("id", existingMember.id);
 
         if (updateError) {
-          throw updateError;
+          // Em caso de erro com RLS, tenta usar a API do servidor
+          if (
+            updateError.message &&
+            updateError.message.includes("row-level security policy")
+          ) {
+            try {
+              // Usar API para contornar limitações de RLS
+              const response = await fetch("/api/process-invite", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  teamId,
+                  userId,
+                  email,
+                }),
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(
+                  errorData.error || "Erro ao adicionar membro à equipe"
+                );
+              }
+            } catch (apiError: any) {
+              console.error("Erro na API ao adicionar membro:", apiError);
+              throw apiError;
+            }
+          } else {
+            throw updateError;
+          }
         }
       } else {
         // Se o membro não existe, criar novo
-        // Membros convidados sempre começam com status "invited"
         const memberStatus = userId ? status : "invited";
 
-        const { error } = await supabase.from("team_members").insert({
-          team_id: teamId,
-          user_id: userId,
-          email,
-          role,
-          status: memberStatus,
-        });
+        try {
+          const { error } = await supabase.from("team_members").insert({
+            team_id: teamId,
+            user_id: userId,
+            email,
+            role,
+            status: memberStatus,
+          });
 
-        if (error) {
-          throw error;
+          if (error) {
+            // Em caso de erro com RLS, tenta usar a API do servidor
+            if (
+              error.message &&
+              error.message.includes("row-level security policy")
+            ) {
+              const response = await fetch("/api/process-invite", {
+                method: "POST",
+                headers: {
+                  "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                  teamId,
+                  userId,
+                  email,
+                }),
+              });
+
+              if (!response.ok) {
+                const errorData = await response.json();
+                throw new Error(
+                  errorData.error || "Erro ao adicionar membro à equipe"
+                );
+              }
+            } else {
+              throw error;
+            }
+          }
+        } catch (insertError: any) {
+          console.error("Erro ao inserir membro na equipe:", insertError);
+          throw insertError;
         }
       }
 
@@ -622,73 +638,48 @@ export const TeamService = {
    * @param teamId ID da equipe
    * @returns Lista de respostas dos membros
    */
-  async getTeamSurveyResponses(teamId: string): Promise<any[]> {
+  async getTeamSurveyResponses(teamId: string): Promise<TeamSurveyResponse[]> {
     try {
-      // Primeiro, buscar os membros da equipe que já responderam
-      const { data: members, error: membersError } = await supabase
-        .from("team_members")
-        .select(
-          `
-          id,
-          team_id,
-          user_id,
-          email,
-          role,
-          status
-        `
-        )
-        .eq("team_id", teamId)
-        .eq("status", "answered");
+      const { data: responses, error } = await supabase
+        .from("team_survey_responses")
+        .select("*")
+        .eq("team_id", teamId);
 
-      if (membersError) {
-        console.error("Erro ao buscar membros da equipe:", membersError);
-        throw membersError;
-      }
-
-      if (!members || members.length === 0) {
+      if (error) {
+        console.error("Erro ao buscar respostas da equipe:", error);
         return [];
       }
 
-      // Buscar as respostas para cada membro
-      const responses = await Promise.all(
-        members.map(async (member) => {
-          const { data: surveyResponse, error: surveyError } = await supabase
-            .from("survey_responses")
-            .select("*")
-            .eq("user_id", member.user_id)
-            .eq("team_id", member.team_id)
-            .single();
+      return responses || [];
+    } catch (error) {
+      console.error("Erro ao carregar respostas da equipe:", error);
+      return [];
+    }
+  },
 
-          if (surveyError) {
-            console.error(
-              `Erro ao buscar respostas do membro ${member.email}:`,
-              surveyError
-            );
-            return null;
-          }
+  // Função para criar cliente admin do Supabase (usado para operações privilegiadas)
+  // Esta função deve ser chamada apenas no servidor
+  createAdminClient: () => {
+    // Verificar se estamos em ambiente de servidor
+    if (typeof window !== "undefined") {
+      console.warn("createAdminClient não deve ser usado no cliente");
+      return null;
+    }
 
-          return {
-            team_member_id: member.id,
-            team_id: member.team_id,
-            user_id: member.user_id,
-            email: member.email,
-            role: member.role,
-            status: member.status,
-            ...surveyResponse,
-            response_created_at: surveyResponse.created_at,
-            response_updated_at: surveyResponse.updated_at,
-          };
-        })
-      );
-
-      // Filtrar respostas nulas e retornar apenas as válidas
-      return responses.filter(
-        (response): response is NonNullable<typeof response> =>
-          response !== null
+    try {
+      return createClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+        process.env.SUPABASE_SERVICE_ROLE_KEY || "",
+        {
+          auth: {
+            autoRefreshToken: false,
+            persistSession: false,
+          },
+        }
       );
     } catch (error) {
-      console.error("Erro ao buscar respostas da equipe:", error);
-      return [];
+      console.error("Erro ao criar cliente admin do Supabase:", error);
+      return null;
     }
   },
 };
