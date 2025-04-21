@@ -121,3 +121,12 @@ export interface CompetencyDetail {
   teamAverage: number;
   difference: number;
 }
+
+// Nova interface para comparação de competências
+export interface CompetencyComparison {
+  team_id: string;
+  competency: string;
+  leader_score: number;
+  team_average: number;
+  difference: number;
+}

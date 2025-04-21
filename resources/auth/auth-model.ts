@@ -5,14 +5,14 @@ import { SurveyResponses } from "../survey/survey-model";
 // Tipos para autenticação e gerenciamento de usuários
 export interface User {
   id: string;
-  email: string;
+  email?: string;
   name?: string;
   avatar_url?: string;
   created_at?: string;
   updated_at?: string;
   team_id?: string;
   organization_id?: string;
-  role?: UserRole;
+  role?: UserRole | string;
   status?: UserStatus;
   email_confirmed_at?: string | null;
   last_form_page?: string; // Última página do formulário que o usuário visitou
@@ -62,9 +62,11 @@ export interface FormProgressState {
 
 // Resposta da API para operações de autenticação
 export interface AuthResponse {
-  user: User | null;
-  session: any | null;
-  error?: string;
+  data: {
+    user: User | null;
+    session: Session | null;
+  };
+  error: any | null;
 }
 
 // Esquemas de validação Zod

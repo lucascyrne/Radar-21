@@ -2,6 +2,7 @@ import { Session } from "@supabase/supabase-js";
 import { createContext } from "react";
 import { SurveyResponses } from "../survey/survey-model";
 import {
+  AuthResponse,
   AuthState,
   InviteUserParams,
   UpdateProfileParams,
@@ -24,7 +25,7 @@ export interface AuthContextType extends AuthState {
     email: string,
     password: string,
     role: string
-  ) => Promise<void>;
+  ) => Promise<AuthResponse>;
   signOut: () => Promise<void>;
   clearError: () => void;
   inviteUser: (
@@ -51,7 +52,9 @@ const AuthContext = createContext<AuthContextType>({
   signInWithEmail: async (email: string, password: string) => {
     throw new Error("AuthProvider não inicializado");
   },
-  signUpWithEmail: async () => {},
+  signUpWithEmail: async () => {
+    throw new Error("AuthProvider não inicializado");
+  },
   signOut: async () => {},
   clearError: () => {},
   inviteUser: async () => ({ success: false }),

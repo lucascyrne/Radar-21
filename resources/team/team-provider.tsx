@@ -1,13 +1,12 @@
 "use client";
 
+import supabase from "@/lib/supabase/client";
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/auth-hook";
-import { supabase } from "../auth/auth.service";
 import { useInvite } from "../invite/invite-hook";
 import { initialTeamState, TeamContext } from "./team-context";
 import {
   CreateTeamFormValues,
-  MemberTeamResponse,
   Team,
   TeamMember,
   TeamMemberStatus,
@@ -22,11 +21,19 @@ export function TeamProvider({ children }: TeamProviderProps) {
   const { user } = useAuth();
   const { pendingInviteId, processInvite } = useInvite();
 
+  // Adicionar estado para controlar se estamos no lado do cliente
+  const [isClient, setIsClient] = useState(false);
+
   // Refs para controlar requisições em andamento
   const loadingTeamsRef = useRef(false);
   const loadingMembersRef = useRef(false);
   const loadedMembersRef = useRef<Set<string>>(new Set());
   const initialLoadAttempted = useRef(false);
+
+  // Verificar se estamos no cliente
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
 
   // Limpar estado do provider
   const clearState = useCallback(() => {
@@ -88,22 +95,8 @@ export function TeamProvider({ children }: TeamProviderProps) {
         // Buscar todos os times onde o usuário é membro
         const { data: memberData, error: memberError } = await supabase
           .from("team_members")
-          .select(
-            `
-          id,
-          team_id,
-          teams:team_id (
-            id,
-            name,
-            owner_email,
-            team_size,
-            created_at
-          )
-        `
-          )
-          .eq("email", user?.email || "")
-          .not("teams", "is", null)
-          .returns<MemberTeamResponse[]>();
+          .select("team_id")
+          .eq("email", user?.email || "");
 
         if (memberError) {
           console.error("Erro ao buscar equipes:", memberError);
@@ -118,8 +111,6 @@ export function TeamProvider({ children }: TeamProviderProps) {
           initialLoadAttempted.current = true;
           return;
         }
-
-        console.log("Resultados da busca de equipes:", memberData?.length || 0);
 
         // Se não encontramos equipes, definir estado como vazio mas não em loading
         if (!memberData || memberData.length === 0) {
@@ -136,30 +127,44 @@ export function TeamProvider({ children }: TeamProviderProps) {
           return;
         }
 
-        // Extrair e formatar times únicos
-        const uniqueTeams = Array.from(
-          new Map(
-            memberData
-              .filter((mt) => mt.teams)
-              .map((mt) => {
-                const team = mt.teams;
-                return [
-                  team.id,
-                  {
-                    id: team.id,
-                    name: team.name,
-                    owner_id: "", // Campo não usado mais
-                    owner_email: team.owner_email,
-                    team_size: team.team_size,
-                    created_at: team.created_at,
-                  } as Team,
-                ];
-              })
-          ).values()
-        ).sort(
-          (a, b) =>
-            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-        );
+        // Buscar detalhes das equipes em uma consulta separada
+        const teamIds = memberData.map((mt) => mt.team_id);
+        const { data: teamsData, error: teamsError } = await supabase
+          .from("teams")
+          .select("id, name, owner_email, team_size, created_at")
+          .in("id", teamIds);
+
+        if (teamsError) {
+          console.error("Erro ao buscar detalhes das equipes:", teamsError);
+          setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            error: teamsError.message,
+            teams: [],
+            selectedTeam: null,
+          }));
+          loadingTeamsRef.current = false;
+          initialLoadAttempted.current = true;
+          return;
+        }
+
+        const uniqueTeams = (teamsData || [])
+          .map(
+            (team) =>
+              ({
+                id: team.id,
+                name: team.name,
+                owner_id: "", // Campo não usado mais
+                owner_email: team.owner_email,
+                team_size: team.team_size,
+                created_at: team.created_at,
+              } as Team)
+          )
+          .sort(
+            (a, b) =>
+              new Date(b.created_at).getTime() -
+              new Date(a.created_at).getTime()
+          );
 
         console.log(
           "Equipes encontradas após processamento:",
@@ -197,15 +202,13 @@ export function TeamProvider({ children }: TeamProviderProps) {
     [user?.email]
   );
 
-  // Efeito para carregar equipes automaticamente quando o usuário está autenticado
+  // Modificar o efeito que tenta carregar as equipes automaticamente
   useEffect(() => {
-    const attemptLoad = async () => {
-      if (user?.email && !initialLoadAttempted.current) {
-        await loadTeams(user.id);
-      }
-    };
-    attemptLoad();
-  }, [user?.email]);
+    // Só tentar carregar se estamos no cliente
+    if (isClient && user?.email && !initialLoadAttempted.current) {
+      loadTeams(user.id);
+    }
+  }, [isClient, user?.email]);
 
   // Efeito para limpar estado quando o usuário mudar
   useEffect(() => {
@@ -229,7 +232,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
     return () => {
       window.removeEventListener("teamUpdate", handleTeamUpdate);
     };
-  }, [user?.email, loadTeams]);
+  }, [user?.email]);
 
   // Obter o membro atual
   const getCurrentMember = useCallback(
@@ -515,7 +518,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
       const team = state.teams[0];
       loadTeamMembers(team.id);
     }
-  }, [state.teams, user?.email, loadTeamMembers]);
+  }, [state.teams, user?.email]);
 
   // Carregar respostas da pesquisa da equipe
   const loadTeamSurveyResponses = useCallback(async (teamId: string) => {

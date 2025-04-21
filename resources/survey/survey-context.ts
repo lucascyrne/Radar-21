@@ -1,15 +1,16 @@
-"use client"
+"use client";
 
-import { createContext } from 'react';
-import { 
-  DemographicFormValues,
-  SurveyResponses,
-  OpenQuestionsFormValues,
+import { createContext } from "react";
+import {
+  CompetencyComparison,
   DemographicData,
+  DemographicFormValues,
+  OpenQuestionResponse,
+  OpenQuestionsFormValues,
   Question,
   RadarDataPoint,
-  OpenQuestionResponse,
-} from './survey-model';
+  SurveyResponses,
+} from "./survey-model";
 
 // Tipo do contexto de pesquisa
 export interface SurveyState {
@@ -34,6 +35,7 @@ export interface SurveyState {
   questions: Question[];
   answers: SurveyResponses | null;
   isSaving: boolean;
+  competencyComparison: CompetencyComparison[];
 }
 
 export interface SurveyContextType extends SurveyState {
@@ -46,6 +48,7 @@ export interface SurveyContextType extends SurveyState {
   updateTeamId: (teamId: string | null) => void;
   loadData: () => Promise<void>;
   completeAllSteps: () => Promise<boolean>;
+  getCompetencyComparison: (teamId: string) => Promise<CompetencyComparison[]>;
 }
 
 export const initialState: SurveyState = {
@@ -59,19 +62,22 @@ export const initialState: SurveyState = {
     survey: false,
     openQuestions: false,
     teamMember: false,
-    saving: false
+    saving: false,
   },
   error: {
     demographicData: null,
     survey: null,
-    openQuestions: null
+    openQuestions: null,
   },
   radarData: [],
   questions: [],
   answers: null,
   isSaving: false,
+  competencyComparison: [],
 };
 
-const SurveyContext = createContext<SurveyContextType>(initialState as SurveyContextType);
+const SurveyContext = createContext<SurveyContextType>(
+  initialState as SurveyContextType
+);
 
-export default SurveyContext; 
+export default SurveyContext;

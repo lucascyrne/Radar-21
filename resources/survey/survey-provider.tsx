@@ -1,10 +1,10 @@
 "use client";
 
+import supabase from "@/lib/supabase/client";
 import { useAuth } from "@/resources/auth/auth-hook";
 import { useTeam } from "@/resources/team/team-hook";
 import { ReactNode, useCallback, useEffect, useMemo, useState } from "react";
-import { supabase } from "../auth/auth.service";
-import SurveyContext from "./survey-context";
+import SurveyContext, { SurveyState, initialState } from "./survey-context";
 import {
   DemographicFormValues,
   OpenQuestionsFormValues,
@@ -12,37 +12,12 @@ import {
   RadarDataPoint,
   SurveyFormValues,
   SurveyResponses,
-  SurveyState,
 } from "./survey-model";
 import { SurveyService } from "./survey.service";
 
 interface SurveyProviderProps {
   children: ReactNode;
 }
-
-const initialState: SurveyState = {
-  userId: null,
-  teamId: null,
-  surveyResponses: null,
-  openQuestions: null,
-  loading: {
-    survey: false,
-    openQuestions: false,
-    teamMember: false,
-    saving: false,
-    demographicData: false,
-  },
-  error: {
-    survey: null,
-    openQuestions: null,
-    demographicData: null,
-  },
-  radarData: [],
-  questions: [],
-  answers: null,
-  isSaving: false,
-  demographicData: null,
-};
 
 export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
   const [state, setState] = useState<SurveyState>(initialState);
@@ -461,6 +436,31 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
     }
   }, [state.surveyResponses]);
 
+  // Função para buscar comparação de competências
+  const getCompetencyComparison = useCallback(async (teamId: string) => {
+    try {
+      updateLoading("survey", true);
+
+      const data = await SurveyService.getCompetencyComparison(teamId);
+
+      setState((prev) => ({
+        ...prev,
+        competencyComparison: data,
+      }));
+
+      return data;
+    } catch (error: any) {
+      console.error("Erro ao buscar comparação de competências:", error);
+      updateError(
+        "survey",
+        error.message || "Erro ao buscar comparação de competências"
+      );
+      return [];
+    } finally {
+      updateLoading("survey", false);
+    }
+  }, []);
+
   // Carregar dados
   const loadData = useCallback(async () => {
     try {
@@ -479,17 +479,23 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
       updateLoading("survey", true);
       updateLoading("openQuestions", true);
 
-      const [demographicData, surveyResponses, openQuestions] =
-        await Promise.all([
-          SurveyService.loadDemographicData(state.userId, state.teamId),
-          SurveyService.loadSurveyResponses(state.userId, state.teamId),
-          SurveyService.loadOpenQuestions(state.userId, state.teamId),
-        ]);
+      const [
+        demographicData,
+        surveyResponses,
+        openQuestions,
+        competencyComparison,
+      ] = await Promise.all([
+        SurveyService.loadDemographicData(state.userId, state.teamId),
+        SurveyService.loadSurveyResponses(state.userId, state.teamId),
+        SurveyService.loadOpenQuestions(state.userId, state.teamId),
+        SurveyService.getCompetencyComparison(state.teamId),
+      ]);
 
       console.log("Dados carregados:", {
         demographicData,
         surveyResponses,
         openQuestions,
+        competencyComparison,
       });
 
       setState((prev) => ({
@@ -498,6 +504,7 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
         surveyResponses: surveyResponses?.responses || null,
         openQuestions,
         answers: surveyResponses?.responses || null,
+        competencyComparison,
         error: {
           demographicData: null,
           survey: null,
@@ -636,6 +643,7 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
       loadData,
       completeAllSteps,
       loadDemographicData,
+      getCompetencyComparison,
     }),
     [
       state,
@@ -651,6 +659,7 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
       loadData,
       completeAllSteps,
       loadDemographicData,
+      getCompetencyComparison,
     ]
   );
 

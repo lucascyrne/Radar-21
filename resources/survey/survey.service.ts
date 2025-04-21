@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { TeamMemberStatus } from "../team/team-model";
 import {
+  CompetencyComparison,
   DemographicData,
   DemographicFormValues,
   OpenQuestionResponse,
@@ -375,6 +376,27 @@ export class SurveyService {
     } catch (error) {
       console.error("Erro ao carregar resultados da equipe:", error);
       return null;
+    }
+  }
+
+  static async getCompetencyComparison(
+    teamId: string
+  ): Promise<CompetencyComparison[]> {
+    try {
+      const { data, error } = await supabase
+        .from("competency_comparison")
+        .select("*")
+        .eq("team_id", teamId);
+
+      if (error) {
+        console.error("Erro ao buscar comparação de competências:", error);
+        throw error;
+      }
+
+      return data || [];
+    } catch (error) {
+      console.error("Erro ao carregar comparação de competências:", error);
+      return [];
     }
   }
 }
