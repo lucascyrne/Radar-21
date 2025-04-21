@@ -6,14 +6,28 @@ import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function AuthPage() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, user } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.push("/team-setup");
+      // Verificar se é usuário organização
+      const isOrg = user?.role === "ORGANIZATION";
+
+      if (isOrg) {
+        console.log(
+          "Usuário organização autenticado, redirecionando para org.radar21.com.br"
+        );
+        // Redirecionar para subdomain de organização
+        window.location.href = "https://org.radar21.com.br/org/dashboard";
+      } else {
+        console.log(
+          "Usuário comum autenticado, redirecionando para /team-setup"
+        );
+        router.push("/team-setup");
+      }
     }
-  }, [isAuthenticated]);
+  }, [isAuthenticated, user]);
 
   return (
     <Layout>
@@ -38,6 +52,12 @@ export default function AuthPage() {
             >
               Registrar
             </button>
+            <a
+              href="https://org.radar21.com.br/auth/login"
+              className="block w-full text-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary"
+            >
+              Área da Organização
+            </a>
           </div>
         </div>
       </div>

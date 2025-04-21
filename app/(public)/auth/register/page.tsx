@@ -22,11 +22,26 @@ export default function RegisterPage() {
     role: string;
   }) => {
     try {
-      await signUpWithEmail(data.email, data.password, data.role);
-      router.push("/auth/verify-email");
-      return undefined;
+      const response = await signUpWithEmail(
+        data.email,
+        data.password,
+        data.role
+      );
+
+      if (response.error) {
+        return response.error.message;
+      }
+
+      if (response.data.user) {
+        // Redirecionar para a página de verificação de email
+        router.push("/auth/verify-email");
+        return undefined;
+      }
+
+      return "Erro inesperado ao criar usuário";
     } catch (error: any) {
-      return error.message;
+      console.error("Erro no registro:", error);
+      return error.message || "Erro ao registrar usuário";
     }
   };
 

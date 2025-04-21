@@ -26,7 +26,7 @@ export default function VerifyEmailPage() {
 
   return (
     <Layout>
-      <div className="w-full max-w-md mx-auto px-4">
+      <div className="flex flex-col items-center w-full max-w-md mx-auto px-4 py-10">
         <Card>
           <CardHeader>
             <CardTitle>Verifique seu Email</CardTitle>

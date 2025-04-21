@@ -20,7 +20,7 @@ import {
 } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { supabase } from "@/resources/auth/auth.service";
+import supabase from "@/lib/supabase/client";
 import { PlusCircleIcon } from "lucide-react";
 
 // Componentes personalizados
@@ -45,16 +45,6 @@ const TeamSkeleton = () => (
 export default function TeamSetupPage() {
   const router = useRouter();
   const { user, isLoading: authLoading } = useAuth();
-
-  // Verificar autenticação antes de prosseguir
-  if (!user || authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
-      </div>
-    );
-  }
-
   const {
     teams,
     selectedTeam,
@@ -75,37 +65,49 @@ export default function TeamSetupPage() {
     "loading" | "not_member" | "error" | "success"
   >("not_member");
   const [teamsLoaded, setTeamsLoaded] = useState(false);
+  const [isMounted, setIsMounted] = useState(false);
 
-  const hasOrganization = !!user.organization_id;
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
-  // Efeito para redirecionar se não estiver autenticado
   useEffect(() => {
     if (!user) {
+      console.log(
+        "Usuário não autenticado em team-setup, redirecionando para /auth"
+      );
       router.push("/auth");
+      return;
     }
-  }, [user]);
 
-  // Efeito para carregar equipes do usuário uma única vez
-  useEffect(() => {
-    const loadUserTeams = async () => {
-      if (user?.id && !teamsLoaded) {
+    console.log("Usuário autenticado em team-setup:", {
+      userId: user.id,
+      userEmail: user.email,
+      userRole: user.role,
+    });
+
+    const initializeTeams = async () => {
+      if (user.id) {
         await loadTeams(user.id);
         setTeamsLoaded(true);
       }
     };
 
-    loadUserTeams();
-  }, [user?.id, teamsLoaded]);
+    initializeTeams();
+  }, [user]);
 
-  // Efeito para atualizar mensagem de convite
   useEffect(() => {
     if (selectedTeam && user?.email) {
       const message = generateInviteMessage(selectedTeam.name, user.email);
       setInviteMessage(message);
     }
-  }, [selectedTeam?.id, user?.email]);
+  }, [
+    selectedTeam?.id,
+    user?.email,
+    generateInviteMessage,
+    selectedTeam?.name,
+  ]);
 
-  // Efeito para verificar status da pesquisa
   useEffect(() => {
     const checkSurveyStatus = async () => {
       if (!selectedTeam?.id || !user?.email) {
@@ -123,22 +125,17 @@ export default function TeamSetupPage() {
 
         if (memberError) {
           if (memberError.code === "PGRST116") {
-            // Usuário não é membro da equipe - comportamento esperado
             setSurveyStatus("not_member");
             return;
           }
-          // Erro real do sistema
           console.error("Erro ao verificar membro da equipe:", memberError);
           setSurveyStatus("error");
           return;
         }
 
-        // Verificar se o usuário já respondeu a pesquisa
         const hasAnswered = memberData.status === "answered";
-
         setSurveyStatus(hasAnswered ? "success" : "not_member");
 
-        // Se o usuário está autenticado mas ainda não está registrado, atualizar para "invited"
         if (memberData.status === "invited") {
           await supabase
             .from("team_members")
@@ -151,28 +148,22 @@ export default function TeamSetupPage() {
       }
     };
 
-    if (selectedTeam?.id && user?.email) {
-      checkSurveyStatus();
-    }
+    checkSurveyStatus();
   }, [selectedTeam?.id, user?.email]);
 
-  // Handlers
   const handleCreateTeamSubmit = useCallback(
     async (data: CreateTeamFormValues) => {
       if (!user) return;
 
       setIsSubmitting(true);
-
       try {
         await createTeam(data, user.id, user.email || "");
         resetTeamsLoaded();
         setActiveTab("my-teams");
-
         toast.success("Equipe criada com sucesso!", {
           description: "Agora você pode convidar membros para sua equipe.",
         });
       } catch (error: any) {
-        console.error("Erro ao criar equipe:", error);
         toast.error("Erro ao criar equipe", {
           description:
             error.message || "Erro ao criar equipe. Tente novamente.",
@@ -207,7 +198,6 @@ export default function TeamSetupPage() {
           }),
         });
 
-        // Forçar recarregamento dos membros
         loadTeamMembers(selectedTeam.id);
 
         toast.success("Convite enviado", {
@@ -237,18 +227,13 @@ export default function TeamSetupPage() {
       selectedTeam.id
     );
 
-    if (surveyComplete) {
-      router.push("/open-questions");
-    } else {
-      router.push("/survey");
-    }
+    router.push(surveyComplete ? "/open-questions" : "/survey");
   }, [selectedTeam?.id, user?.id, router]);
 
   const handleTeamSelect = useCallback(
     async (teamId: string) => {
       if (!user?.id) return;
 
-      // Atualizar a equipe selecionada no contexto
       const team = teams.find((t) => t.id === teamId);
       if (team) {
         selectTeam(teamId);
@@ -257,6 +242,33 @@ export default function TeamSetupPage() {
     },
     [user?.id, teams]
   );
+
+  if (authLoading) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-8">
+          <TeamSkeleton />
+          <TeamSkeleton />
+        </div>
+      </Layout>
+    );
+  }
+
+  if (!user) {
+    return null;
+  }
+
+  const hasOrganization = user?.organization_id;
+
+  if (!isMounted) {
+    return (
+      <Layout>
+        <div className="container mx-auto px-4 py-8 space-y-8 max-w-3xl flex items-center justify-center h-96">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary"></div>
+        </div>
+      </Layout>
+    );
+  }
 
   return (
     <Layout>
@@ -300,142 +312,130 @@ export default function TeamSetupPage() {
                 <TeamSkeleton />
               </div>
             ) : (
-              <div className="space-y-6">
-                <div className="bg-card rounded-lg border shadow-sm">
-                  <TeamList
-                    teams={teams}
-                    selectedTeamId={selectedTeam?.id}
-                    userEmail={user?.email || null}
-                    onSelectTeam={handleTeamSelect}
-                  />
-                </div>
+              <TeamList
+                teams={teams}
+                selectedTeamId={selectedTeam?.id}
+                userEmail={user.email || ""}
+                onSelectTeam={handleTeamSelect}
+              />
+            )}
 
-                {selectedTeam && (
-                  <>
-                    <div className="bg-card rounded-lg border shadow-sm p-6 space-y-6">
-                      <TeamDetails
-                        teamId={selectedTeam.id}
-                        members={teamMembers}
-                        currentUserEmail={user?.email || null}
-                        surveyStatus={surveyStatus}
-                        onContinue={handleNext}
-                        inviteMessage={inviteMessage}
-                        onInviteMessageChange={setInviteMessage}
-                        onSendInvite={handleSendInvite}
-                        isSendingInvite={isSendingInvite}
-                      />
-                    </div>
-                  </>
-                )}
+            {selectedTeam && (
+              <TeamDetails
+                teamId={selectedTeam.id}
+                members={teamMembers}
+                currentUserEmail={user.email}
+                surveyStatus={surveyStatus}
+                onContinue={handleNext}
+                inviteMessage={inviteMessage}
+                onInviteMessageChange={setInviteMessage}
+                onSendInvite={handleSendInvite}
+                isSendingInvite={isSendingInvite}
+              />
+            )}
 
-                {teams.length === 0 && (
-                  <Card className="bg-card">
-                    <CardHeader className="space-y-2">
-                      <CardTitle>Bem-vindo ao Radar21!</CardTitle>
-                      <p className="text-muted-foreground text-sm">
-                        {user?.role === "LEADER" ? (
+            {teams.length === 0 && (
+              <Card className="bg-card">
+                <CardHeader className="space-y-2">
+                  <CardTitle>Bem-vindo ao Radar21!</CardTitle>
+                  <p className="text-muted-foreground text-sm">
+                    {user?.role === "LEADER" ? (
+                      <>
+                        {hasOrganization ? (
                           <>
-                            {hasOrganization ? (
-                              <>
-                                Você está vinculado a uma organização. Aguarde
-                                seu gestor atribuí-lo a uma equipe para começar
-                                a avaliação.
-                                <br />
-                                <br />
-                                Se você é líder de uma pequena equipe e deseja
-                                criar sua própria equipe independente, entre em
-                                contato com o suporte para ajustar seu perfil.
-                              </>
-                            ) : (
-                              <>
-                                Como líder, você pode criar sua própria equipe e
-                                convidar membros para participar da avaliação.
-                                <br />
-                                <br />
-                                <span className="font-bold text-red-400">
-                                  Atenção:
-                                </span>{" "}
-                                Se você faz parte de uma organização maior, é
-                                recomendado que seu gestor (usuário com papel de
-                                Organização) crie a equipe e atribua você como
-                                líder.
-                              </>
-                            )}
+                            Você está vinculado a uma organização. Aguarde seu
+                            gestor atribuí-lo a uma equipe para começar a
+                            avaliação.
+                            <br />
+                            <br />
+                            Se você é líder de uma pequena equipe e deseja criar
+                            sua própria equipe independente, entre em contato
+                            com o suporte para ajustar seu perfil.
                           </>
                         ) : (
-                          "Você ainda não faz parte de nenhuma equipe. Você pode criar sua própria equipe ou aguardar um convite de um líder."
+                          <>
+                            Como líder, você pode criar sua própria equipe e
+                            convidar membros para participar da avaliação.
+                            <br />
+                            <br />
+                            <span className="font-bold text-red-400">
+                              Atenção:
+                            </span>{" "}
+                            Se você faz parte de uma organização maior, é
+                            recomendado que seu gestor (usuário com papel de
+                            Organização) crie a equipe e atribua você como
+                            líder.
+                          </>
                         )}
-                      </p>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="rounded-lg bg-muted p-4">
-                        <h3 className="font-semibold mb-2">Próximos passos:</h3>
-                        <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
-                          {user?.role === "LEADER" ? (
-                            hasOrganization ? (
-                              <>
-                                <li>
-                                  Aguarde seu gestor atribuí-lo a uma equipe
-                                </li>
-                                <li>
-                                  Após ser atribuído, você poderá gerenciar sua
-                                  equipe
-                                </li>
-                                <li>
-                                  Convide membros para participar da avaliação
-                                </li>
-                                <li>Aguarde as respostas dos membros</li>
-                                <li>Analise os resultados da avaliação</li>
-                              </>
-                            ) : (
-                              <>
-                                <li>
-                                  Crie uma nova equipe clicando no botão abaixo
-                                </li>
-                                <li>
-                                  Convide membros para participar da sua equipe
-                                </li>
-                                <li>Aguarde as respostas dos membros</li>
-                                <li>Analise os resultados da avaliação</li>
-                              </>
-                            )
-                          ) : (
-                            <>
-                              <li>
-                                Crie sua própria equipe ou aguarde um convite
-                              </li>
-                              <li>
-                                Após entrar em uma equipe, responda a avaliação
-                              </li>
-                              <li>
-                                Contribua para o desenvolvimento da sua equipe
-                              </li>
-                            </>
-                          )}
-                        </ul>
-                      </div>
-                    </CardContent>
-                    <CardFooter className="pt-6">
-                      {user?.role === "LEADER" && !hasOrganization && (
-                        <Button
-                          onClick={() => setActiveTab("create-team")}
-                          className="w-full sm:w-auto"
-                        >
-                          <PlusCircleIcon className="mr-2 h-4 w-4" />
-                          Criar Nova Equipe
-                        </Button>
+                      </>
+                    ) : (
+                      "Você ainda não faz parte de nenhuma equipe. Você pode criar sua própria equipe ou aguardar um convite de um líder."
+                    )}
+                  </p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="rounded-lg bg-muted p-4">
+                    <h3 className="font-semibold mb-2">Próximos passos:</h3>
+                    <ul className="list-disc list-inside space-y-2 text-sm text-muted-foreground">
+                      {user?.role === "LEADER" ? (
+                        hasOrganization ? (
+                          <>
+                            <li>Aguarde seu gestor atribuí-lo a uma equipe</li>
+                            <li>
+                              Após ser atribuído, você poderá gerenciar sua
+                              equipe
+                            </li>
+                            <li>
+                              Convide membros para participar da avaliação
+                            </li>
+                            <li>Aguarde as respostas dos membros</li>
+                            <li>Analise os resultados da avaliação</li>
+                          </>
+                        ) : (
+                          <>
+                            <li>
+                              Crie uma nova equipe clicando no botão abaixo
+                            </li>
+                            <li>
+                              Convide membros para participar da sua equipe
+                            </li>
+                            <li>Aguarde as respostas dos membros</li>
+                            <li>Analise os resultados da avaliação</li>
+                          </>
+                        )
+                      ) : (
+                        <>
+                          <li>Crie sua própria equipe ou aguarde um convite</li>
+                          <li>
+                            Após entrar em uma equipe, responda a avaliação
+                          </li>
+                          <li>
+                            Contribua para o desenvolvimento da sua equipe
+                          </li>
+                        </>
                       )}
-                    </CardFooter>
-                  </Card>
-                )}
-              </div>
+                    </ul>
+                  </div>
+                </CardContent>
+                <CardFooter className="pt-6">
+                  {user?.role === "LEADER" && !hasOrganization && (
+                    <Button
+                      onClick={() => setActiveTab("create-team")}
+                      className="w-full sm:w-auto"
+                    >
+                      <PlusCircleIcon className="mr-2 h-4 w-4" />
+                      Criar Nova Equipe
+                    </Button>
+                  )}
+                </CardFooter>
+              </Card>
             )}
           </TabsContent>
 
           <TabsContent value="create-team">
             <div className="bg-card rounded-lg border shadow-sm p-6">
               <CreateTeamForm
-                userEmail={user?.email || null}
+                userEmail={user.email || ""}
                 isSubmitting={isSubmitting}
                 onSubmit={handleCreateTeamSubmit}
               />

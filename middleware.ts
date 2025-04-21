@@ -3,55 +3,57 @@ import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  const res = NextResponse.next();
-  const supabase = createMiddlewareClient({ req: request, res });
+  const response = NextResponse.next();
+  const supabase = createMiddlewareClient({ req: request, res: response });
 
-  // Forçar uma nova verificação da sessão
+  // Obter informações sobre o request
+  const { pathname } = request.nextUrl;
+  const hostname = request.headers.get("host") || "";
+  const isOrgSubdomain =
+    hostname.startsWith("org.") || hostname.includes(".org.");
+
+  // Rotas de autenticação e outras rotas públicas
+  const publicPatterns = ["/", "/auth", "/_next", "/api", "/favicon.ico"];
+  const isPublicRoute = publicPatterns.some((pattern) =>
+    pathname.startsWith(pattern)
+  );
+
+  // Se for rota pública, permitir acesso sem verificação
+  if (isPublicRoute) {
+    return response;
+  }
+
+  // Verificar sessão do usuário
   const {
     data: { session },
   } = await supabase.auth.getSession();
 
-  // Rotas públicas que não requerem autenticação
-  const publicRoutes = [
-    "/",
-    "/auth",
-    "/auth/login",
-    "/auth/register",
-    "/auth/forgot-password",
-    "/auth/reset-password",
-    "/auth/verify-email",
-    "/auth/callback",
-    "/auth/logout",
-  ];
-
-  // Se não houver sessão e a rota não for pública, redirecionar para login
-  if (
-    !session &&
-    !publicRoutes.some((route) => request.nextUrl.pathname.startsWith(route))
-  ) {
-    return NextResponse.redirect(new URL("/auth", request.url));
+  // Se não houver sessão, redirecionar para login
+  if (!session) {
+    return NextResponse.redirect(new URL("/auth/login", request.url));
   }
 
-  // Se houver sessão e estiver em uma rota de autenticação (exceto logout), redirecionar para dashboard
-  if (
-    session &&
-    request.nextUrl.pathname.startsWith("/auth") &&
-    !request.nextUrl.pathname.startsWith("/auth/logout")
-  ) {
-    return NextResponse.redirect(new URL("/team-setup", request.url));
+  // Verificar papel do usuário
+  const userRole = session.user.user_metadata?.role;
+  const isOrganization = userRole === "ORGANIZATION";
+
+  // Verificar se está no subdomínio correto
+  if (isOrgSubdomain && !isOrganization) {
+    return NextResponse.redirect(
+      new URL("https://radar21.com.br/auth/login", request.url)
+    );
   }
 
-  return res;
+  if (!isOrgSubdomain && isOrganization) {
+    return NextResponse.redirect(
+      new URL("https://org.radar21.com.br/auth/login", request.url)
+    );
+  }
+
+  // Usuário autenticado e no subdomínio correto
+  return response;
 }
 
 export const config = {
-  matcher: [
-    /*
-     * Match all request paths except:
-     * - _next/static (static files)
-     * - _next/image (image optimization files)
-     * - favicon.ico (favicon file)
-     */
-    "/((?!_next/static|_next/image|favicon.ico).*)",
-  ],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico).*)"],
 };

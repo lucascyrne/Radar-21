@@ -1,6 +1,7 @@
 import "@/app/globals.css";
 import { AuthProvider } from "@/resources/auth/auth-provider";
 import { InviteProvider } from "@/resources/invite/invite-provider";
+import { OrganizationProvider } from "@/resources/organization/organization-provider";
 import { SurveyProvider } from "@/resources/survey/survey-provider";
 import { TeamProvider } from "@/resources/team/team-provider";
 import type { Metadata } from "next";
@@ -38,10 +39,12 @@ export default function RootLayout({
           <AuthProvider>
             <TeamProvider>
               <SurveyProvider>
-                <InviteProvider>
-                  {children}
-                  <Toaster />
-                </InviteProvider>
+                <OrganizationProvider>
+                  <InviteProvider>
+                    {children}
+                    <Toaster />
+                  </InviteProvider>
+                </OrganizationProvider>
               </SurveyProvider>
             </TeamProvider>
           </AuthProvider>
