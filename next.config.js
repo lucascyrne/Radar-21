@@ -4,29 +4,35 @@ const nextConfig = {
   images: {
     domains: ["lh3.googleusercontent.com", "avatars.githubusercontent.com"],
   },
-  async rewrites() {
+  async headers() {
     return [
       {
         source: "/:path*",
-        has: [
+        headers: [
           {
-            type: "host",
-            value: "org.localhost:3000",
+            key: "X-DNS-Prefetch-Control",
+            value: "on",
           },
         ],
-        destination: "/org/:path*",
-      },
-      {
-        source: "/:path*",
-        has: [
-          {
-            type: "host",
-            value: "org.radar21.com.br",
-          },
-        ],
-        destination: "/org/:path*",
       },
     ];
+  },
+  async rewrites() {
+    return {
+      beforeFiles: [
+        // Rewrite para o subdomínio org
+        {
+          source: "/:path*",
+          has: [
+            {
+              type: "host",
+              value: "org.localhost|org.radar21.com.br",
+            },
+          ],
+          destination: "/org/:path*",
+        },
+      ],
+    };
   },
   async redirects() {
     return [
@@ -56,6 +62,9 @@ const nextConfig = {
   },
   webpack: (config) => {
     return config;
+  },
+  experimental: {
+    serverActions: true,
   },
 };
 

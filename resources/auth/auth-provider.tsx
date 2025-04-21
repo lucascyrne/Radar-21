@@ -67,7 +67,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
   const isOrgSubdomain = useCallback(() => {
     if (typeof window !== "undefined") {
       const hostname = window.location.hostname;
-      return hostname.startsWith("org.") || hostname.includes(".org.");
+      return hostname.startsWith("org.");
     }
     return false;
   }, []);
