@@ -20,17 +20,17 @@ const nextConfig = {
   async rewrites() {
     return {
       beforeFiles: [
-        // Rewrite para o subdomínio org
-        {
-          source: "/:path*",
-          has: [
-            {
-              type: "host",
-              value: "org.localhost|org.radar21.com.br",
-            },
-          ],
-          destination: "/org/:path*",
-        },
+        // Rewrite para subdomínio org
+      {
+        source: "/:path*",
+        has: [
+          {
+            type: "host",
+              value: "org.localhost:3000|org.radar21.com.br",
+          },
+        ],
+          destination: "/:path*",
+      },
       ],
     };
   },
@@ -41,27 +41,13 @@ const nextConfig = {
         has: [
           {
             type: "host",
-            value: "org.localhost:3000",
+            value: "org.localhost:3000|org.radar21.com.br",
           },
         ],
-        destination: "/org/dashboard",
-        permanent: true,
-      },
-      {
-        source: "/",
-        has: [
-          {
-            type: "host",
-            value: "org.radar21.com.br",
-          },
-        ],
-        destination: "/org/dashboard",
+        destination: "/dashboard",
         permanent: true,
       },
     ];
-  },
-  webpack: (config) => {
-    return config;
   },
 };
 
