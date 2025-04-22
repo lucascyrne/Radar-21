@@ -10,34 +10,67 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { useAuth } from "@/resources/auth/auth-hook";
 import { useOrganization } from "@/resources/organization/organization-hook";
-import { BarChart2, MessagesSquare, PlusCircle, Users2 } from "lucide-react";
+import { useTeam } from "@/resources/team/team-hook";
+import { BarChart2, MessagesSquare, PlusCircle } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export default function OrgDashboardPage() {
-  const {
-    selectedOrganization,
-    organizations,
-    teamOverviews,
-    getTeamOverviews,
-    selectOrganization,
-    isLoading,
-  } = useOrganization();
+  const { user } = useAuth();
+  const { selectedOrganization } = useOrganization();
+  const { teams, teamMembers, loadTeams, isLoading } = useTeam();
 
-  // Selecionar a primeira organização se nenhuma estiver selecionada
-  useEffect(() => {
-    if (!selectedOrganization && organizations.length > 0) {
-      selectOrganization(organizations[0]);
-    }
-  }, [selectedOrganization, organizations, selectOrganization]);
+  // Estado para controlar a montagem do componente
+  const [isMounted, setIsMounted] = useState(false);
+  const [teamOverviews, setTeamOverviews] = useState<any[]>([]);
 
-  // Carregar dados da equipe quando a organização for selecionada
+  // Efeito para marcar o componente como montado no cliente
   useEffect(() => {
-    if (selectedOrganization) {
-      getTeamOverviews(selectedOrganization.id);
+    setIsMounted(true);
+  }, []);
+
+  // Carregar times do usuário quando o componente montar
+  useEffect(() => {
+    if (isMounted && user?.id) {
+      loadTeams(user.id);
     }
-  }, [selectedOrganization, getTeamOverviews]);
+  }, [isMounted, user?.id]);
+
+  // Preparar dados das equipes para exibição
+  useEffect(() => {
+    if (teams.length > 0) {
+      // Criar uma visualização simplificada dos times para o dashboard
+      const overviews = teams.map((team) => {
+        // Buscar membros da equipe atual
+        const members = teamMembers.filter((m) => m.team_id === team.id);
+        const totalMembers = members.length || team.team_size || 0;
+        const respondedMembers = members.filter(
+          (m) => m.status === "answered"
+        ).length;
+        const completionPercentage =
+          totalMembers > 0
+            ? Math.round((respondedMembers / totalMembers) * 100)
+            : 0;
+
+        return {
+          team_id: team.id,
+          team_name: team.name,
+          organization_id: selectedOrganization?.id || "",
+          organization_name: selectedOrganization?.name || "",
+          members_answered: respondedMembers,
+          total_members: totalMembers,
+          team_created_at: team.created_at,
+          leaders_answered: 0,
+          total_leaders: 0,
+          completion_percentage: completionPercentage,
+        };
+      });
+
+      setTeamOverviews(overviews);
+    }
+  }, [teams, teamMembers, selectedOrganization]);
 
   const getTotalMembers = useCallback(() => {
     return teamOverviews.reduce((total, team) => total + team.total_members, 0);
@@ -55,7 +88,16 @@ export default function OrgDashboardPage() {
     const responded = getRespondedMembers();
     if (total === 0) return 0;
     return Math.round((responded / total) * 100);
-  }, [getTotalMembers, getRespondedMembers]);
+  }, []);
+
+  // Não renderizar conteúdo no primeiro render para evitar hidratação inconsistente
+  if (!isMounted) {
+    return (
+      <OrgLayout>
+        <div className="container py-8">Carregando...</div>
+      </OrgLayout>
+    );
+  }
 
   return (
     <OrgLayout>
@@ -70,15 +112,9 @@ export default function OrgDashboardPage() {
           </div>
           <div className="flex gap-2">
             <Button asChild>
-              <Link href="/org/teams/add">
+              <Link href="/teams/add">
                 <PlusCircle className="mr-2 h-4 w-4" />
                 Adicionar Equipe
-              </Link>
-            </Button>
-            <Button variant="outline" asChild>
-              <Link href="/org/leaders/invite">
-                <Users2 className="mr-2 h-4 w-4" />
-                Convidar Líderes
               </Link>
             </Button>
           </div>
@@ -146,7 +182,7 @@ export default function OrgDashboardPage() {
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-xl font-bold">Equipes</h2>
             <Button variant="outline" size="sm" asChild>
-              <Link href="/org/teams">Ver Todas</Link>
+              <Link href="/teams">Ver Todas</Link>
             </Button>
           </div>
           {isLoading ? (
@@ -159,7 +195,7 @@ export default function OrgDashboardPage() {
                 Nenhuma equipe encontrada
               </p>
               <Button asChild>
-                <Link href="/org/teams/add">
+                <Link href="/teams/add">
                   <PlusCircle className="mr-2 h-4 w-4" />
                   Adicionar Equipe
                 </Link>
@@ -187,7 +223,7 @@ export default function OrgDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="flex h-40 items-center justify-center">
-                <Link href="/org/results" passHref>
+                <Link href="/org-results" passHref>
                   <Button>Ver Resultados Detalhados</Button>
                 </Link>
               </div>
@@ -204,7 +240,7 @@ export default function OrgDashboardPage() {
             </CardHeader>
             <CardContent>
               <div className="flex h-40 items-center justify-center">
-                <Link href="/org/open-answers" passHref>
+                <Link href="/open-answers" passHref>
                   <Button>Ver Respostas Abertas</Button>
                 </Link>
               </div>

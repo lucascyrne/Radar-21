@@ -1,10 +1,9 @@
 "use client";
 
 import { useAuth } from "@/resources/auth/auth-hook";
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export default function LogoutPage() {
+export default function OrgLogoutPage() {
   const { signOut } = useAuth();
 
   useEffect(() => {
@@ -13,10 +12,10 @@ export default function LogoutPage() {
         await signOut();
         // Aguardar um momento para garantir que a sessão seja limpa
         await new Promise((resolve) => setTimeout(resolve, 500));
-        window.location.href = "/";
+        window.location.href = "/org-auth/login";
       } catch (error) {
         console.error("Erro ao fazer logout:", error);
-        window.location.href = "/";
+        window.location.href = "/org-auth/login";
       }
     };
 

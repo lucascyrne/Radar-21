@@ -66,6 +66,10 @@ export default function TeamSetupPage() {
   >("not_member");
   const [teamsLoaded, setTeamsLoaded] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
+  const [totalMembers, setTotalMembers] = useState<Record<string, number>>({});
+  const [completionPercentages, setCompletionPercentages] = useState<
+    Record<string, number>
+  >({});
 
   useEffect(() => {
     setIsMounted(true);
@@ -151,6 +155,48 @@ export default function TeamSetupPage() {
     checkSurveyStatus();
   }, [selectedTeam?.id, user?.email]);
 
+  // Efeito para calcular totalMembers e completionPercentages
+  useEffect(() => {
+    const calculateTeamStats = async () => {
+      const membersCount: Record<string, number> = {};
+      const completionPercs: Record<string, number> = {};
+
+      for (const team of teams) {
+        try {
+          const { data: members } = await supabase
+            .from("team_members")
+            .select("*")
+            .eq("team_id", team.id);
+
+          if (members) {
+            membersCount[team.id] = members.length;
+            const answeredMembers = members.filter(
+              (m) => m.status === "answered"
+            ).length;
+            completionPercs[team.id] =
+              members.length > 0
+                ? Math.round((answeredMembers / members.length) * 100)
+                : 0;
+          }
+        } catch (error) {
+          console.error(
+            `Erro ao buscar estatísticas da equipe ${team.id}:`,
+            error
+          );
+          membersCount[team.id] = 0;
+          completionPercs[team.id] = 0;
+        }
+      }
+
+      setTotalMembers(membersCount);
+      setCompletionPercentages(completionPercs);
+    };
+
+    if (teams.length > 0) {
+      calculateTeamStats();
+    }
+  }, [teams]);
+
   const handleCreateTeamSubmit = useCallback(
     async (data: CreateTeamFormValues) => {
       if (!user) return;
@@ -234,13 +280,10 @@ export default function TeamSetupPage() {
     async (teamId: string) => {
       if (!user?.id) return;
 
-      const team = teams.find((t) => t.id === teamId);
-      if (team) {
-        selectTeam(teamId);
-        await loadTeamMembers(teamId);
-      }
+      selectTeam(teamId);
+      await loadTeamMembers(teamId);
     },
-    [user?.id, teams]
+    [user?.id]
   );
 
   if (authLoading) {
@@ -315,8 +358,10 @@ export default function TeamSetupPage() {
               <TeamList
                 teams={teams}
                 selectedTeamId={selectedTeam?.id}
-                userEmail={user.email || ""}
+                userEmail={user?.email || ""}
                 onSelectTeam={handleTeamSelect}
+                totalMembers={totalMembers}
+                completionPercentages={completionPercentages}
               />
             )}
 

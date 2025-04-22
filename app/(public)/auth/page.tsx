@@ -19,7 +19,7 @@ export default function AuthPage() {
           "Usuário organização autenticado, redirecionando para org.radar21.com.br"
         );
         // Redirecionar para subdomain de organização
-        window.location.href = "https://org.radar21.com.br/org/dashboard";
+        window.location.href = "https://org.radar21.com.br/dashboard";
       } else {
         console.log(
           "Usuário comum autenticado, redirecionando para /team-setup"
