@@ -1,6 +1,5 @@
 "use client";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -13,86 +12,68 @@ import {
 import { Progress } from "@/components/ui/progress";
 import { OrganizationTeamOverview } from "@/resources/organization/organization-model";
 import { format } from "date-fns";
-import { BarChart2, Users } from "lucide-react";
+import { BarChart2, Users2 } from "lucide-react";
 import Link from "next/link";
 
 interface TeamOverviewCardProps {
   team: OrganizationTeamOverview;
+  onClick?: () => void;
 }
 
-export function TeamOverviewCard({ team }: TeamOverviewCardProps) {
+export function TeamOverviewCard({ team, onClick }: TeamOverviewCardProps) {
   const formattedDate = team.team_created_at
     ? format(new Date(team.team_created_at), "dd/MM/yyyy")
     : "Data desconhecida";
 
+  const completionPercentage =
+    team.total_members > 0
+      ? Math.round((team.members_answered / team.total_members) * 100)
+      : 0;
+
   const progressColor =
-    team.completion_percentage && team.completion_percentage >= 80
-      ? "text-green-500"
-      : team.completion_percentage && team.completion_percentage >= 50
-      ? "text-yellow-500"
-      : "text-red-500";
+    completionPercentage >= 80 ? "text-green-500" : "text-red-500";
 
   return (
-    <Card className="overflow-hidden">
+    <Card
+      className="cursor-pointer transition-all hover:shadow-md"
+      onClick={onClick}
+    >
       <CardHeader className="pb-2">
-        <CardTitle className="text-xl font-bold">{team.team_name}</CardTitle>
+        <CardTitle className="flex items-center justify-between">
+          <span className="truncate">{team.team_name}</span>
+          <Users2 className="h-5 w-5 text-muted-foreground" />
+        </CardTitle>
         <CardDescription>Criada em: {formattedDate}</CardDescription>
       </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="flex flex-col space-y-2">
-          <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">
-              Progresso da equipe
-            </span>
-            <Badge
-              variant={
-                team.completion_percentage && team.completion_percentage >= 80
-                  ? "default"
-                  : team.completion_percentage &&
-                    team.completion_percentage >= 50
-                  ? "default"
-                  : "destructive"
-              }
-            >
-              {team.completion_percentage || 0}%
-            </Badge>
+      <CardContent>
+        <div className="mb-4">
+          <div className="mb-2 flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Progresso</span>
+            <span className="font-medium">{completionPercentage}%</span>
           </div>
-          <Progress
-            value={team.completion_percentage || 0}
-            className="h-2"
-            indicatorClassName={
-              team.completion_percentage && team.completion_percentage >= 80
-                ? "bg-green-500"
-                : team.completion_percentage && team.completion_percentage >= 50
-                ? "bg-yellow-500"
-                : "bg-red-500"
-            }
-          />
+          <Progress value={completionPercentage} className="h-2" />
         </div>
-
-        <div className="grid grid-cols-2 gap-4 pt-2">
-          <div className="flex flex-col space-y-1">
-            <span className="text-xs text-muted-foreground">Membros</span>
-            <span className="flex items-center font-medium">
-              <Users className="mr-1 h-4 w-4 text-primary" />
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-muted-foreground">Membros</p>
+            <p className="font-medium">
               {team.members_answered} / {team.total_members}
-            </span>
+            </p>
           </div>
-          <div className="flex flex-col space-y-1">
-            <span className="text-xs text-muted-foreground">Líderes</span>
-            <span className="flex items-center font-medium">
-              <Users className="mr-1 h-4 w-4 text-primary" />
-              {team.leaders_answered} / {team.total_leaders}
-            </span>
+          <div>
+            <p className="text-muted-foreground">Status</p>
+            <p className="font-medium">
+              {completionPercentage >= 80 ? "Concluído" : "Em andamento"}
+            </p>
           </div>
         </div>
       </CardContent>
       <CardFooter className="flex justify-between pt-2">
         <Button size="sm" variant="outline" asChild>
-          <Link href={`/org/teams/${team.team_id}`}>Detalhes</Link>
+          <Link href={`/teams/${team.team_id}`}>Detalhes</Link>
         </Button>
         <Button size="sm" asChild>
-          <Link href={`/org/teams/${team.team_id}/results`}>
+          <Link href={`/teams/${team.team_id}/results`}>
             <BarChart2 className="mr-2 h-4 w-4" />
             Resultados
           </Link>

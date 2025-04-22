@@ -22,12 +22,16 @@ export function LoginForm({ onSubmit }: LoginFormProps) {
     setIsLoading(true);
     setError(null);
 
-    const result = await onSubmit({ email, password });
-    if (result) {
-      setError(result);
+    try {
+      const result = await onSubmit({ email, password });
+      if (result) {
+        setError(result);
+      }
+    } catch (err) {
+      setError("Erro inesperado ao fazer login");
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (

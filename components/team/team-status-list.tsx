@@ -1,87 +1,69 @@
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
-import { TeamMember } from '@/resources/team/team-model';
-import { cn } from '@/lib/utils';
+import { Badge } from "@/components/ui/badge";
+import { TeamMember } from "@/resources/team/team-model";
+
+const statusLabels: Record<string, string> = {
+  invited: "Convidado",
+  pending_survey: "Pesquisa Pendente",
+  answered: "Respondido",
+};
+
+const statusColors: Record<string, string> = {
+  invited: "bg-yellow-500",
+  pending_survey: "bg-blue-500",
+  answered: "bg-green-500",
+};
 
 interface TeamStatusListProps {
   members: TeamMember[];
-  currentUserEmail: string | null;
+  currentUserId: string;
 }
 
-// Mapeamento de status para exibição em português
-const statusLabels: Record<string, string> = {
-  'invited': 'Convidado',
-  'answered': 'Respondeu',
-  'pending_survey': 'Aguardando',
-};
-
-// Mapeamento de status para cores (sem hover)
-const statusColors: Record<string, string> = {
-  'invited': 'bg-yellow-100 text-yellow-800 hover:bg-yellow-100 hover:text-yellow-800',
-  'answered': 'bg-green-100 text-green-800 hover:bg-green-100 hover:text-green-800',
-  'pending_survey': 'bg-blue-100 text-blue-800 hover:bg-blue-100 hover:text-blue-800',
-};
-
-// Estilo base para badges sem hover
-const baseBadgeStyle = "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold transition-none pointer-events-none";
-
-export function TeamStatusList({ members, currentUserEmail }: TeamStatusListProps) {
-  // Ordenar membros: primeiro o usuário atual, depois líderes, depois outros membros
+export function TeamStatusList({
+  members,
+  currentUserId,
+}: TeamStatusListProps) {
+  // Ordena os membros: usuário atual primeiro, depois líderes, depois outros membros
   const sortedMembers = [...members].sort((a, b) => {
-    // Colocar o usuário atual primeiro
-    if (a.email === currentUserEmail) return -1;
-    if (b.email === currentUserEmail) return 1;
-    
-    // Depois os líderes
-    if (a.role === 'leader' && b.role !== 'leader') return -1;
-    if (a.role !== 'leader' && b.role === 'leader') return 1;
-    
-    // Por fim, ordenar por email
-    return a.email.localeCompare(b.email);
+    if (a.user_id === currentUserId) return -1;
+    if (b.user_id === currentUserId) return 1;
+    if (a.role === "leader" && b.role !== "leader") return -1;
+    if (a.role !== "leader" && b.role === "leader") return 1;
+    return 0;
   });
 
+  if (!members.length) {
+    return (
+      <div className="text-center text-gray-500">
+        Nenhum membro encontrado na equipe.
+      </div>
+    );
+  }
+
   return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Email</TableHead>
-            <TableHead>Função</TableHead>
-            <TableHead>Status</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {sortedMembers.length > 0 ? (
-            sortedMembers.map((member) => {
-              const isCurrentUser = member.email === currentUserEmail;
-              
-              return (
-                <TableRow key={member.id} className={isCurrentUser ? 'bg-blue-50' : ''}>
-                  <TableCell className="font-medium">
-                    {member.email} {isCurrentUser && <span className="text-xs text-blue-600">(Você)</span>}
-                  </TableCell>
-                  <TableCell>
-                    <span className={cn(baseBadgeStyle, "bg-gray-100 text-gray-800")}>
-                      {member.role === 'leader' ? 'Líder' : 'Membro'}
-                    </span>
-                  </TableCell>
-                  <TableCell>
-                    <span className={cn(baseBadgeStyle, statusColors[member.status])}>
-                      {statusLabels[member.status]}
-                    </span>
-                  </TableCell>
-                </TableRow>
-              );
-            })
-          ) : (
-            <TableRow>
-              <TableCell colSpan={3} className="text-center py-4">
-                Nenhum membro encontrado
-              </TableCell>
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+    <div className="space-y-4">
+      {sortedMembers.map((member) => (
+        <div
+          key={member.id}
+          className="flex items-center justify-between p-4 bg-white rounded-lg shadow"
+        >
+          <div className="flex items-center space-x-4">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-gray-900 truncate">
+                {member.email}
+              </p>
+              <p className="text-sm text-gray-500">
+                {member.role === "leader" ? "Líder" : "Membro"}
+              </p>
+            </div>
+          </div>
+          <Badge
+            className={`${statusColors[member.status]} text-white`}
+            variant="secondary"
+          >
+            {statusLabels[member.status]}
+          </Badge>
+        </div>
+      ))}
     </div>
   );
-} 
+}

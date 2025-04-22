@@ -1,40 +1,42 @@
 "use client";
 
-import { ReactNode } from "react";
+import { useAuth } from "@/resources/auth/auth-hook";
+import { useRouter } from "next/navigation";
+import { ReactNode, useEffect } from "react";
+import { toast } from "sonner";
 import { OrgHeader } from "./org-header";
 
-export function OrgLayout({ children }: { children: ReactNode }) {
+interface OrgLayoutProps {
+  children: ReactNode;
+}
+
+export function OrgLayout({ children }: OrgLayoutProps) {
+  const router = useRouter();
+  const { user } = useAuth();
+
+  // Verificar se o usuário está autenticado e tem a role correta
+  useEffect(() => {
+    if (!user?.id) {
+      toast.error("Usuário não autenticado");
+      router.push("/auth/login");
+      return;
+    }
+
+    if (user.role !== "ORGANIZATION") {
+      toast.error("Acesso não autorizado");
+      router.push("/dashboard");
+      return;
+    }
+  }, [user]);
+
+  if (!user?.id || user.role !== "ORGANIZATION") {
+    return null;
+  }
+
   return (
-    <div className="flex min-h-screen flex-col">
+    <div className="min-h-screen bg-background">
       <OrgHeader />
-      <main className="flex-1">{children}</main>
-      <footer className="border-t py-4">
-        <div className="container flex flex-col items-center justify-between gap-4 md:flex-row">
-          <p className="text-center text-sm leading-loose text-muted-foreground">
-            © 2024 Radar21. Todos os direitos reservados.
-          </p>
-          <div className="flex items-center gap-4">
-            <a
-              href="/cookies"
-              className="text-sm text-muted-foreground underline underline-offset-4"
-            >
-              Cookies
-            </a>
-            <a
-              href="/privacy"
-              className="text-sm text-muted-foreground underline underline-offset-4"
-            >
-              Privacidade
-            </a>
-            <a
-              href="/terms"
-              className="text-sm text-muted-foreground underline underline-offset-4"
-            >
-              Termos
-            </a>
-          </div>
-        </div>
-      </footer>
+      <main>{children}</main>
     </div>
   );
 }

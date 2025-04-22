@@ -1,72 +1,108 @@
-import { useTeam } from "@/resources/team/team-hook";
+import { Button } from "@/components/ui/button";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Team } from "@/resources/team/team-model";
-import { useCallback } from "react";
+import { BarChart2, Eye, Users } from "lucide-react";
+import Link from "next/link";
+import { TeamStatus } from "./team-status";
 
 interface TeamListProps {
   teams: Team[];
-  selectedTeamId: string | undefined;
-  userEmail: string | null;
+  totalMembers: Record<string, number>;
+  completionPercentages: Record<string, number>;
+  userEmail: string;
   onSelectTeam: (teamId: string) => void;
+  selectedTeamId?: string;
 }
 
 export function TeamList({
   teams,
-  selectedTeamId,
+  totalMembers,
+  completionPercentages,
   userEmail,
   onSelectTeam,
+  selectedTeamId,
 }: TeamListProps) {
-  const { selectTeam } = useTeam();
-
-  const handleSelectTeam = useCallback((teamId: string) => {
-    if (!teamId) return;
-
-    selectTeam(teamId);
-    onSelectTeam(teamId);
-  }, []);
-
-  // Se não houver equipes, exibir mensagem
-  if (teams.length === 0) {
+  if (!teams || teams.length === 0) {
     return (
-      <div className="space-y-4 p-6">
-        <h2 className="text-2xl font-semibold">Minhas Equipes</h2>
-        <div className="p-8 text-center bg-muted/10 rounded-lg border border-dashed">
-          <h3 className="text-lg font-medium mb-2">Bem-vindo ao Radar21!</h3>
-          <div className="text-muted-foreground space-y-2">
-            <p>Você ainda não participa de nenhuma equipe.</p>
-            <p>Para começar sua jornada, você pode:</p>
-            <ul className="mt-4 space-y-2 text-sm">
-              <li>
-                • Criar sua própria equipe clicando na aba "Criar Nova Equipe"
-              </li>
-              <li>• Aguardar um convite de um líder de equipe</li>
-            </ul>
-          </div>
-        </div>
+      <div className="text-center py-12">
+        <p className="text-muted-foreground">Nenhuma equipe encontrada.</p>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 p-6">
-      <h2 className="text-2xl font-semibold">Minhas Equipes</h2>
-      <div className="space-y-2">
-        {teams.map((team) => (
-          <div
+    <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+      {teams.map((team) => {
+        const memberCount = totalMembers[team.id] || team.team_size || 0;
+        const completionPercentage = completionPercentages[team.id] || 0;
+
+        // Determinar o status da equipe
+        const teamStatus =
+          completionPercentage >= 80
+            ? "completo"
+            : completionPercentage > 0
+            ? "em-progresso"
+            : "pendente";
+
+        return (
+          <Card
             key={team.id}
-            className={`p-4 rounded-lg border cursor-pointer transition-all ${
-              selectedTeamId === team.id
-                ? "bg-primary/5 border-primary/20 shadow-sm"
-                : "hover:bg-accent border-border hover:border-primary/20"
+            className={`flex flex-col ${
+              selectedTeamId === team.id ? "ring-2 ring-primary" : ""
             }`}
-            onClick={() => handleSelectTeam(team.id)}
+            onClick={() => onSelectTeam(team.id)}
+            style={{ cursor: "pointer" }}
           >
-            <h3 className="font-medium">{team.name}</h3>
-            <p className="text-sm text-muted-foreground mt-1">
-              {team.owner_email === userEmail ? "Líder" : "Membro"}
-            </p>
-          </div>
-        ))}
-      </div>
+            <CardHeader className="pb-2">
+              <div className="flex justify-between items-start">
+                <CardTitle className="text-xl">{team.name}</CardTitle>
+                <TeamStatus status={teamStatus} />
+              </div>
+              <CardDescription>
+                <div className="flex items-center gap-1">
+                  <Users className="h-3.5 w-3.5" />
+                  <span>{memberCount} membros</span>
+                </div>
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="pb-4 pt-2 flex-grow">
+              <div className="space-y-2">
+                <div className="flex items-center justify-between text-sm">
+                  <span>Progresso</span>
+                  <span className="font-medium">{completionPercentage}%</span>
+                </div>
+                <div className="w-full bg-gray-100 rounded-full h-2">
+                  <div
+                    className="bg-primary h-2 rounded-full"
+                    style={{ width: `${completionPercentage}%` }}
+                  ></div>
+                </div>
+              </div>
+            </CardContent>
+            <CardFooter className="grid grid-rows-2 gap-2 pt-0">
+              <Button variant="outline" asChild className="w-full">
+                <Link href={`/teams/${team.id}`}>
+                  <Eye className="mr-1 h-4 w-4" />
+                  Detalhes
+                </Link>
+              </Button>
+              <Button variant="secondary" asChild className="w-full">
+                <Link href={`/teams/${team.id}/results`}>
+                  <BarChart2 className="mr-1 h-4 w-4" />
+                  Resultados
+                </Link>
+              </Button>
+            </CardFooter>
+          </Card>
+        );
+      })}
     </div>
   );
 }

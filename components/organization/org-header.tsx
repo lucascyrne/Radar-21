@@ -11,61 +11,85 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/resources/auth/auth-hook";
 import { useOrganization } from "@/resources/organization/organization-hook";
-import { LogOut, Settings, User } from "lucide-react";
-import Image from "next/image";
+import { Activity, LogOut, User } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 export function OrgHeader() {
   const { user, signOut } = useAuth();
   const { selectedOrganization } = useOrganization();
   const router = useRouter();
+  const [isMounted, setIsMounted] = useState(false);
+
+  // Efeito para marcar o componente como montado no cliente
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
 
   const handleSignOut = useCallback(async () => {
     await signOut();
     router.push("/auth");
-  }, [signOut, router]);
+  }, []);
 
   const getUserInitials = useCallback(() => {
     if (!user?.email) return "U";
     return user.email.substring(0, 2).toUpperCase();
   }, [user]);
 
+  if (!isMounted) {
+    return (
+      <header className="sticky top-0 z-40 border-b bg-background">
+        <div className="container flex h-16 items-center justify-between py-4">
+          <div className="flex items-center gap-4">
+            <Link href="/dashboard" className="flex items-center space-x-2">
+              <Activity className="h-6 w-6 text-primary" />
+              <span className="hidden font-bold sm:inline-block">Radar21</span>
+            </Link>
+          </div>
+        </div>
+      </header>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b bg-background">
       <div className="container flex h-16 items-center justify-between py-4">
-        <div className="flex items-center gap-4">
-          <Link href="/org/dashboard" className="flex items-center space-x-2">
-            <Image
-              src="/logo.svg"
-              alt="Radar21 Logo"
-              width={32}
-              height={32}
-              priority
-            />
-            <span className="hidden font-bold sm:inline-block">
-              Radar21 | {selectedOrganization?.name || "Organização"}
-            </span>
-          </Link>
-        </div>
+        <Link href="/dashboard" className="flex items-center space-x-2">
+          <Activity className="h-6 w-6 text-primary" />
+          <span className="hidden font-bold sm:inline-block">
+            Radar21 | {selectedOrganization?.name || "Organização"}
+          </span>
+        </Link>
 
-        <nav className="flex items-center gap-4 text-sm">
-          <Link href="/org/dashboard" className="font-medium">
+        <nav className="absolute left-1/2 transform -translate-x-1/2 flex items-center gap-6 text-sm">
+          <Link
+            href="/dashboard"
+            className="font-medium transition hover:text-primary"
+          >
             Dashboard
           </Link>
-          <Link href="/org/teams" className="font-medium">
+          <Link
+            href="/teams"
+            className="font-medium transition hover:text-primary"
+          >
             Equipes
           </Link>
-          <Link href="/org/leaders" className="font-medium">
+          <Link
+            href="/leaders"
+            className="font-medium transition hover:text-primary"
+          >
             Líderes
           </Link>
-          <Link href="/org/open-answers" className="font-medium">
+          <Link
+            href="/open-answers"
+            className="font-medium transition hover:text-primary"
+          >
             Respostas
           </Link>
         </nav>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center">
           <DropdownMenu>
             <DropdownMenuTrigger className="outline-none">
               <Avatar className="h-8 w-8">
@@ -86,15 +110,9 @@ export function OrgHeader() {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link href="/org/profile">
+                <Link href="/org-profile">
                   <User className="mr-2 h-4 w-4" />
                   <span>Perfil</span>
-                </Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/org/settings">
-                  <Settings className="mr-2 h-4 w-4" />
-                  <span>Configurações</span>
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
