@@ -1,6 +1,11 @@
 import supabase from "@/lib/supabase/client";
 import { createClient } from "@supabase/supabase-js";
-import { Team, TeamMember, TeamMemberStatus, TeamSurveyResponse } from "./team-model";
+import {
+  Team,
+  TeamMember,
+  TeamMemberStatus,
+  TeamSurveyResponse,
+} from "./team-model";
 
 // Cache para armazenar resultados de requisições
 const cache = {
@@ -110,6 +115,27 @@ export const TeamService = {
     status: string
   ): Promise<void> {
     try {
+      // Se houver um userId, verificar se não é uma organização
+      if (userId) {
+        const { data: userProfile, error: profileError } = await supabase
+          .from("user_profiles")
+          .select("role")
+          .eq("auth_id", userId)
+          .single();
+
+        if (profileError && profileError.code !== "PGRST116") {
+          throw profileError;
+        }
+
+        // Se for uma organização, não permitir adicionar como membro
+        if (userProfile?.role === "ORGANIZATION") {
+          console.log(
+            "Usuário é uma organização, não será adicionado como membro"
+          );
+          return;
+        }
+      }
+
       // Verificar se o membro já existe
       const { data: existingMember, error: checkError } = await supabase
         .from("team_members")
@@ -471,6 +497,23 @@ export const TeamService = {
       console.log(
         `Processando convite: teamId=${teamId}, userId=${userId}, email=${email}`
       );
+
+      // Verificar se o usuário é uma organização
+      const { data: userProfile, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("role")
+        .eq("auth_id", userId)
+        .single();
+
+      if (profileError && profileError.code !== "PGRST116") {
+        throw profileError;
+      }
+
+      // Se for uma organização, não permitir processar o convite
+      if (userProfile?.role === "ORGANIZATION") {
+        console.log("Usuário é uma organização, convite não será processado");
+        return null;
+      }
 
       // Verificar se o membro já existe
       const { data: existingMember, error: checkError } = await supabase

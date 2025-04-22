@@ -29,10 +29,21 @@ export function TeamProvider({ children }: TeamProviderProps) {
   const loadingMembersRef = useRef(false);
   const loadedMembersRef = useRef<Set<string>>(new Set());
   const initialLoadAttempted = useRef(false);
+  const teamsLoadedRef = useRef(false);
 
   // Verificar se estamos no cliente
   useEffect(() => {
     setIsClient(true);
+    // Armazenar o documento visível atual
+    const handleVisibilityChange = () => {
+      // Não recarregar quando a página volta a ficar visível
+      // Isso evita problemas de alt+tab
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, []);
 
   // Limpar estado do provider
@@ -42,6 +53,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
     loadingMembersRef.current = false;
     loadedMembersRef.current.clear();
     initialLoadAttempted.current = false;
+    teamsLoadedRef.current = false;
   }, []);
 
   // Carregar membros da equipe
@@ -84,7 +96,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
   // Carregar equipes do usuário
   const loadTeams = useCallback(
     async (userId: string) => {
-      if (!userId || loadingTeamsRef.current) return;
+      if (!userId || loadingTeamsRef.current || teamsLoadedRef.current) return;
 
       try {
         setState((prev) => ({ ...prev, isLoading: true, error: null }));
@@ -124,6 +136,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
           }));
           loadingTeamsRef.current = false;
           initialLoadAttempted.current = true;
+          teamsLoadedRef.current = true;
           return;
         }
 
@@ -184,6 +197,8 @@ export function TeamProvider({ children }: TeamProviderProps) {
         if (uniqueTeams[0]?.id) {
           await loadTeamMembers(uniqueTeams[0].id);
         }
+
+        teamsLoadedRef.current = true;
       } catch (error: any) {
         console.error("Erro ao carregar equipes:", error);
         setState((prev) => ({
@@ -199,31 +214,29 @@ export function TeamProvider({ children }: TeamProviderProps) {
         initialLoadAttempted.current = true;
       }
     },
-    [user?.email]
+    [user?.email, loadTeamMembers]
   );
 
   // Modificar o efeito que tenta carregar as equipes automaticamente
   useEffect(() => {
-    // Só tentar carregar se estamos no cliente
-    if (isClient && user?.email && !initialLoadAttempted.current) {
+    // Só tentar carregar se estamos no cliente e não foi carregado ainda
+    if (isClient && user?.email && !teamsLoadedRef.current) {
       loadTeams(user.id);
     }
-  }, [isClient, user?.email]);
+  }, [isClient, user?.email, user?.id, loadTeams]);
 
   // Efeito para limpar estado quando o usuário mudar
   useEffect(() => {
     if (!user) {
       clearState();
     }
-  }, [user]);
+  }, [user, clearState]);
 
   // Efeito para ouvir atualizações de equipe
   useEffect(() => {
     const handleTeamUpdate = async () => {
       if (user?.email) {
-        loadingTeamsRef.current = false;
-        loadedMembersRef.current.clear();
-        initialLoadAttempted.current = false;
+        teamsLoadedRef.current = false;
         await loadTeams(user.id);
       }
     };
@@ -232,7 +245,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
     return () => {
       window.removeEventListener("teamUpdate", handleTeamUpdate);
     };
-  }, [user?.email]);
+  }, [user?.email, user?.id, loadTeams]);
 
   // Obter o membro atual
   const getCurrentMember = useCallback(
@@ -269,6 +282,19 @@ export function TeamProvider({ children }: TeamProviderProps) {
       setState((prev) => ({ ...prev, isLoading: true, error: null }));
 
       try {
+        // Verificar o role do usuário
+        const { data: userProfile, error: profileError } = await supabase
+          .from("user_profiles")
+          .select("role")
+          .eq("auth_id", userId)
+          .single();
+
+        if (profileError) {
+          throw new Error(
+            `Erro ao verificar perfil do usuário: ${profileError.message}`
+          );
+        }
+
         const team = await TeamService.createTeam(
           data.name,
           userId,
@@ -276,14 +302,16 @@ export function TeamProvider({ children }: TeamProviderProps) {
           data.team_size
         );
 
-        // O criador da equipe começa como "invited" (não "answered")
-        await TeamService.addTeamMember(
-          team.id,
-          userId,
-          userEmail,
-          data.role as "leader" | "member",
-          "invited"
-        );
+        // Apenas adicionar o usuário como membro se não for uma organização
+        if (userProfile.role !== "ORGANIZATION") {
+          await TeamService.addTeamMember(
+            team.id,
+            userId,
+            userEmail,
+            data.role as "leader" | "member",
+            "invited"
+          );
+        }
 
         setState((prev) => ({
           ...prev,
@@ -295,6 +323,9 @@ export function TeamProvider({ children }: TeamProviderProps) {
         // Carregar membros da nova equipe
         loadTeamMembers(team.id);
 
+        // Marcar que os times foram carregados
+        teamsLoadedRef.current = true;
+
         return team;
       } catch (error: any) {
         setState((prev) => ({
@@ -305,7 +336,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
         throw error;
       }
     },
-    []
+    [loadTeamMembers]
   );
 
   // Adicionar membro à equipe
@@ -345,7 +376,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
         throw error;
       }
     },
-    []
+    [loadTeamMembers]
   );
 
   // Selecionar uma equipe
@@ -357,7 +388,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
         loadTeamMembers(team.id);
       }
     },
-    [state.teams]
+    [state.teams, loadTeamMembers]
   );
 
   // Atualizar status do membro
@@ -403,6 +434,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
   // Resetar estado de carregamento de equipes
   const resetTeamsLoaded = useCallback(() => {
     loadingTeamsRef.current = false;
+    teamsLoadedRef.current = false;
     setState((prev) => ({ ...prev, isInitialLoading: true }));
   }, []);
 
@@ -419,6 +451,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
 
     // Limpar cache e estado
     loadingTeamsRef.current = false;
+    teamsLoadedRef.current = false;
     loadedMembersRef.current.clear();
     setState((prev) => ({
       ...prev,
@@ -450,6 +483,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
 
         // Marcar o time como carregado
         loadedMembersRef.current.add(userTeams[0].id);
+        teamsLoadedRef.current = true;
 
         // Se o usuário atual estiver logado, encontrar e definir o membro atual
         if (user?.email) {
@@ -467,6 +501,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
           isLoading: false,
           isInitialLoading: false,
         }));
+        teamsLoadedRef.current = true;
       }
     } catch (err) {
       console.error("Erro ao atualizar times:", err);
@@ -480,6 +515,8 @@ export function TeamProvider({ children }: TeamProviderProps) {
 
   // Processar convite pendente quando o usuário estiver disponível
   useEffect(() => {
+    if (!pendingInviteId) return;
+
     const handleInvite = async () => {
       if (user?.id && user?.email && pendingInviteId) {
         try {
@@ -487,7 +524,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
           await processInvite(user.id, user.email, pendingInviteId);
 
           // Forçar limpeza do cache e recarregamento completo
-          loadingTeamsRef.current = false;
+          teamsLoadedRef.current = false;
           loadedMembersRef.current.clear();
 
           console.log(
@@ -511,14 +548,6 @@ export function TeamProvider({ children }: TeamProviderProps) {
 
     handleInvite();
   }, [user?.id, user?.email, pendingInviteId, processInvite, refreshTeams]);
-
-  // Efeito adicional para garantir atualização após processamento do convite
-  useEffect(() => {
-    if (state.teams.length > 0 && user?.email) {
-      const team = state.teams[0];
-      loadTeamMembers(team.id);
-    }
-  }, [state.teams, user?.email]);
 
   // Carregar respostas da pesquisa da equipe
   const loadTeamSurveyResponses = useCallback(async (teamId: string) => {

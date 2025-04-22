@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { User } from "../auth/auth-model";
 
 // Tipos para organizações
 export interface Organization {
@@ -8,27 +7,6 @@ export interface Organization {
   owner_id: string;
   created_at: string;
   updated_at: string;
-}
-
-export interface OrganizationMember {
-  id: string;
-  organization_id: string;
-  user_id: string | null;
-  email: string;
-  role: "admin" | "leader";
-  status: "invited" | "active";
-  last_reminder_sent: string | null;
-  created_at: string;
-  updated_at: string;
-  user?: User;
-}
-
-export interface OrganizationTeam {
-  id: string;
-  organization_id: string;
-  team_id: string;
-  created_at: string;
-  team_name?: string;
 }
 
 // Interface para visão geral das equipes da organização
@@ -63,7 +41,6 @@ export interface OrganizationOpenAnswer {
 export interface OrganizationState {
   organizations: Organization[];
   selectedOrganization: Organization | null;
-  organizationMembers: OrganizationMember[];
   teamOverviews: OrganizationTeamOverview[];
   openAnswers: OrganizationOpenAnswer[];
   isLoading: boolean;

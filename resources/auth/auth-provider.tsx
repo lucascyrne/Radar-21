@@ -3,7 +3,7 @@
 import supabase from "@/lib/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { usePathname, useRouter } from "next/navigation";
-import { ReactNode, useCallback, useEffect, useState } from "react";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { SurveyResponses } from "../survey/survey-model";
 import AuthContext, { initialState } from "./auth-context";
 import { AuthState, UpdateProfileParams, User } from "./auth-model";
@@ -40,6 +40,12 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   const router = useRouter();
   const pathname = usePathname();
+  const stateRef = useRef(state);
+
+  // Manter referência atualizada do estado
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const updateState = useCallback((updates: Partial<AuthState>) => {
     setState((current) => {
@@ -60,7 +66,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // Verifica se estamos em uma página de autenticação
   const isAuthPage = useCallback(() => {
-    return pathname?.startsWith("/auth");
+    return pathname?.startsWith("/auth") || pathname?.startsWith("/org-auth");
   }, [pathname]);
 
   // Verifica se estamos em um subdomínio de organização
@@ -78,90 +84,65 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
     const isOrg = state.user.role === "ORGANIZATION";
     const onOrgSubdomain = isOrgSubdomain();
-    const onAuthPage = isAuthPage();
 
-    console.log("Verificando redirecionamento:", {
-      isAuthenticated: state.isAuthenticated,
-      userRole: state.user.role,
-      pathname,
-      isOrg,
-      onOrgSubdomain,
-      onAuthPage,
-    });
+    // Apenas redirecionar se estiver na página de autenticação
+    if (!isAuthPage()) return;
 
-    // Redirecionar usuários autenticados que estão na página de autenticação
-    if (onAuthPage) {
-      if (isOrg && onOrgSubdomain) {
-        console.log("Redirecionando para dashboard de organização");
-        router.push("/org/dashboard");
-      } else if (!isOrg && !onOrgSubdomain) {
-        console.log("Redirecionando para team-setup");
-        router.push("/team-setup");
-      }
-    }
-    // Redirecionar usuários comuns autenticados em páginas de root (/) para team-setup
-    else if (!isOrg && !onOrgSubdomain && pathname === "/") {
-      console.log(
-        "Redirecionando usuário comum da página raiz para team-setup"
-      );
+    // Redirecionar para a página inicial apropriada
+    if (isOrg && onOrgSubdomain) {
+      router.push("/dashboard");
+    } else if (!isOrg && !onOrgSubdomain) {
       router.push("/team-setup");
     }
-  }, [
-    state.user,
-    state.isAuthenticated,
-    isOrgSubdomain,
-    isAuthPage,
-    pathname,
-    router,
-  ]);
+  }, [state.user, state.isAuthenticated, isOrgSubdomain, isAuthPage]);
 
   // Efeito para redirecionar usuário autenticado
   useEffect(() => {
-    console.log("Estado de autenticação alterado:", {
-      isAuthenticated: state.isAuthenticated,
-      pathname,
-      user: state.user?.role,
-    });
-    redirectAuthenticatedUser();
-  }, [state.isAuthenticated, pathname, redirectAuthenticatedUser, state.user]);
+    if (state.isAuthenticated) {
+      redirectAuthenticatedUser();
+    }
+  }, [state.isAuthenticated]);
 
-  const setSession = useCallback((session: Session | null) => {
-    if (!session) {
+  const setSession = useCallback(
+    (session: Session | null) => {
+      if (!session) {
+        updateState({
+          user: null,
+          session: null,
+          isAuthenticated: false,
+          isLoading: false,
+          error: null,
+          surveyResponses: null,
+        });
+
+        if (typeof window !== "undefined") {
+          localStorage.removeItem(SESSION_STORAGE_KEY);
+        }
+        return null;
+      }
+
+      const userRole = session.user.user_metadata?.role;
+      const user: User = {
+        id: session.user.id,
+        email: session.user.email || "",
+        name: session.user.user_metadata?.name || "",
+        avatar_url: session.user.user_metadata?.avatar_url || "",
+        role: userRole,
+        email_confirmed_at: session.user.email_confirmed_at,
+      };
+
       updateState({
-        user: null,
-        session: null,
-        isAuthenticated: false,
+        user,
+        session,
+        isAuthenticated: true,
         isLoading: false,
         error: null,
-        surveyResponses: null,
       });
 
-      if (typeof window !== "undefined") {
-        localStorage.removeItem(SESSION_STORAGE_KEY);
-      }
-      return null;
-    }
-
-    const userRole = session.user.user_metadata?.role;
-    const user: User = {
-      id: session.user.id,
-      email: session.user.email || "",
-      name: session.user.user_metadata?.name || "",
-      avatar_url: session.user.user_metadata?.avatar_url || "",
-      role: userRole,
-      email_confirmed_at: session.user.email_confirmed_at,
-    };
-
-    updateState({
-      user,
-      session,
-      isAuthenticated: true,
-      isLoading: false,
-      error: null,
-    });
-
-    return user;
-  }, []);
+      return user;
+    },
+    [updateState]
+  );
 
   useEffect(() => {
     const {
@@ -186,38 +167,28 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     };
   }, []);
 
-  const signInWithEmail = async (email: string, password: string) => {
-    try {
-      updateState({ isLoading: true, error: null });
-      const session = await AuthService.signInWithEmail(email, password);
+  const signInWithEmail = useCallback(
+    async (email: string, password: string) => {
+      try {
+        updateState({ isLoading: true, error: null });
+        const session = await AuthService.signInWithEmail(email, password);
 
-      if (!session) {
-        throw new Error("Erro ao fazer login");
+        if (!session) {
+          throw new Error("Erro ao fazer login");
+        }
+
+        const user = setSession(session);
+        return session;
+      } catch (error: any) {
+        console.error("Erro no login:", error);
+        updateState({ error: error.message, isLoading: false });
+        throw error;
       }
+    },
+    []
+  );
 
-      setSession(session);
-
-      // Verificar se é usuário organização e redirecionar
-      const userRole = session.user.user_metadata?.role;
-      const isOrg = userRole === "ORGANIZATION";
-
-      if (isOrg) {
-        console.log("Login bem-sucedido para usuário organização");
-        // Redirecionamento é feito pelo middleware ou pela página auth/login
-      } else {
-        console.log("Login bem-sucedido, redirecionando para team-setup");
-        router.push("/team-setup");
-      }
-
-      return session;
-    } catch (error: any) {
-      console.error("Erro no login:", error);
-      updateState({ error: error.message, isLoading: false });
-      throw error;
-    }
-  };
-
-  const signOut = async () => {
+  const signOut = useCallback(async () => {
     try {
       updateState({ isLoading: true, error: null });
       await AuthService.signOut();
@@ -227,9 +198,9 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } catch (error: any) {
       updateState({ error: error.message, isLoading: false });
     }
-  };
+  }, []);
 
-  const signInWithGoogle = async () => {
+  const signInWithGoogle = useCallback(async () => {
     try {
       updateState({ isLoading: true, error: null });
       await AuthService.signInWithGoogle({
@@ -239,31 +210,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       updateState({ error: error.message, isLoading: false });
       throw error;
     }
-  };
+  }, []);
 
-  const signUpWithEmail = async (
-    email: string,
-    password: string,
-    role: string
-  ) => {
-    try {
-      updateState({ isLoading: true, error: null });
-      const response = await AuthService.signUpWithEmail(email, password, role);
+  const signUpWithEmail = useCallback(
+    async (email: string, password: string, role: string) => {
+      try {
+        updateState({ isLoading: true, error: null });
+        const response = await AuthService.signUpWithEmail(
+          email,
+          password,
+          role
+        );
 
-      if (response.error) {
-        updateState({ error: response.error.message, isLoading: false });
-      } else {
-        updateState({ isLoading: false });
+        if (response.error) {
+          updateState({ error: response.error.message, isLoading: false });
+        } else {
+          updateState({ isLoading: false });
+        }
+
+        return response;
+      } catch (error: any) {
+        updateState({ error: error.message, isLoading: false });
+        return { data: { user: null, session: null }, error };
       }
+    },
+    []
+  );
 
-      return response;
-    } catch (error: any) {
-      updateState({ error: error.message, isLoading: false });
-      return { data: { user: null, session: null }, error };
-    }
-  };
-
-  const updateProfile = async (params: UpdateProfileParams) => {
+  const updateProfile = useCallback(async (params: UpdateProfileParams) => {
     try {
       updateState({ isLoading: true, error: null });
       const { data, error } = await supabase.auth.updateUser({
@@ -275,11 +249,11 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
       if (error) throw error;
 
-      if (data.user) {
+      if (data.user && stateRef.current.user) {
         const updatedUser: User = {
-          ...state.user!,
-          name: params.name || state.user?.name,
-          avatar_url: params.avatar_url || state.user?.avatar_url,
+          ...stateRef.current.user,
+          name: params.name || stateRef.current.user.name,
+          avatar_url: params.avatar_url || stateRef.current.user.avatar_url,
         };
         updateState({ user: updatedUser });
       }
@@ -289,7 +263,7 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     } finally {
       updateState({ isLoading: false });
     }
-  };
+  }, []);
 
   return (
     <AuthContext.Provider
@@ -299,19 +273,27 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
         signInWithEmail,
         signUpWithEmail,
         signOut,
-        clearError: () => updateState({ error: null }),
+        clearError: useCallback(() => updateState({ error: null }), []),
         inviteUser: async () => ({ success: false }),
         updateFormProgress: async () => ({ success: false }),
         getNextFormPage: () => "/form/step1",
         hasCompletedForm: () => false,
-        setUser: (user) => updateState({ user }),
+        setUser: useCallback((user) => updateState({ user }), [updateState]),
         setSession,
-        setIsLoading: (isLoading) => updateState({ isLoading }),
-        setIsAuthenticated: (isAuthenticated) =>
-          updateState({ isAuthenticated }),
-        setError: (error) => updateState({ error }),
-        setSurveyResponses: (surveyResponses: SurveyResponses | null) =>
-          updateState({ surveyResponses }),
+        setIsLoading: useCallback(
+          (isLoading) => updateState({ isLoading }),
+          []
+        ),
+        setIsAuthenticated: useCallback(
+          (isAuthenticated) => updateState({ isAuthenticated }),
+          []
+        ),
+        setError: useCallback((error) => updateState({ error }), [updateState]),
+        setSurveyResponses: useCallback(
+          (surveyResponses: SurveyResponses | null) =>
+            updateState({ surveyResponses }),
+          []
+        ),
         updateProfile,
       }}
     >

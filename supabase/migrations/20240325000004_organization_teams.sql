@@ -50,3 +50,35 @@ USING (
     AND owner_id = auth.uid()
   )
 );
+
+-- Atualizar tabela de times para reconhecer que o usuário é a organização
+CREATE OR REPLACE FUNCTION public.update_team_owner_info()
+RETURNS TRIGGER AS $$
+BEGIN
+  -- Verificar se o proprietário tem role ORGANIZATION
+  DECLARE
+    owner_role public.user_role;
+  BEGIN
+    SELECT role INTO owner_role
+    FROM public.user_profiles
+    WHERE id = NEW.owner_id OR auth_id = NEW.owner_id;
+    
+    IF owner_role = 'ORGANIZATION' THEN
+      -- Se o proprietário for uma organização, atualizar o campo organization_id
+      NEW.organization_id = NEW.owner_id;
+    END IF;
+    
+    RETURN NEW;
+  END;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger para atualizar automaticamente o campo organization_id quando uma equipe é criada
+DROP TRIGGER IF EXISTS on_team_created ON public.teams;
+CREATE TRIGGER on_team_created
+  BEFORE INSERT ON public.teams
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_team_owner_info();
+
+-- Criar índice para facilitar a busca de equipes por organização
+CREATE INDEX IF NOT EXISTS idx_teams_organization_id ON public.teams USING btree (organization_id);

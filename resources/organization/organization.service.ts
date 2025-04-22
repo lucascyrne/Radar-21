@@ -1,9 +1,9 @@
 import supabase from "@/lib/supabase/client";
+import { User } from "../auth/auth-model";
+import { Team } from "../team/team-model";
 import {
   Organization,
-  OrganizationMember,
   OrganizationOpenAnswer,
-  OrganizationTeam,
   OrganizationTeamOverview,
 } from "./organization-model";
 
@@ -103,21 +103,21 @@ export class OrganizationService {
   // Buscar membros da organização
   static async getOrganizationMembers(
     organizationId: string
-  ): Promise<{ data: OrganizationMember[]; error: any }> {
+  ): Promise<{ data: User[]; error: any }> {
     const { data, error } = await supabase
       .from("organization_members")
       .select("*")
       .eq("organization_id", organizationId)
       .order("created_at", { ascending: false });
 
-    return { data: data as OrganizationMember[], error };
+    return { data: data as User[], error };
   }
 
   // Convidar líder para a organização
   static async inviteLeaderToOrganization(
     organizationId: string,
     email: string
-  ): Promise<{ data: OrganizationMember | null; error: any }> {
+  ): Promise<{ data: User | null; error: any }> {
     const { data, error } = await supabase.rpc(
       "invite_leader_to_organization",
       {
@@ -155,7 +155,7 @@ export class OrganizationService {
       }
     }
 
-    return { data: memberData as OrganizationMember, error: memberError };
+    return { data: memberData as User, error: memberError };
   }
 
   // Remover membro da organização
@@ -174,21 +174,66 @@ export class OrganizationService {
   static async getTeamOverviews(
     organizationId: string
   ): Promise<{ data: OrganizationTeamOverview[]; error: any }> {
-    const { data, error } = await supabase
-      .from("organization_team_overview")
-      .select("*")
-      .eq("organization_id", organizationId);
+    try {
+      // Buscar todos os times do usuário/organização
+      const { data: teamsData, error: teamsError } = await supabase
+        .from("teams")
+        .select("id, name, team_size, created_at, owner_email")
+        .eq("owner_id", organizationId);
 
-    // Calcular porcentagem de conclusão para cada equipe
-    const teamOverviews = data?.map((team) => ({
-      ...team,
-      completion_percentage:
-        team.total_members > 0
-          ? Math.round((team.members_answered / team.total_members) * 100)
-          : 0,
-    }));
+      if (teamsError) {
+        return { data: [], error: teamsError };
+      }
 
-    return { data: teamOverviews as OrganizationTeamOverview[], error };
+      // Para cada time, buscar membros e calcular estatísticas
+      const teamOverviews: OrganizationTeamOverview[] = [];
+
+      for (const team of teamsData || []) {
+        // Buscar membros do time
+        const { data: members, error: membersError } = await supabase
+          .from("team_members")
+          .select("*")
+          .eq("team_id", team.id);
+
+        if (membersError) {
+          console.error(
+            `Erro ao buscar membros do time ${team.id}:`,
+            membersError
+          );
+          continue;
+        }
+
+        const totalMembers = members?.length || team.team_size || 0;
+        const respondedMembers =
+          members?.filter((m) => m.status === "answered").length || 0;
+        const totalLeaders =
+          members?.filter((m) => m.role === "leader").length || 0;
+        const respondedLeaders =
+          members?.filter((m) => m.role === "leader" && m.status === "answered")
+            .length || 0;
+
+        teamOverviews.push({
+          organization_id: organizationId,
+          organization_name: "",
+          team_id: team.id,
+          team_name: team.name,
+          members_answered: respondedMembers,
+          total_members: totalMembers,
+          team_created_at: team.created_at,
+          leaders_answered: respondedLeaders,
+          total_leaders: totalLeaders,
+          completion_percentage:
+            totalMembers > 0
+              ? Math.round((respondedMembers / totalMembers) * 100)
+              : 0,
+        });
+      }
+
+      return { data: teamOverviews, error: null };
+    } catch (error) {
+      console.error("Erro ao buscar visão geral das equipes:", error);
+      return { data: [], error };
+    }
   }
 
   // Buscar respostas às perguntas abertas
@@ -196,25 +241,82 @@ export class OrganizationService {
     organizationId: string,
     teamId?: string
   ): Promise<{ data: OrganizationOpenAnswer[]; error: any }> {
-    let query = supabase
-      .from("organization_open_answers")
-      .select("*")
-      .eq("organization_id", organizationId);
+    try {
+      // Buscar times do usuário/organização
+      const { data: teamsData, error: teamsError } = await supabase
+        .from("teams")
+        .select("id, name")
+        .eq("owner_id", organizationId);
 
-    if (teamId) {
-      query = query.eq("team_id", teamId);
+      if (teamsError) {
+        return { data: [], error: teamsError };
+      }
+
+      const teamIds = teamsData?.map((t) => t.id) || [];
+
+      if (teamIds.length === 0) {
+        return { data: [], error: null };
+      }
+
+      // Se fornecido um team_id específico, filtrar apenas por ele
+      if (teamId) {
+        if (!teamIds.includes(teamId)) {
+          return { data: [], error: null }; // O time não pertence a esta organização
+        }
+        teamIds.length = 0;
+        teamIds.push(teamId);
+      }
+
+      // Construir array para armazenar as respostas abertas
+      const openAnswers: OrganizationOpenAnswer[] = [];
+
+      // Para cada time, buscar membros com respostas
+      for (const tId of teamIds) {
+        const teamInfo = teamsData?.find((t) => t.id === tId);
+
+        // Buscar respostas da pesquisa para este time
+        const { data: surveyResponses, error: surveyError } = await supabase
+          .from("team_survey_responses")
+          .select("*")
+          .eq("team_id", tId);
+
+        if (surveyError) {
+          console.error(
+            `Erro ao buscar respostas do time ${tId}:`,
+            surveyError
+          );
+          continue;
+        }
+
+        // Processar cada resposta
+        for (const response of surveyResponses || []) {
+          openAnswers.push({
+            organization_id: organizationId,
+            organization_name: "",
+            team_id: tId,
+            team_name: teamInfo?.name || "",
+            user_id: response.user_id || "",
+            email: response.email || "",
+            role: response.role || "",
+            leadership_strengths: response.leadership_strengths,
+            leadership_improvements: response.leadership_improvements,
+            response_date: response.created_at,
+          });
+        }
+      }
+
+      return { data: openAnswers, error: null };
+    } catch (error) {
+      console.error("Erro ao buscar respostas abertas:", error);
+      return { data: [], error };
     }
-
-    const { data, error } = await query;
-
-    return { data: data as OrganizationOpenAnswer[], error };
   }
 
   // Associar uma equipe à organização
   static async addTeamToOrganization(
     organizationId: string,
     teamId: string
-  ): Promise<{ data: OrganizationTeam | null; error: any }> {
+  ): Promise<{ data: Team | null; error: any }> {
     const { data, error } = await supabase
       .from("organization_teams")
       .insert({
@@ -224,7 +326,7 @@ export class OrganizationService {
       .select()
       .single();
 
-    return { data: data as OrganizationTeam, error };
+    return { data: data as Team, error };
   }
 
   // Remover uma equipe da organização
