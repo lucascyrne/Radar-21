@@ -1,19 +1,34 @@
 -- Views que dependem de todas as tabelas
 
--- View para respostas da pesquisa por equipe
-DROP VIEW IF EXISTS "public"."team_survey_responses";
-CREATE OR REPLACE VIEW "public"."team_survey_responses" AS 
-SELECT 
-    tm.id AS team_member_id,
-    tm.team_id,
+-- View para visão geral de equipes por organização
+CREATE OR REPLACE VIEW "public"."organization_team_overview" AS
+SELECT
+    t.organization_id,
+    up.email AS organization_email,
+    t.id AS team_id,
     t.name AS team_name,
-    tm.user_id,
-    tm.email,
-    tm.role,
-    tm.status,
-    tm.created_at AS member_since,
-    up.email as user_email,
-    up.role as user_role,
+    COUNT(DISTINCT tm.id) FILTER (WHERE tm.status = 'answered') AS members_answered,
+    COUNT(DISTINCT tm.id) AS total_members,
+    t.created_at AS team_created_at,
+    COUNT(DISTINCT CASE WHEN tm.role = 'leader' AND tm.status = 'answered' THEN tm.id END) AS leaders_answered,
+    COUNT(DISTINCT CASE WHEN tm.role = 'leader' THEN tm.id END) AS total_leaders
+FROM teams t
+JOIN user_profiles up ON up.auth_id = t.organization_id
+LEFT JOIN team_members tm ON tm.team_id = t.id
+WHERE t.organization_id IS NOT NULL
+GROUP BY t.organization_id, up.email, t.id, t.name, t.created_at;
+
+-- View para respostas de pesquisa por equipe
+CREATE OR REPLACE VIEW "public"."team_survey_responses" AS
+SELECT 
+    t.id AS team_id,
+    t.name AS team_name,
+    t.organization_id,
+    up.email AS organization_email,
+    tm.id AS member_id,
+    tm.email AS member_email,
+    tm.role AS member_role,
+    tm.status AS response_status,
     sr.q1,
     sr.q2,
     sr.q3,
@@ -26,88 +41,74 @@ SELECT
     sr.q10,
     sr.q11,
     sr.q12,
-    sr.created_at AS response_created_at,
-    sr.updated_at AS response_updated_at,
-    CASE 
-        WHEN tm.role = 'leader' THEN true
-        ELSE false
-    END as is_leader
-FROM team_members tm
-INNER JOIN teams t ON t.id = tm.team_id
-LEFT JOIN user_profiles up ON up.auth_id = tm.user_id OR up.email = tm.email
-LEFT JOIN survey_responses sr ON (
-    (sr.user_id = tm.user_id OR sr.user_id IN (
-        SELECT auth_id FROM user_profiles WHERE email = tm.email
-    ))
-    AND sr.team_id = tm.team_id
-);
+    sr.created_at AS response_date
+FROM teams t
+JOIN user_profiles up ON up.auth_id = t.organization_id
+JOIN team_members tm ON tm.team_id = t.id
+LEFT JOIN survey_responses sr ON sr.user_id = tm.user_id AND sr.team_id = t.id
+WHERE t.organization_id IS NOT NULL;
 
--- View para visão geral de equipes por organização
-CREATE OR REPLACE VIEW "public"."organization_team_overview" AS 
-SELECT 
-    ot.organization_id,
-    org.name AS organization_name,
-    ot.team_id,
-    t.name AS team_name,
-    COUNT(DISTINCT tm.id) FILTER (WHERE tm.status = 'answered') AS members_answered,
+-- View para métricas de organização
+CREATE OR REPLACE VIEW "public"."organization_metrics" AS
+SELECT
+    t.organization_id,
+    up.email AS organization_email,
+    COUNT(DISTINCT t.id) AS total_teams,
     COUNT(DISTINCT tm.id) AS total_members,
-    t.created_at AS team_created_at,
-    COUNT(DISTINCT CASE WHEN tm.role = 'leader' AND tm.status = 'answered' THEN tm.id END) AS leaders_answered,
-    COUNT(DISTINCT CASE WHEN tm.role = 'leader' THEN tm.id END) AS total_leaders
-FROM organization_teams ot
-INNER JOIN organizations org ON org.id = ot.organization_id
-INNER JOIN teams t ON t.id = ot.team_id
+    COUNT(DISTINCT CASE WHEN tm.status = 'answered' THEN tm.id END) AS total_responses,
+    COUNT(DISTINCT CASE WHEN tm.role = 'leader' THEN tm.id END) AS total_leaders,
+    COUNT(DISTINCT CASE WHEN tm.role = 'leader' AND tm.status = 'answered' THEN tm.id END) AS leaders_responded
+FROM teams t
+JOIN user_profiles up ON up.auth_id = t.organization_id
 LEFT JOIN team_members tm ON tm.team_id = t.id
-GROUP BY ot.organization_id, org.name, ot.team_id, t.id, t.name, t.created_at;
+WHERE t.organization_id IS NOT NULL
+GROUP BY t.organization_id, up.email;
 
 -- View para respostas de perguntas abertas por organização
 CREATE OR REPLACE VIEW "public"."organization_open_answers" AS 
 SELECT 
-    ot.organization_id,
-    org.name AS organization_name,
+    t.organization_id,
+    up.email AS organization_email,
     t.id AS team_id,
     t.name AS team_name,
-    oqr.user_id,
-    tm.email,
-    tm.role,
+    tm.user_id,
+    tm.email AS member_email,
+    tm.role AS member_role,
     oqr.q13 AS leadership_strengths,
     oqr.q14 AS leadership_improvements,
     oqr.created_at AS response_date
-FROM organization_teams ot
-INNER JOIN organizations org ON org.id = ot.organization_id
-INNER JOIN teams t ON t.id = ot.team_id
-INNER JOIN team_members tm ON tm.team_id = t.id
-INNER JOIN open_question_responses oqr ON (
-    oqr.user_id = tm.user_id OR 
-    oqr.user_id IN (SELECT auth_id FROM user_profiles WHERE email = tm.email)
-) AND oqr.team_id = t.id
-WHERE oqr.q13 IS NOT NULL OR oqr.q14 IS NOT NULL;
+FROM teams t
+JOIN user_profiles up ON up.auth_id = t.organization_id
+JOIN team_members tm ON tm.team_id = t.id
+LEFT JOIN open_question_responses oqr ON oqr.user_id = tm.user_id AND oqr.team_id = t.id
+WHERE t.organization_id IS NOT NULL
+AND (oqr.q13 IS NOT NULL OR oqr.q14 IS NOT NULL);
 
--- View para comparação de competências (nova)
+-- View para comparação de competências
 CREATE OR REPLACE VIEW "public"."competency_comparison" AS
 WITH team_data AS (
     SELECT
         team_id,
-        role,
+        member_role AS role,
         q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12
     FROM team_survey_responses
-    WHERE status = 'answered'
+    WHERE response_status = 'answered'
 ),
 leader_data AS (
     SELECT
         team_id,
-        COALESCE(AVG(q1), 0) as q1,
-        COALESCE(AVG(q2), 0) as q2,
-        COALESCE(AVG(q3), 0) as q3,
-        COALESCE(AVG(q4), 0) as q4,
-        COALESCE(AVG(q5), 0) as q5,
-        COALESCE(AVG(q6), 0) as q6,
-        COALESCE(AVG(q7), 0) as q7,
-        COALESCE(AVG(q8), 0) as q8,
-        COALESCE(AVG(q9), 0) as q9,
-        COALESCE(AVG(q10), 0) as q10,
-        COALESCE(AVG(q11), 0) as q11,
-        COALESCE(AVG(q12), 0) as q12
+        COALESCE(AVG(q1::numeric), 0) as q1,
+        COALESCE(AVG(q2::numeric), 0) as q2,
+        COALESCE(AVG(q3::numeric), 0) as q3,
+        COALESCE(AVG(q4::numeric), 0) as q4,
+        COALESCE(AVG(q5::numeric), 0) as q5,
+        COALESCE(AVG(q6::numeric), 0) as q6,
+        COALESCE(AVG(q7::numeric), 0) as q7,
+        COALESCE(AVG(q8::numeric), 0) as q8,
+        COALESCE(AVG(q9::numeric), 0) as q9,
+        COALESCE(AVG(q10::numeric), 0) as q10,
+        COALESCE(AVG(q11::numeric), 0) as q11,
+        COALESCE(AVG(q12::numeric), 0) as q12
     FROM team_data
     WHERE role = 'leader'
     GROUP BY team_id
@@ -115,18 +116,18 @@ leader_data AS (
 team_avg AS (
     SELECT
         team_id,
-        COALESCE(AVG(q1), 0) as q1,
-        COALESCE(AVG(q2), 0) as q2,
-        COALESCE(AVG(q3), 0) as q3,
-        COALESCE(AVG(q4), 0) as q4,
-        COALESCE(AVG(q5), 0) as q5,
-        COALESCE(AVG(q6), 0) as q6,
-        COALESCE(AVG(q7), 0) as q7,
-        COALESCE(AVG(q8), 0) as q8,
-        COALESCE(AVG(q9), 0) as q9,
-        COALESCE(AVG(q10), 0) as q10,
-        COALESCE(AVG(q11), 0) as q11,
-        COALESCE(AVG(q12), 0) as q12
+        COALESCE(AVG(q1::numeric), 0) as q1,
+        COALESCE(AVG(q2::numeric), 0) as q2,
+        COALESCE(AVG(q3::numeric), 0) as q3,
+        COALESCE(AVG(q4::numeric), 0) as q4,
+        COALESCE(AVG(q5::numeric), 0) as q5,
+        COALESCE(AVG(q6::numeric), 0) as q6,
+        COALESCE(AVG(q7::numeric), 0) as q7,
+        COALESCE(AVG(q8::numeric), 0) as q8,
+        COALESCE(AVG(q9::numeric), 0) as q9,
+        COALESCE(AVG(q10::numeric), 0) as q10,
+        COALESCE(AVG(q11::numeric), 0) as q11,
+        COALESCE(AVG(q12::numeric), 0) as q12
     FROM team_data
     WHERE role = 'member'
     GROUP BY team_id
@@ -245,6 +246,7 @@ GRANT SELECT ON "public"."team_survey_responses" TO authenticated;
 GRANT SELECT ON "public"."organization_team_overview" TO authenticated;
 GRANT SELECT ON "public"."organization_open_answers" TO authenticated;
 GRANT SELECT ON "public"."competency_comparison" TO authenticated;
+GRANT SELECT ON "public"."organization_metrics" TO authenticated;
 
 -- Função para envio de lembretes
 CREATE OR REPLACE FUNCTION send_reminder_emails()

@@ -9,7 +9,7 @@ CREATE TABLE "public"."teams" (
     "created_at" timestamp with time zone DEFAULT now(),
     CONSTRAINT "teams_pkey" PRIMARY KEY ("id"),
     CONSTRAINT "teams_owner_id_fkey" FOREIGN KEY ("owner_id") REFERENCES auth.users(id) ON DELETE CASCADE,
-    CONSTRAINT "teams_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES organizations(id) ON DELETE SET NULL
+    CONSTRAINT "teams_organization_id_fkey" FOREIGN KEY ("organization_id") REFERENCES auth.users(id) ON DELETE SET NULL
 );
 
 -- 1.3 Membros da equipe
@@ -45,4 +45,50 @@ WHERE status IN ('invited', 'pending_survey');
 CREATE TRIGGER update_team_members_updated_at 
     BEFORE UPDATE ON public.team_members 
     FOR EACH ROW 
-    EXECUTE FUNCTION update_updated_at_column(); 
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Função para atualizar automaticamente o organization_id quando o owner é uma organização
+CREATE OR REPLACE FUNCTION public.update_team_owner_info()
+RETURNS TRIGGER AS $$
+DECLARE
+  owner_role public.user_role;
+BEGIN
+  -- Verificar se o proprietário tem role ORGANIZATION
+  SELECT role INTO owner_role
+  FROM public.user_profiles
+  WHERE auth_id = NEW.owner_id;
+  
+  IF owner_role = 'ORGANIZATION' THEN
+    -- Se o proprietário for uma organização, atualizar o campo organization_id
+    NEW.organization_id = NEW.owner_id;
+  END IF;
+  
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Trigger para atualizar automaticamente o campo organization_id quando uma equipe é criada
+DROP TRIGGER IF EXISTS on_team_created ON public.teams;
+CREATE TRIGGER on_team_created
+  BEFORE INSERT OR UPDATE ON public.teams
+  FOR EACH ROW
+  EXECUTE FUNCTION public.update_team_owner_info();
+
+-- Configurações de segurança
+ALTER TABLE "public"."teams" ENABLE ROW LEVEL SECURITY;
+
+-- Políticas para times
+CREATE POLICY "teams_owner_policy" 
+  ON public.teams 
+  FOR ALL 
+  USING (owner_id = auth.uid());
+  
+CREATE POLICY "teams_member_policy" 
+  ON public.teams 
+  FOR SELECT 
+  USING (
+    EXISTS (
+      SELECT 1 FROM team_members 
+      WHERE team_id = id AND user_id = auth.uid()
+    )
+  ); 

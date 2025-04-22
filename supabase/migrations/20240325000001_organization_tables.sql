@@ -1,20 +1,10 @@
 -- 1. Criação de tipos e tabelas para organizações
 CREATE TYPE public.org_invitation_status AS ENUM ('pending', 'accepted', 'rejected');
 
--- Tabela de organizações
-CREATE TABLE IF NOT EXISTS "public"."organizations" (
-    "id" uuid DEFAULT uuid_generate_v4(),
-    "name" text NOT NULL,
-    "owner_id" uuid REFERENCES auth.users(id) ON DELETE SET NULL,
-    "created_at" timestamp with time zone DEFAULT now(),
-    "updated_at" timestamp with time zone DEFAULT now(),
-    CONSTRAINT "organizations_pkey" PRIMARY KEY ("id")
-);
-
 -- Tabela de membros da organização
 CREATE TABLE IF NOT EXISTS "public"."organization_members" (
     "id" uuid DEFAULT uuid_generate_v4(),
-    "organization_id" uuid REFERENCES public.organizations(id) ON DELETE CASCADE,
+    "organization_id" uuid REFERENCES auth.users(id) ON DELETE CASCADE,
     "user_id" uuid REFERENCES auth.users(id) ON DELETE CASCADE,
     "email" text NOT NULL,
     "role" text NOT NULL CHECK (role IN ('admin', 'leader')),
@@ -26,10 +16,6 @@ CREATE TABLE IF NOT EXISTS "public"."organization_members" (
     CONSTRAINT "organization_members_org_email_key" UNIQUE ("organization_id", "email")
 );
 
--- Índices para organizations
-CREATE INDEX IF NOT EXISTS idx_organizations_owner_id ON public.organizations USING btree (owner_id);
-CREATE INDEX IF NOT EXISTS idx_organizations_name ON public.organizations USING btree (name);
-
 -- Índices para organization_members
 CREATE INDEX IF NOT EXISTS idx_org_members_org_id ON public.organization_members USING btree (organization_id);
 CREATE INDEX IF NOT EXISTS idx_org_members_user_id ON public.organization_members USING btree (user_id);
@@ -37,15 +23,40 @@ CREATE INDEX IF NOT EXISTS idx_org_members_email ON public.organization_members 
 CREATE INDEX IF NOT EXISTS idx_org_members_status ON public.organization_members USING btree (status) WHERE status = 'active';
 
 -- Triggers para atualização de timestamps
-CREATE TRIGGER update_organizations_updated_at 
-    BEFORE UPDATE ON public.organizations 
-    FOR EACH ROW 
-    EXECUTE FUNCTION update_updated_at_column();
-
 CREATE TRIGGER update_organization_members_updated_at 
     BEFORE UPDATE ON public.organization_members 
     FOR EACH ROW 
     EXECUTE FUNCTION update_updated_at_column();
+
+-- Políticas para membros da organização
+ALTER TABLE "public"."organization_members" ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Permitir leitura de membros da organização para membros"
+ON "public"."organization_members"
+FOR SELECT
+USING (
+  EXISTS (
+    SELECT 1 FROM public.organization_members
+    WHERE organization_id = public.organization_members.organization_id
+    AND user_id = auth.uid()
+    AND role = 'admin'
+  )
+  OR organization_id = auth.uid()
+  OR user_id = auth.uid()
+);
+
+CREATE POLICY "Permitir modificação de membros para admins da organização"
+ON "public"."organization_members"
+FOR ALL
+USING (
+  EXISTS (
+    SELECT 1 FROM public.organization_members
+    WHERE organization_id = public.organization_members.organization_id
+    AND user_id = auth.uid()
+    AND role = 'admin'
+  )
+  OR organization_id = auth.uid()
+);
 
 -- 3. Funções para gerenciamento de organizações
 -- Função para criar uma organização
@@ -146,65 +157,4 @@ BEGIN
   
   RETURN v_member_id;
 END;
-$$;
-
--- 4. Políticas de segurança
--- Configurações de segurança para tabelas de organizações
-ALTER TABLE "public"."organizations" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE "public"."organization_members" ENABLE ROW LEVEL SECURITY;
-
--- Políticas para organizações
-CREATE POLICY "Permitir leitura para membros da organização"
-ON "public"."organizations"
-FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM public.organization_members
-    WHERE organization_id = public.organizations.id
-    AND user_id = auth.uid()
-  )
-  OR 
-  auth.uid() = public.organizations.owner_id
-);
-
-CREATE POLICY "Permitir modificação para o dono da organização"
-ON "public"."organizations"
-FOR ALL
-USING (auth.uid() = public.organizations.owner_id);
-
--- Políticas para membros da organização
-CREATE POLICY "Permitir leitura de membros da organização para membros"
-ON "public"."organization_members"
-FOR SELECT
-USING (
-  EXISTS (
-    SELECT 1 FROM public.organization_members
-    WHERE organization_id = public.organization_members.organization_id
-    AND user_id = auth.uid()
-    AND role = 'admin'
-  )
-  OR
-  EXISTS (
-    SELECT 1 FROM public.organizations
-    WHERE id = public.organization_members.organization_id
-    AND owner_id = auth.uid()
-  )
-);
-
-CREATE POLICY "Permitir modificação de membros para admins da organização"
-ON "public"."organization_members"
-FOR ALL
-USING (
-  EXISTS (
-    SELECT 1 FROM public.organization_members
-    WHERE organization_id = public.organization_members.organization_id
-    AND user_id = auth.uid()
-    AND role = 'admin'
-  )
-  OR
-  EXISTS (
-    SELECT 1 FROM public.organizations
-    WHERE id = public.organization_members.organization_id
-    AND owner_id = auth.uid()
-  )
-); 
+$$; 
