@@ -17,9 +17,16 @@ export default function OrgLogoutPage() {
         // Aguardar um momento para garantir que a sessão seja limpa
         await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // Redirecionar para o login de organização usando o domínio completo
+        // Determinar se estamos no subdomínio de organização
+        const isOrgSubdomain = window.location.hostname.startsWith("org.");
+
+        // Redirecionar para o login correto com base no domínio
         const baseUrl = window.location.origin;
-        window.location.href = `${baseUrl}/org-auth/login`;
+        if (isOrgSubdomain) {
+          window.location.href = `${baseUrl}/org-auth/login`;
+        } else {
+          window.location.href = `/org-auth/login`;
+        }
       } catch (error) {
         console.error("Erro ao fazer logout:", error);
         window.location.href = "/org-auth/login";
@@ -27,7 +34,7 @@ export default function OrgLogoutPage() {
     };
 
     handleLogout();
-  }, [signOut]);
+  }, []);
 
   return (
     <div className="min-h-screen flex items-center justify-center">

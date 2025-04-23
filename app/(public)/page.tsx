@@ -91,7 +91,7 @@ const HeroSection = () => {
           className="mt-12 flex items-center justify-center gap-4"
           variants={item}
         >
-          <Link href="/auth">
+          <Link href="/auth/login">
             <Button
               size="lg"
               className="text-lg px-8 py-6 hover:scale-105 transition-transform"

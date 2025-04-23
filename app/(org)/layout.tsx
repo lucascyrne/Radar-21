@@ -6,8 +6,6 @@ import { useAuth } from "@/resources/auth/auth-hook";
 import { Inter } from "next/font/google";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { Toaster } from "sonner";
-
 const inter = Inter({ subsets: ["latin"] });
 
 export default function OrgLayout({ children }: { children: React.ReactNode }) {
@@ -70,7 +68,6 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
         disableTransitionOnChange
       >
         {children}
-        <Toaster position="top-center" />
       </ThemeProvider>
     </div>
   );

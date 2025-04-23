@@ -130,9 +130,15 @@ export async function POST(request: NextRequest) {
     }
 
     // Enviar email de convite usando a API existente
-    const inviteUrl = `${
-      request.nextUrl.origin
-    }/auth?invite=${teamId}&email=${encodeURIComponent(email)}`;
+    const origin = request.nextUrl.origin;
+    const baseUrl =
+      origin.startsWith("https://org.") || origin.startsWith("http://org.")
+        ? origin.replace(/^(https?:\/\/)org\./, "$1")
+        : origin;
+    const inviteUrl = `${baseUrl}/auth?invite=${teamId}&email=${encodeURIComponent(
+      email
+    )}`;
+
     const response = await fetch(`${request.nextUrl.origin}/api/send-invite`, {
       method: "POST",
       headers: {

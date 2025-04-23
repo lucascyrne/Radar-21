@@ -35,12 +35,11 @@ export async function POST(request: NextRequest) {
       await request.json();
 
     // 1. Validações básicas
-    if (!email || !teamId || !teamName || !inviteUrl) {
+    if (!email || !teamId || !teamName) {
       console.error("[send-invite] Parâmetros obrigatórios ausentes", {
         email,
         teamId,
         teamName,
-        inviteUrl,
       });
       return NextResponse.json(
         { error: "Parâmetros obrigatórios ausentes" },
@@ -48,8 +47,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Usar a URL de convite fornecida ou construir uma nova
+    const finalInviteUrl =
+      inviteUrl ||
+      `${request.nextUrl.origin.replace(
+        "org.",
+        ""
+      )}/auth?invite=${teamId}&email=${encodeURIComponent(email)}`;
+
     console.log(
-      `[send-invite] Processando convite para: ${email}, time: ${teamId}`
+      `[send-invite] Processando convite para: ${email}, time: ${teamId}, url: ${finalInviteUrl}`
     );
 
     // 2. Executar operações em paralelo
@@ -111,7 +118,7 @@ export async function POST(request: NextRequest) {
             ${invitedBy ? `<br><br>Convite enviado por: ${invitedBy}` : ""}
           </p>
           <div style="margin: 30px 0; text-align: center;">
-            <a href="${inviteUrl}" style="background-color: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Aceitar Convite</a>
+            <a href="${finalInviteUrl}" style="background-color: #3498db; color: white; padding: 12px 24px; text-decoration: none; border-radius: 4px; font-weight: bold;">Aceitar Convite</a>
           </div>
           <p style="color: #777; font-size: 14px;">
             Se você não reconhece este convite, pode ignorá-lo com segurança.
