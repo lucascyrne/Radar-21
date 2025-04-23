@@ -3,7 +3,7 @@
 CREATE TABLE IF NOT EXISTS "public"."user_profiles" (
     "id" uuid DEFAULT uuid_generate_v4(),
     "email" text NOT NULL,
-    "role" public.user_role NOT NULL DEFAULT 'COLLABORATOR',
+    "role" text NOT NULL CHECK (role IN ('ORGANIZATION', 'USER')),
     "created_at" timestamp with time zone DEFAULT now(),
     "updated_at" timestamp with time zone DEFAULT now(),
     "auth_id" uuid REFERENCES auth.users(id) ON DELETE SET NULL,
@@ -15,16 +15,13 @@ CREATE TABLE IF NOT EXISTS "public"."user_profiles" (
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 DECLARE
-  user_role_value public.user_role;
+  user_role_value text;
   profile_id uuid;
 BEGIN
   -- Determinar o role com base nos metadados do usuário
   user_role_value := CASE 
-    WHEN new.raw_user_meta_data->>'role' = 'ORGANIZATION' THEN 'ORGANIZATION'::public.user_role
-    WHEN new.raw_user_meta_data->>'role' = 'LEADER' THEN 'LEADER'::public.user_role
-    WHEN new.raw_user_meta_data->>'role' = 'ADMIN' THEN 'ADMIN'::public.user_role
-    WHEN new.raw_user_meta_data->>'role' = 'SUPPORT' THEN 'SUPPORT'::public.user_role
-    ELSE 'COLLABORATOR'::public.user_role
+    WHEN new.raw_user_meta_data->>'role' = 'ORGANIZATION' THEN 'ORGANIZATION'
+    ELSE 'USER'
   END;
 
   -- Verificar se já existe um perfil com este email
@@ -37,23 +34,14 @@ BEGIN
     UPDATE public.user_profiles
     SET 
       auth_id = new.id,
-      role = COALESCE(user_role_value, role),
+      role = user_role_value,
       updated_at = now()
     WHERE id = profile_id;
-    
-    RAISE NOTICE 'Perfil existente atualizado para usuário % com role %', new.id, user_role_value;
   ELSE
     -- Criar novo perfil
     INSERT INTO public.user_profiles (id, email, role, auth_id)
     VALUES (new.id, new.email, user_role_value, new.id)
     RETURNING id INTO profile_id;
-    
-    RAISE NOTICE 'Novo perfil criado para usuário % com role %', new.id, user_role_value;
-  END IF;
-
-  -- Garantir que o perfil foi criado/atualizado
-  IF profile_id IS NULL THEN
-    RAISE EXCEPTION 'Falha ao criar/atualizar perfil para usuário %', new.id;
   END IF;
 
   -- Atualizar os metadados do usuário com o ID do perfil
@@ -72,7 +60,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Função para criar perfil preliminar
 CREATE OR REPLACE FUNCTION public.create_preliminary_profile(
   user_email text,
-  user_role public.user_role DEFAULT 'COLLABORATOR'
+  user_role text DEFAULT 'USER'
 )
 RETURNS uuid
 LANGUAGE plpgsql
