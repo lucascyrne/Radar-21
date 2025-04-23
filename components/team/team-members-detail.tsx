@@ -7,10 +7,18 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import supabase from "@/lib/supabase/client";
 import { TeamMember, TeamMemberStatus } from "@/resources/team/team-model";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 
 interface TeamMembersDetailProps {
   teamId: string;
@@ -39,6 +47,59 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Função para atualizar o papel do membro
+  const updateMemberRole = async (memberId: string, newRole: string) => {
+    try {
+      // Verificar se já existe um líder (exceto o membro atual)
+      if (newRole === "leader") {
+        const existingLeader = members.find(
+          (m) => m.role === "leader" && m.id !== memberId
+        );
+        if (existingLeader) {
+          // Atualizar o líder existente para membro primeiro
+          const { error: leaderError } = await supabase
+            .from("team_members")
+            .update({ role: "member" })
+            .eq("id", existingLeader.id);
+
+          if (leaderError) throw leaderError;
+        }
+      }
+
+      // Atualizar o papel do membro selecionado
+      const { error: updateError } = await supabase
+        .from("team_members")
+        .update({ role: newRole })
+        .eq("id", memberId);
+
+      if (updateError) throw updateError;
+
+      // Atualizar o estado local
+      setMembers((prevMembers) =>
+        prevMembers.map((member) => {
+          if (member.id === memberId) {
+            return { ...member, role: newRole as "leader" | "member" };
+          }
+          if (newRole === "leader" && member.role === "leader") {
+            return { ...member, role: "member" };
+          }
+          return member;
+        })
+      );
+
+      toast.success(
+        `O membro agora é ${
+          newRole === "leader" ? "líder" : "membro"
+        } da equipe.`
+      );
+    } catch (error: any) {
+      console.error("Erro ao atualizar papel:", error);
+      toast.error("Erro ao atualizar papel:", {
+        description: error.message,
+      });
+    }
+  };
+
   // Função para carregar os membros da equipe
   const loadTeamMembers = async () => {
     if (!teamId) return;
@@ -49,8 +110,8 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
         .from("team_members")
         .select("*")
         .eq("team_id", teamId)
-        .order("role", { ascending: false }) // Líderes primeiro
-        .order("status", { ascending: true }); // Respondidos primeiro
+        .order("role", { ascending: false })
+        .order("status", { ascending: true });
 
       if (error) throw error;
 
@@ -131,26 +192,6 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
     );
   }
 
-  // Ordenar membros: líder primeiro, depois por status (respondido > pendente > convidado)
-  const sortedMembers = [...members].sort((a: TeamMember, b: TeamMember) => {
-    // Comparar roles
-    if (a.role === "leader" && b.role === "member") return -1;
-    if (a.role === "member" && b.role === "leader") return 1;
-
-    // Definir ordem dos status
-    const statusOrder = {
-      answered: 0,
-      pending_survey: 1,
-      invited: 2,
-    } as const;
-
-    // Garantir que status seja um dos valores válidos
-    const aStatus = a.status as keyof typeof statusOrder;
-    const bStatus = b.status as keyof typeof statusOrder;
-
-    return statusOrder[aStatus] - statusOrder[bStatus];
-  });
-
   return (
     <Card>
       <CardHeader>
@@ -167,7 +208,7 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
           </p>
         ) : (
           <div className="space-y-4">
-            {sortedMembers.map((member) => (
+            {members.map((member) => (
               <div
                 key={member.id}
                 className="flex items-center justify-between p-2"
@@ -178,9 +219,20 @@ export function TeamMembersDetail({ teamId }: TeamMembersDetailProps) {
                   </Avatar>
                   <div>
                     <p className="text-sm font-medium">{member.email}</p>
-                    <p className="text-sm text-muted-foreground">
-                      {member.role === "leader" ? "Líder" : "Membro"}
-                    </p>
+                    <Select
+                      value={member.role}
+                      onValueChange={(value) =>
+                        updateMemberRole(member.id, value)
+                      }
+                    >
+                      <SelectTrigger className="w-[180px]">
+                        <SelectValue placeholder="Selecione o papel" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="leader">Líder</SelectItem>
+                        <SelectItem value="member">Membro</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
                 {getStatusBadge(member.status)}

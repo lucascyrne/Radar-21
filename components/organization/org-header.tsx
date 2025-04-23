@@ -29,7 +29,7 @@ export function OrgHeader() {
 
   const handleSignOut = useCallback(async () => {
     await signOut();
-    router.push("/auth");
+    router.push("/org-auth/login");
   }, []);
 
   const getUserInitials = useCallback(() => {
@@ -74,18 +74,6 @@ export function OrgHeader() {
             className="font-medium transition hover:text-primary"
           >
             Equipes
-          </Link>
-          <Link
-            href="/leaders"
-            className="font-medium transition hover:text-primary"
-          >
-            Líderes
-          </Link>
-          <Link
-            href="/open-answers"
-            className="font-medium transition hover:text-primary"
-          >
-            Respostas
           </Link>
         </nav>
 

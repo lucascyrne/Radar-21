@@ -1,32 +1,32 @@
-"use client"
+"use client";
 
+import { Card } from "@/components/ui/card";
 import {
-  RadarChart as RechartsRadarChart,
-  PolarGrid,
-  PolarAngleAxis,
-  Radar,
   Legend,
-  ResponsiveContainer,
+  PolarAngleAxis,
+  PolarGrid,
   PolarRadiusAxis,
+  Radar,
+  RadarChart as RechartsRadarChart,
+  ResponsiveContainer,
   Tooltip,
-} from "recharts"
-import { Card } from '@/components/ui/card'
+} from "recharts";
 
 export interface RadarDataPoint {
-  category: string
-  value: number
+  category: string;
+  value: number;
 }
 
 interface RadarChartProps {
-  userResults: RadarDataPoint[]
-  teamResults?: RadarDataPoint[]
-  leaderResults?: RadarDataPoint[]
+  userResults: RadarDataPoint[];
+  teamResults?: RadarDataPoint[];
+  leaderResults?: RadarDataPoint[];
 }
 
 interface CustomTooltipProps {
-  active?: boolean
-  payload?: any[]
-  label?: string
+  active?: boolean;
+  payload?: any[];
+  label?: string;
 }
 
 const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
@@ -40,30 +40,65 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
           </p>
         ))}
       </Card>
-    )
+    );
   }
 
-  return null
-}
+  return null;
+};
 
-export function RadarChart({ userResults, teamResults, leaderResults }: RadarChartProps) {
-  const data = userResults.map((item) => {
-    const teamValue = teamResults?.find(
-      (team) => team.category === item.category
-    )?.value
-    const leaderValue = leaderResults?.find(
-      (leader) => leader.category === item.category
-    )?.value
+export function RadarChart({
+  userResults,
+  teamResults,
+  leaderResults,
+}: RadarChartProps) {
+  // Verificar se temos dados
+  if (!userResults || userResults.length === 0) {
+    console.warn("RadarChart: Dados do usuário não fornecidos");
+    return (
+      <div className="flex items-center justify-center h-[400px] bg-gray-50 rounded-md">
+        <p className="text-muted-foreground">
+          Dados insuficientes para exibir o gráfico
+        </p>
+      </div>
+    );
+  }
+
+  // Obter todas as categorias possíveis
+  const allCategories = new Set<string>();
+  userResults.forEach((item) => allCategories.add(item.category));
+  teamResults?.forEach((item) => allCategories.add(item.category));
+  leaderResults?.forEach((item) => allCategories.add(item.category));
+
+  const categories = Array.from(allCategories);
+
+  // Criar dados normalizados para o gráfico
+  const data = categories.map((category) => {
+    const userValue =
+      userResults.find((item) => item.category === category)?.value || 0;
+
+    const teamValue =
+      teamResults?.find((item) => item.category === category)?.value || 0;
+
+    const leaderValue =
+      leaderResults?.find((item) => item.category === category)?.value || 0;
+
+    // Calcular a diferença (equipe - líder) para consistência com a tabela
+    const difference =
+      teamValue && leaderValue ? teamValue - leaderValue : null;
 
     return {
-      category: item.category,
-      user: item.value,
-      team: teamValue || 0,
-      leader: leaderValue || 0,
-    }
-  })
+      category,
+      user: userValue,
+      team: teamValue,
+      leader: leaderValue,
+      difference: difference,
+    };
+  });
 
-  console.log('Dados do radar chart:', data)
+  // Definir cores consistentes
+  const userColor = "#2563eb"; // Azul
+  const teamColor = "#16a34a"; // Verde
+  const leaderColor = "#dc2626"; // Vermelho
 
   return (
     <ResponsiveContainer width="100%" height={400}>
@@ -71,30 +106,41 @@ export function RadarChart({ userResults, teamResults, leaderResults }: RadarCha
         <PolarGrid />
         <PolarAngleAxis dataKey="category" />
         <PolarRadiusAxis angle={30} domain={[0, 5]} />
+
+        {/* Radar do usuário */}
         <Radar
           name="Sua avaliação"
           dataKey="user"
-          stroke="#2563eb"
-          fill="#2563eb"
+          stroke={userColor}
+          fill={userColor}
           fillOpacity={0.6}
         />
-        <Radar
-          name="Média da equipe"
-          dataKey="team"
-          stroke="#16a34a"
-          fill="#16a34a"
-          fillOpacity={0.6}
-        />
-        <Radar
-          name="Avaliação da liderança"
-          dataKey="leader"
-          stroke="#dc2626"
-          fill="#dc2626"
-          fillOpacity={0.6}
-        />
+
+        {/* Radar da equipe (se disponível) */}
+        {teamResults && teamResults.length > 0 && (
+          <Radar
+            name="Média da equipe"
+            dataKey="team"
+            stroke={teamColor}
+            fill={teamColor}
+            fillOpacity={0.6}
+          />
+        )}
+
+        {/* Radar do líder (se disponível) */}
+        {leaderResults && leaderResults.length > 0 && (
+          <Radar
+            name="Avaliação da liderança"
+            dataKey="leader"
+            stroke={leaderColor}
+            fill={leaderColor}
+            fillOpacity={0.6}
+          />
+        )}
+
         <Legend />
         <Tooltip content={<CustomTooltip />} />
       </RechartsRadarChart>
     </ResponsiveContainer>
-  )
+  );
 }

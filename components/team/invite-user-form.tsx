@@ -144,9 +144,15 @@ export default function InviteUserForm({
       const userId = await checkUserExists(data.email);
 
       // Gerar URL de convite incluindo o email
-      const inviteUrl = `${
-        window.location.origin
-      }/auth?invite=${teamId}&email=${encodeURIComponent(data.email)}`;
+      // Verificar se estamos no subdomínio da organização
+      const isOrgSubdomain = window.location.hostname.startsWith("org.");
+      const baseUrl = isOrgSubdomain
+        ? window.location.origin.replace("org.", "") // Remover o "org." do domínio
+        : window.location.origin;
+
+      const inviteUrl = `${baseUrl}/auth?invite=${teamId}&email=${encodeURIComponent(
+        data.email
+      )}`;
 
       console.log("Enviando requisição para /api/send-invite com payload:", {
         email: data.email,
@@ -247,9 +253,14 @@ export default function InviteUserForm({
 
     try {
       // Gerar URL de convite atualizado
-      const inviteUrl = `${
-        window.location.origin
-      }/auth?invite=${teamId}&email=${encodeURIComponent(email)}`;
+      const isOrgSubdomain = window.location.hostname.startsWith("org.");
+      const baseUrl = isOrgSubdomain
+        ? window.location.origin.replace("org.", "") // Remover o "org." do domínio
+        : window.location.origin;
+
+      const inviteUrl = `${baseUrl}/auth?invite=${teamId}&email=${encodeURIComponent(
+        email
+      )}`;
 
       // Enviar email de convite novamente
       const response = await fetch("/api/send-invite", {
