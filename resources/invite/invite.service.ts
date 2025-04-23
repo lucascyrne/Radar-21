@@ -159,6 +159,21 @@ export class InviteService {
         throw new Error("Este convite foi enviado para outro email");
       }
 
+      // Verificar o perfil do usuário para garantir que não seja organização
+      const { data: userProfile, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("role")
+        .eq("auth_id", userId)
+        .single();
+
+      if (profileError && profileError.code !== "PGRST116") {
+        console.error("Erro ao verificar perfil do usuário:", profileError);
+      } else if (userProfile?.role === "ORGANIZATION") {
+        throw new Error(
+          "Contas de organização não podem ser membros de equipes"
+        );
+      }
+
       const { error: updateError } = await supabase
         .from("team_members")
         .update({
