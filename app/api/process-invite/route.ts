@@ -32,6 +32,26 @@ export async function POST(request: NextRequest) {
       `Processando convite para equipe ${teamId}, usuário ${userId}, email ${email}`
     );
 
+    // Verificar o papel do usuário para garantir que não seja organização
+    const { data: userProfile, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("role")
+      .eq("auth_id", userId)
+      .single();
+
+    if (profileError) {
+      console.error(`Erro ao verificar perfil do usuário:`, profileError);
+      // Continuamos mesmo com erro, assumindo que não é uma organização
+    } else if (userProfile?.role === "ORGANIZATION") {
+      return NextResponse.json(
+        {
+          error: "Acesso negado",
+          message: "Contas de organização não podem ser membros de equipes",
+        },
+        { status: 403 }
+      );
+    }
+
     // Verificar se o membro já existe na equipe
     const { data: existingMember, error: memberError } = await supabase
       .from("team_members")

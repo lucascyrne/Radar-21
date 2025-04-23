@@ -31,10 +31,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar se o usuário existe
+    // Verificar se o usuário já existe
     const { data: userData, error: userError } = await supabase
       .from("user_profiles")
-      .select("id, auth_id")
+      .select("id, auth_id, role")
       .eq("email", email)
       .single();
 
@@ -42,11 +42,14 @@ export async function POST(request: NextRequest) {
 
     // Se o usuário não existir, criar um perfil preliminar
     if (!userData) {
+      // Certificar-se de que nunca criamos uma organização através de convites
+      const userRole = role === "leader" ? "LEADER" : "COLLABORATOR";
+
       const { data: newProfile, error: profileError } = await supabase.rpc(
         "create_preliminary_profile",
         {
           user_email: email,
-          user_role: "COLLABORATOR",
+          user_role: userRole,
         }
       );
 
