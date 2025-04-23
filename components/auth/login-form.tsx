@@ -2,6 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { TooltipDescription } from "@/components/ui/tooltip-description";
+import Link from "next/link";
 import { useState } from "react";
 
 interface LoginFormProps {
@@ -9,9 +10,15 @@ interface LoginFormProps {
     email: string;
     password: string;
   }) => Promise<string | undefined>;
+  showRegisterLink?: boolean;
+  isOrgLogin?: boolean;
 }
 
-export function LoginForm({ onSubmit }: LoginFormProps) {
+export function LoginForm({
+  onSubmit,
+  showRegisterLink = true,
+  isOrgLogin = false,
+}: LoginFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -66,6 +73,20 @@ export function LoginForm({ onSubmit }: LoginFormProps) {
       <Button type="submit" className="w-full" disabled={isLoading}>
         {isLoading ? "Entrando..." : "Entrar"}
       </Button>
+
+      {showRegisterLink && (
+        <div className="text-center mt-4 text-sm">
+          <p className="text-muted-foreground">
+            Ainda não tem uma conta?{" "}
+            <Link
+              href={isOrgLogin ? "/org-auth/register" : "/auth/register"}
+              className="text-primary hover:underline font-medium"
+            >
+              Registre-se
+            </Link>
+          </p>
+        </div>
+      )}
     </form>
   );
 }

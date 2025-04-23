@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { TooltipDescription } from "@/components/ui/tooltip-description";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 interface RegisterFormProps {
   onSubmit: (data: {
@@ -17,6 +17,8 @@ interface RegisterFormProps {
     password: string;
     role: string;
   }) => Promise<string | undefined>;
+  hideRoleSelection?: boolean;
+  predefinedRole?: string;
 }
 
 const roleDescriptions = {
@@ -25,13 +27,24 @@ const roleDescriptions = {
   ORGANIZATION: "Representante da organização que gerencia múltiplas equipes",
 };
 
-export function RegisterForm({ onSubmit }: RegisterFormProps) {
+export function RegisterForm({
+  onSubmit,
+  hideRoleSelection = false,
+  predefinedRole = "",
+}: RegisterFormProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
-  const [role, setRole] = useState("");
+  const [role, setRole] = useState(predefinedRole);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+
+  // Atualiza o role quando predefinedRole mudar
+  useEffect(() => {
+    if (predefinedRole) {
+      setRole(predefinedRole);
+    }
+  }, [predefinedRole]);
 
   const validateForm = () => {
     if (!email.trim()) {
@@ -155,34 +168,62 @@ export function RegisterForm({ onSubmit }: RegisterFormProps) {
           disabled={isLoading}
         />
       </div>
-      <div className="space-y-2">
-        <div className="flex items-center">
-          <Label htmlFor="role">Seu Papel</Label>
-          <TooltipDescription description="Selecione o papel que melhor descreve sua função no sistema." />
+
+      {!hideRoleSelection && (
+        <div className="space-y-2">
+          <div className="flex items-center">
+            <Label htmlFor="role">Seu Papel</Label>
+            <TooltipDescription description="Selecione o papel que melhor descreve sua função no sistema." />
+          </div>
+          <Select
+            value={role}
+            onValueChange={(value) => {
+              setRole(value);
+              setError(null);
+            }}
+            disabled={isLoading || !!predefinedRole}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Selecione seu papel" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="COLLABORATOR">Colaborador</SelectItem>
+              <SelectItem value="LEADER">Líder</SelectItem>
+              <SelectItem value="ORGANIZATION">Organização</SelectItem>
+            </SelectContent>
+          </Select>
+          {role && (
+            <p className="text-sm text-muted-foreground">
+              {roleDescriptions[role as keyof typeof roleDescriptions]}
+            </p>
+          )}
         </div>
-        <Select
-          value={role}
-          onValueChange={(value) => {
-            setRole(value);
-            setError(null);
-          }}
-          disabled={isLoading}
-        >
-          <SelectTrigger>
-            <SelectValue placeholder="Selecione seu papel" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="COLLABORATOR">Colaborador</SelectItem>
-            <SelectItem value="LEADER">Líder</SelectItem>
-            <SelectItem value="ORGANIZATION">Organização</SelectItem>
-          </SelectContent>
-        </Select>
-        {role && (
-          <p className="text-sm text-muted-foreground">
-            {roleDescriptions[role as keyof typeof roleDescriptions]}
-          </p>
-        )}
-      </div>
+      )}
+
+      {hideRoleSelection && predefinedRole && (
+        <div className="space-y-2">
+          <div className="flex items-center">
+            <Label>Tipo de Conta</Label>
+          </div>
+          <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
+            <p className="font-medium text-blue-800">
+              {predefinedRole === "ORGANIZATION"
+                ? "Organização"
+                : predefinedRole === "LEADER"
+                ? "Líder"
+                : "Colaborador"}
+            </p>
+            <p className="text-sm text-blue-700 mt-1">
+              {
+                roleDescriptions[
+                  predefinedRole as keyof typeof roleDescriptions
+                ]
+              }
+            </p>
+          </div>
+        </div>
+      )}
+
       {error && (
         <div className="text-red-500 text-sm bg-red-50 p-2 rounded border border-red-200">
           {error}
