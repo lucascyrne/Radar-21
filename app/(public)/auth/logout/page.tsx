@@ -1,7 +1,6 @@
 "use client";
 
 import { useAuth } from "@/resources/auth/auth-hook";
-import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
 export default function LogoutPage() {
@@ -11,17 +10,24 @@ export default function LogoutPage() {
     const handleLogout = async () => {
       try {
         await signOut();
+        // Limpar qualquer estado local
+        localStorage.clear();
+        sessionStorage.clear();
+
         // Aguardar um momento para garantir que a sessão seja limpa
         await new Promise((resolve) => setTimeout(resolve, 500));
-        window.location.href = "/";
+
+        // Redirecionar para a página inicial usando o domínio completo
+        const baseUrl = window.location.origin;
+        window.location.href = `${baseUrl}/auth/login`;
       } catch (error) {
         console.error("Erro ao fazer logout:", error);
-        window.location.href = "/";
+        window.location.href = "/auth/login";
       }
     };
 
     handleLogout();
-  }, []);
+  }, [signOut]);
 
   return (
     <div className="min-h-screen flex items-center justify-center">

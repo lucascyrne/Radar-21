@@ -3,13 +3,25 @@
 import { LoginForm } from "@/components/auth/login-form";
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/resources/auth/auth-hook";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export default function OrgLoginPage() {
   const { signInWithEmail, user, isAuthenticated } = useAuth();
   const [isNonOrgUser, setIsNonOrgUser] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    // Verificar se há um parâmetro de erro na URL
+    const errorParam = searchParams.get("error");
+    if (errorParam === "not_organization") {
+      setError(
+        "Esta área é exclusiva para organizações. Se você é um colaborador ou líder, acesse radar21.com.br"
+      );
+    }
+  }, [searchParams]);
 
   // Redirecionar se já estiver autenticado como organização
   useEffect(() => {
@@ -52,7 +64,7 @@ export default function OrgLoginPage() {
               Acesse sua conta para continuar
             </p>
           </div>
-          <LoginForm onSubmit={handleSubmit} />
+          <LoginForm onSubmit={handleSubmit} isOrgLogin={true} />
           {isNonOrgUser && (
             <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-800 text-sm">
               <p>Este portal é exclusivo para organizações.</p>
@@ -65,6 +77,11 @@ export default function OrgLoginPage() {
               >
                 radar21.com.br/auth/login
               </a>
+            </div>
+          )}
+          {error && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
+              <p>{error}</p>
             </div>
           )}
         </div>

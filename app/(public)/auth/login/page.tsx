@@ -3,13 +3,25 @@
 import { LoginForm } from "@/components/auth/login-form";
 import { Layout } from "@/components/layout";
 import { useAuth } from "@/resources/auth/auth-hook";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 
 export default function LoginPage() {
   const { signInWithEmail, isAuthenticated, user } = useAuth();
   const [isOrgUser, setIsOrgUser] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    // Verificar se há um parâmetro de erro na URL
+    const errorParam = searchParams.get("error");
+    if (errorParam === "org_access_denied") {
+      setError(
+        "Você precisa estar logado com uma conta de organização para acessar o portal de organização"
+      );
+    }
+  }, [searchParams]);
 
   // Efeito para redirecionar após login bem-sucedido
   useEffect(() => {
@@ -64,6 +76,11 @@ export default function LoginPage() {
               >
                 org.radar21.com.br/auth/login
               </a>
+            </div>
+          )}
+          {error && (
+            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md text-red-800 text-sm">
+              <p>{error}</p>
             </div>
           )}
         </div>
