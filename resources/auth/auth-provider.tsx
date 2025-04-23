@@ -91,10 +91,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     // Redirecionar para a página inicial apropriada
     if (isOrg && onOrgSubdomain) {
       router.push("/dashboard");
+    } else if (isOrg && !onOrgSubdomain) {
+      // Se for organização mas estiver no domínio principal, redirecionar para o subdomínio
+      const protocol = window.location.protocol;
+      const host = window.location.host;
+      window.location.href = `${protocol}//org.${host}/dashboard`;
+    } else if (!isOrg && onOrgSubdomain) {
+      // Se for usuário regular mas estiver no subdomínio org, redirecionar para o domínio principal
+      const protocol = window.location.protocol;
+      const host = window.location.host.replace(/^org\./, "");
+      window.location.href = `${protocol}//${host}/team-setup`;
     } else if (!isOrg && !onOrgSubdomain) {
       router.push("/team-setup");
     }
-  }, [state.user, state.isAuthenticated, isOrgSubdomain, isAuthPage]);
+  }, [state.user, state.isAuthenticated, isOrgSubdomain, isAuthPage, router]);
 
   // Efeito para redirecionar usuário autenticado
   useEffect(() => {
@@ -194,11 +204,22 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
       await AuthService.signOut();
       setState(initialState);
       localStorage.clear();
-      router.push("/auth/login");
+
+      // Verificar se estamos no subdomínio org
+      const isOrgSubdomain =
+        typeof window !== "undefined"
+          ? window.location.hostname.startsWith("org.")
+          : false;
+
+      if (isOrgSubdomain) {
+        router.push("/org-auth/login");
+      } else {
+        router.push("/auth/login");
+      }
     } catch (error: any) {
       updateState({ error: error.message, isLoading: false });
     }
-  }, []);
+  }, [router]);
 
   const signInWithGoogle = useCallback(async () => {
     try {

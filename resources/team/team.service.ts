@@ -683,17 +683,63 @@ export const TeamService = {
    */
   async getTeamSurveyResponses(teamId: string): Promise<TeamSurveyResponse[]> {
     try {
+      console.log(
+        `[TeamService] Buscando respostas da pesquisa para equipe ${teamId}`
+      );
+
+      // Primeiro, buscar todas as respostas da pesquisa
       const { data: responses, error } = await supabase
-        .from("team_survey_responses")
+        .from("survey_responses")
         .select("*")
-        .eq("team_id", teamId);
+        .eq("team_id", teamId)
+        .eq("is_complete", true);
 
       if (error) {
         console.error("Erro ao buscar respostas da equipe:", error);
         return [];
       }
 
-      return responses || [];
+      if (!responses || responses.length === 0) {
+        console.log("Nenhuma resposta encontrada para a equipe");
+        return [];
+      }
+
+      // Buscar os papéis dos membros
+      const { data: members, error: membersError } = await supabase
+        .from("team_members")
+        .select("user_id, role")
+        .eq("team_id", teamId);
+
+      if (membersError) {
+        console.error("Erro ao buscar papéis dos membros:", membersError);
+        // Continuar mesmo sem os papéis
+        return responses.map((r) => ({ ...r, role: "member" }));
+      }
+
+      // Criar um mapa de user_id para role
+      const roleMap = new Map(
+        members.map((member) => [member.user_id, member.role])
+      );
+
+      // Mapear papéis para as respostas
+      const resultsWithRoles = responses.map((response) => {
+        const role = roleMap.get(response.user_id) || "member";
+        return {
+          ...response,
+          role,
+        };
+      });
+
+      console.log(
+        `[TeamService] Encontradas ${resultsWithRoles.length} respostas totais. Detalhes:`,
+        {
+          total: resultsWithRoles.length,
+          leaders: resultsWithRoles.filter((r) => r.role === "leader").length,
+          members: resultsWithRoles.filter((r) => r.role === "member").length,
+        }
+      );
+
+      return resultsWithRoles;
     } catch (error) {
       console.error("Erro ao carregar respostas da equipe:", error);
       return [];

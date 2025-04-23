@@ -104,18 +104,66 @@ export function TeamProvider({ children }: TeamProviderProps) {
 
         console.log("Carregando equipes para usuário:", userId);
 
-        // Buscar todos os times onde o usuário é membro
-        const { data: memberData, error: memberError } = await supabase
-          .from("team_members")
-          .select("team_id")
-          .eq("email", user?.email || "");
+        // Primeiro, verificar o papel do usuário
+        const { data: userProfile, error: profileError } = await supabase
+          .from("user_profiles")
+          .select("role")
+          .eq("auth_id", userId)
+          .single();
 
-        if (memberError) {
-          console.error("Erro ao buscar equipes:", memberError);
+        if (profileError) {
+          console.error("Erro ao verificar perfil do usuário:", profileError);
           setState((prev) => ({
             ...prev,
             isLoading: false,
-            error: memberError.message,
+            error: profileError.message,
+            teams: [],
+            selectedTeam: null,
+          }));
+          loadingTeamsRef.current = false;
+          initialLoadAttempted.current = true;
+          return;
+        }
+
+        let teamsData;
+        let teamsError;
+
+        if (userProfile.role === "ORGANIZATION") {
+          // Se for uma organização, buscar times onde é owner ou organization_id
+          const { data, error } = await supabase
+            .from("teams")
+            .select("id, name, owner_email, team_size, created_at")
+            .or(`owner_id.eq.${userId},organization_id.eq.${userId}`);
+
+          teamsData = data;
+          teamsError = error;
+        } else {
+          // Se for um usuário regular, buscar times via team_members
+          const { data: memberData, error: memberError } = await supabase
+            .from("team_members")
+            .select("team_id")
+            .eq("email", user?.email || "");
+
+          if (memberError) {
+            teamsError = memberError;
+          } else if (memberData && memberData.length > 0) {
+            const teamIds = memberData.map((mt) => mt.team_id);
+            const { data, error } = await supabase
+              .from("teams")
+              .select("id, name, owner_email, team_size, created_at")
+              .in("id", teamIds);
+
+            teamsData = data;
+            teamsError = error;
+          }
+        }
+
+        if (teamsError) {
+          console.error("Erro ao buscar equipes:", teamsError);
+          setState((prev) => ({
+            ...prev,
+            isLoading: false,
+            error: teamsError.message,
             teams: [],
             selectedTeam: null,
           }));
@@ -125,7 +173,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
         }
 
         // Se não encontramos equipes, definir estado como vazio mas não em loading
-        if (!memberData || memberData.length === 0) {
+        if (!teamsData || teamsData.length === 0) {
           setState((prev) => ({
             ...prev,
             teams: [],
@@ -140,28 +188,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
           return;
         }
 
-        // Buscar detalhes das equipes em uma consulta separada
-        const teamIds = memberData.map((mt) => mt.team_id);
-        const { data: teamsData, error: teamsError } = await supabase
-          .from("teams")
-          .select("id, name, owner_email, team_size, created_at")
-          .in("id", teamIds);
-
-        if (teamsError) {
-          console.error("Erro ao buscar detalhes das equipes:", teamsError);
-          setState((prev) => ({
-            ...prev,
-            isLoading: false,
-            error: teamsError.message,
-            teams: [],
-            selectedTeam: null,
-          }));
-          loadingTeamsRef.current = false;
-          initialLoadAttempted.current = true;
-          return;
-        }
-
-        const uniqueTeams = (teamsData || [])
+        const uniqueTeams = teamsData
           .map(
             (team) =>
               ({
@@ -214,7 +241,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
         initialLoadAttempted.current = true;
       }
     },
-    [user?.email, loadTeamMembers]
+    [user?.email]
   );
 
   // Modificar o efeito que tenta carregar as equipes automaticamente
@@ -230,7 +257,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
     if (!user) {
       clearState();
     }
-  }, [user, clearState]);
+  }, [user]);
 
   // Efeito para ouvir atualizações de equipe
   useEffect(() => {
@@ -245,7 +272,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
     return () => {
       window.removeEventListener("teamUpdate", handleTeamUpdate);
     };
-  }, [user?.email, user?.id, loadTeams]);
+  }, [user?.email, user?.id]);
 
   // Obter o membro atual
   const getCurrentMember = useCallback(
@@ -336,7 +363,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
         throw error;
       }
     },
-    [loadTeamMembers]
+    []
   );
 
   // Adicionar membro à equipe
@@ -376,7 +403,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
         throw error;
       }
     },
-    [loadTeamMembers]
+    []
   );
 
   // Selecionar uma equipe
@@ -388,7 +415,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
         loadTeamMembers(team.id);
       }
     },
-    [state.teams, loadTeamMembers]
+    [state.teams]
   );
 
   // Atualizar status do membro
@@ -547,20 +574,33 @@ export function TeamProvider({ children }: TeamProviderProps) {
     };
 
     handleInvite();
-  }, [user?.id, user?.email, pendingInviteId, processInvite, refreshTeams]);
+  }, [user?.id, user?.email, pendingInviteId]);
 
   // Carregar respostas da pesquisa da equipe
   const loadTeamSurveyResponses = useCallback(async (teamId: string) => {
     try {
       setState((prev) => ({ ...prev, isLoading: true }));
+      console.log(`Carregando respostas da pesquisa para equipe ${teamId}`);
+
+      if (!teamId) {
+        throw new Error("ID da equipe não fornecido");
+      }
+
       const responses = await TeamService.getTeamSurveyResponses(teamId);
+
+      console.log(
+        `Obtidas ${responses.length} respostas para a equipe ${teamId}`
+      );
+
       setState((prev) => ({
         ...prev,
         teamSurveyResponses: responses,
         isLoading: false,
       }));
+
       return responses;
     } catch (error: any) {
+      console.error("Erro ao carregar respostas da equipe:", error);
       setState((prev) => ({
         ...prev,
         isLoading: false,

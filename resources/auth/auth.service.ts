@@ -21,10 +21,22 @@ export const AuthService = {
   ) => {
     try {
       // Determinar a URL base com base no ambiente atual
-      const baseUrl =
-        typeof window !== "undefined"
-          ? window.location.origin
-          : "https://radar21.com.br";
+      let baseUrl;
+      if (typeof window !== "undefined") {
+        // Verificar se estamos em um subdomínio org
+        const isOrgSubdomain = window.location.hostname.startsWith("org.");
+
+        if (isOrgSubdomain) {
+          // Se estiver no subdomínio org, manter o mesmo host para o callback
+          baseUrl = window.location.origin;
+        } else {
+          // Se estiver no domínio principal, manter o domínio principal
+          baseUrl = window.location.origin;
+        }
+      } else {
+        // Fallback para servidor
+        baseUrl = "https://radar21.com.br";
+      }
 
       // Construir a URL de redirecionamento completa
       const redirectUrl = options.redirectTo || `${baseUrl}/auth/callback`;
@@ -175,6 +187,38 @@ export const AuthService = {
         throw new Error("Papel de usuário inválido");
       }
 
+      // Determinar URL de redirecionamento apropriado com base no hostname
+      let redirectUrl;
+      if (typeof window !== "undefined") {
+        const isOrgSubdomain = window.location.hostname.startsWith("org.");
+
+        if (normalizedRole === "ORGANIZATION" && !isOrgSubdomain) {
+          // Se estiver registrando uma organização mas não estiver no subdomínio org,
+          // redirecionar para o subdomínio org
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          redirectUrl = `${protocol}//org.${host.replace(
+            /^org\./,
+            ""
+          )}/auth/callback?type=signup`;
+        } else if (normalizedRole !== "ORGANIZATION" && isOrgSubdomain) {
+          // Se estiver registrando um usuário regular mas estiver no subdomínio org,
+          // redirecionar para o domínio principal
+          const protocol = window.location.protocol;
+          const host = window.location.host;
+          redirectUrl = `${protocol}//${host.replace(
+            /^org\./,
+            ""
+          )}/auth/callback?type=signup`;
+        } else {
+          // Caso padrão: mesmo domínio
+          redirectUrl = `${window.location.origin}/auth/callback?type=signup`;
+        }
+      } else {
+        // Fallback para servidor
+        redirectUrl = `https://radar21.com.br/auth/callback?type=signup`;
+      }
+
       // Criar o usuário no Supabase Auth
       const { data, error } = await supabase.auth.signUp({
         email,
@@ -184,7 +228,7 @@ export const AuthService = {
             role: normalizedRole,
             email_confirmed: false,
           },
-          emailRedirectTo: `${window.location.origin}/auth/callback?type=signup`,
+          emailRedirectTo: redirectUrl,
         },
       });
 
