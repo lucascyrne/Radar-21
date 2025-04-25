@@ -1,21 +1,27 @@
 -- 1. Tabelas principais
 -- 1.1 Usuários do sistema (extensão da tabela auth.users)
 CREATE TABLE IF NOT EXISTS "public"."user_profiles" (
-    "id" uuid DEFAULT uuid_generate_v4(),
+    "id" uuid NOT NULL DEFAULT uuid_generate_v4(),
     "email" text NOT NULL,
-    "role" text NOT NULL CHECK (role IN ('ORGANIZATION', 'USER')),
+    "role" public.user_role NOT NULL,
     "created_at" timestamp with time zone DEFAULT now(),
     "updated_at" timestamp with time zone DEFAULT now(),
     "auth_id" uuid REFERENCES auth.users(id) ON DELETE SET NULL,
     CONSTRAINT "user_profiles_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "user_profiles_email_key" UNIQUE ("email")
+    CONSTRAINT "user_profiles_email_key" UNIQUE ("email"),
+    CONSTRAINT "user_profiles_auth_id_key" UNIQUE ("auth_id")
 );
+
+-- Índices para melhorar performance
+CREATE INDEX IF NOT EXISTS idx_user_profiles_email ON public.user_profiles USING btree (email);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_auth_id ON public.user_profiles USING btree (auth_id);
+CREATE INDEX IF NOT EXISTS idx_user_profiles_role ON public.user_profiles USING btree (role);
 
 -- Função para criar ou atualizar perfil de usuário
 CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS trigger AS $$
 DECLARE
-  user_role_value text;
+  user_role_value public.user_role;
   profile_id uuid;
 BEGIN
   -- Determinar o role com base nos metadados do usuário
@@ -39,8 +45,8 @@ BEGIN
     WHERE id = profile_id;
   ELSE
     -- Criar novo perfil
-    INSERT INTO public.user_profiles (id, email, role, auth_id)
-    VALUES (new.id, new.email, user_role_value, new.id)
+    INSERT INTO public.user_profiles (email, role, auth_id)
+    VALUES (new.email, user_role_value, new.id)
     RETURNING id INTO profile_id;
   END IF;
 
@@ -60,7 +66,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 -- Função para criar perfil preliminar
 CREATE OR REPLACE FUNCTION public.create_preliminary_profile(
   user_email text,
-  user_role text DEFAULT 'USER'
+  user_role public.user_role DEFAULT 'USER'
 )
 RETURNS uuid
 LANGUAGE plpgsql
@@ -102,7 +108,7 @@ BEGIN
   ) INTO profile_data
   FROM public.user_profiles
   WHERE auth_id = user_id
-  OR id = user_id;  -- Adicionar busca por ID também
+  OR id = user_id;
 
   -- Se não encontrar, buscar por email usando auth.users
   IF profile_data IS NULL THEN
@@ -119,7 +125,6 @@ BEGIN
     WHERE au.id = user_id;
   END IF;
 
-  -- Se ainda não encontrar, retornar nulo
   RETURN profile_data;
 END;
 $$;

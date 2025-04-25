@@ -4,19 +4,17 @@
 CREATE OR REPLACE VIEW "public"."organization_team_overview" AS
 SELECT
     t.organization_id,
-    up.email AS organization_email,
+    t.owner_email AS organization_email,
     t.id AS team_id,
     t.name AS team_name,
-    COUNT(DISTINCT tm.id) FILTER (WHERE tm.status = 'answered') AS members_answered,
-    COUNT(DISTINCT tm.id) AS total_members,
+    COUNT(DISTINCT tm.id) FILTER (WHERE tm.status = 'ACTIVE') AS members_answered,
+    t.team_size AS total_members,
     t.created_at AS team_created_at,
-    COUNT(DISTINCT CASE WHEN tm.role = 'leader' AND tm.status = 'answered' THEN tm.id END) AS leaders_answered,
+    COUNT(DISTINCT CASE WHEN tm.role = 'leader' AND tm.status = 'ACTIVE' THEN tm.id END) AS leaders_answered,
     COUNT(DISTINCT CASE WHEN tm.role = 'leader' THEN tm.id END) AS total_leaders
 FROM teams t
-JOIN user_profiles up ON up.auth_id = t.organization_id
 LEFT JOIN team_members tm ON tm.team_id = t.id
-WHERE t.organization_id IS NOT NULL
-GROUP BY t.organization_id, up.email, t.id, t.name, t.created_at;
+GROUP BY t.organization_id, t.owner_email, t.id, t.name, t.team_size, t.created_at;
 
 -- View para respostas de pesquisa por equipe
 CREATE OR REPLACE VIEW "public"."team_survey_responses" AS
@@ -24,7 +22,7 @@ SELECT
     t.id AS team_id,
     t.name AS team_name,
     t.organization_id,
-    up.email AS organization_email,
+    t.owner_email AS organization_email,
     tm.id AS member_id,
     tm.email AS member_email,
     tm.role AS member_role,
@@ -43,32 +41,28 @@ SELECT
     sr.q12,
     sr.created_at AS response_date
 FROM teams t
-JOIN user_profiles up ON up.auth_id = t.organization_id
 JOIN team_members tm ON tm.team_id = t.id
-LEFT JOIN survey_responses sr ON sr.user_id = tm.user_id AND sr.team_id = t.id
-WHERE t.organization_id IS NOT NULL;
+LEFT JOIN survey_responses sr ON sr.user_id = tm.user_id AND sr.team_id = t.id;
 
 -- View para métricas de organização
 CREATE OR REPLACE VIEW "public"."organization_metrics" AS
 SELECT
     t.organization_id,
-    up.email AS organization_email,
+    t.owner_email AS organization_email,
     COUNT(DISTINCT t.id) AS total_teams,
     COUNT(DISTINCT tm.id) AS total_members,
-    COUNT(DISTINCT CASE WHEN tm.status = 'answered' THEN tm.id END) AS total_responses,
+    COUNT(DISTINCT CASE WHEN tm.status = 'ACTIVE' THEN tm.id END) AS total_responses,
     COUNT(DISTINCT CASE WHEN tm.role = 'leader' THEN tm.id END) AS total_leaders,
-    COUNT(DISTINCT CASE WHEN tm.role = 'leader' AND tm.status = 'answered' THEN tm.id END) AS leaders_responded
+    COUNT(DISTINCT CASE WHEN tm.role = 'leader' AND tm.status = 'ACTIVE' THEN tm.id END) AS leaders_responded
 FROM teams t
-JOIN user_profiles up ON up.auth_id = t.organization_id
 LEFT JOIN team_members tm ON tm.team_id = t.id
-WHERE t.organization_id IS NOT NULL
-GROUP BY t.organization_id, up.email;
+GROUP BY t.organization_id, t.owner_email;
 
 -- View para respostas de perguntas abertas por organização
 CREATE OR REPLACE VIEW "public"."organization_open_answers" AS 
 SELECT 
     t.organization_id,
-    up.email AS organization_email,
+    t.owner_email AS organization_email,
     t.id AS team_id,
     t.name AS team_name,
     tm.user_id,
@@ -78,21 +72,20 @@ SELECT
     oqr.q14 AS leadership_improvements,
     oqr.created_at AS response_date
 FROM teams t
-JOIN user_profiles up ON up.auth_id = t.organization_id
 JOIN team_members tm ON tm.team_id = t.id
 LEFT JOIN open_question_responses oqr ON oqr.user_id = tm.user_id AND oqr.team_id = t.id
-WHERE t.organization_id IS NOT NULL
-AND (oqr.q13 IS NOT NULL OR oqr.q14 IS NOT NULL);
+WHERE (oqr.q13 IS NOT NULL OR oqr.q14 IS NOT NULL);
 
 -- View para comparação de competências
 CREATE OR REPLACE VIEW "public"."competency_comparison" AS
 WITH team_data AS (
     SELECT
-        team_id,
-        member_role AS role,
-        q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12
-    FROM team_survey_responses
-    WHERE response_status = 'answered'
+        tsr.team_id,
+        tsr.member_role AS role,
+        tsr.q1, tsr.q2, tsr.q3, tsr.q4, tsr.q5, tsr.q6, 
+        tsr.q7, tsr.q8, tsr.q9, tsr.q10, tsr.q11, tsr.q12
+    FROM team_survey_responses tsr
+    WHERE tsr.response_status = 'ACTIVE'
 ),
 leader_data AS (
     SELECT
@@ -266,12 +259,13 @@ begin
   for v_user in (
     select 
       tm.id,
-      tm.email,
+      up.email,
       tm.status,
       t.name as team_name
     from team_members tm
     inner join teams t on t.id = tm.team_id
-    where tm.status in ('invited', 'pending_survey')
+    inner join user_profiles up on up.id = tm.user_id
+    where tm.status = 'PENDING'
     and (
       tm.last_reminder_sent is null 
       or tm.last_reminder_sent < now() - interval '3 days'
@@ -288,38 +282,19 @@ begin
         body := jsonb_build_object(
           'from', 'Radar21 <noreply@radar21.com.br>',
           'to', v_user.email,
-          'subject', case 
-            when v_user.status = 'invited' then 'Complete seu cadastro no Radar21'
-            else 'Complete a pesquisa do Radar21'
-          end,
-          'html', case 
-            when v_user.status = 'invited' then
-              format(
-                '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                  <h1>Complete seu cadastro no Radar21</h1>
-                  <p>Você foi convidado para participar da equipe %s.</p>
-                  <p>Complete seu cadastro para começar.</p>
-                  <a href="%s/auth" style="background-color: #2563EB; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
-                    Completar Cadastro
-                  </a>
-                </div>',
-                v_user.team_name,
-                current_setting('PUBLIC_APP_URL')
-              )
-            else
-              format(
-                '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
-                  <h1>Complete a pesquisa do Radar21</h1>
-                  <p>Sua participação na pesquisa da equipe %s está pendente.</p>
-                  <p>Complete-a para contribuir com sua equipe.</p>
-                  <a href="%s/survey" style="background-color: #2563EB; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
-                    Responder Pesquisa
-                  </a>
-                </div>',
-                v_user.team_name,
-                current_setting('PUBLIC_APP_URL')
-              )
-          end
+          'subject', 'Complete seu cadastro no Radar21',
+          'html', format(
+            '<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <h1>Complete seu cadastro no Radar21</h1>
+              <p>Você foi convidado para participar da equipe %s.</p>
+              <p>Complete seu cadastro para começar.</p>
+              <a href="%s/auth" style="background-color: #2563EB; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+                Completar Cadastro
+              </a>
+            </div>',
+            v_user.team_name,
+            current_setting('PUBLIC_APP_URL')
+          )
         )
       ) into v_response;
 

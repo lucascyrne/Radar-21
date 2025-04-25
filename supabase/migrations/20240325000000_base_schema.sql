@@ -7,7 +7,7 @@ create schema if not exists cron;
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'user_role' AND typnamespace = (SELECT oid FROM pg_namespace WHERE nspname = 'public')) THEN
-        CREATE TYPE public.user_role AS ENUM ('COLLABORATOR', 'LEADER', 'ORGANIZATION', 'ADMIN', 'SUPPORT');
+        CREATE TYPE public.user_role AS ENUM ('ORGANIZATION', 'USER');
     END IF;
 END
 $$;

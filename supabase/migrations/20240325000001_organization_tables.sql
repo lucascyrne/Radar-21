@@ -1,26 +1,24 @@
 -- 1. Criação de tipos e tabelas para organizações
-CREATE TYPE public.org_invitation_status AS ENUM ('pending', 'accepted', 'rejected');
+CREATE TYPE public.org_invitation_status AS ENUM ('PENDING', 'ACTIVE');
 
 -- Tabela de membros da organização
 CREATE TABLE IF NOT EXISTS "public"."organization_members" (
     "id" uuid DEFAULT uuid_generate_v4(),
     "organization_id" uuid REFERENCES auth.users(id) ON DELETE CASCADE,
     "user_id" uuid REFERENCES auth.users(id) ON DELETE CASCADE,
-    "email" text NOT NULL,
-    "role" text NOT NULL CHECK (role IN ('admin', 'leader')),
-    "status" text NOT NULL CHECK (status IN ('invited', 'active')),
+    "role" text NOT NULL CHECK (role IN ('leader', 'member')),
+    "status" org_invitation_status NOT NULL DEFAULT 'PENDING',
     "last_reminder_sent" timestamp with time zone,
     "created_at" timestamp with time zone DEFAULT now(),
     "updated_at" timestamp with time zone DEFAULT now(),
     CONSTRAINT "organization_members_pkey" PRIMARY KEY ("id"),
-    CONSTRAINT "organization_members_org_email_key" UNIQUE ("organization_id", "email")
+    CONSTRAINT "organization_members_org_user_key" UNIQUE ("organization_id", "user_id")
 );
 
 -- Índices para organization_members
 CREATE INDEX IF NOT EXISTS idx_org_members_org_id ON public.organization_members USING btree (organization_id);
 CREATE INDEX IF NOT EXISTS idx_org_members_user_id ON public.organization_members USING btree (user_id);
-CREATE INDEX IF NOT EXISTS idx_org_members_email ON public.organization_members USING btree (email);
-CREATE INDEX IF NOT EXISTS idx_org_members_status ON public.organization_members USING btree (status) WHERE status = 'active';
+CREATE INDEX IF NOT EXISTS idx_org_members_status ON public.organization_members USING btree (status);
 
 -- Triggers para atualização de timestamps
 CREATE TRIGGER update_organization_members_updated_at 
@@ -39,13 +37,13 @@ USING (
     SELECT 1 FROM public.organization_members
     WHERE organization_id = public.organization_members.organization_id
     AND user_id = auth.uid()
-    AND role = 'admin'
+    AND status = 'ACTIVE'
   )
   OR organization_id = auth.uid()
   OR user_id = auth.uid()
 );
 
-CREATE POLICY "Permitir modificação de membros para admins da organização"
+CREATE POLICY "Permitir modificação por líderes"
 ON "public"."organization_members"
 FOR ALL
 USING (
@@ -53,10 +51,62 @@ USING (
     SELECT 1 FROM public.organization_members
     WHERE organization_id = public.organization_members.organization_id
     AND user_id = auth.uid()
-    AND role = 'admin'
+    AND role = 'leader'
+    AND status = 'ACTIVE'
   )
   OR organization_id = auth.uid()
 );
+
+-- Função para convidar um membro para uma organização
+CREATE OR REPLACE FUNCTION public.invite_member_to_organization(
+  org_id uuid,
+  member_email text,
+  member_role text DEFAULT 'member'
+)
+RETURNS uuid
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+  v_member_id uuid;
+  v_user_id uuid;
+BEGIN
+  -- Verificar se o email já existe como usuário
+  SELECT id INTO v_user_id
+  FROM auth.users
+  WHERE email = member_email;
+  
+  -- Criar ou atualizar o membro da organização
+  INSERT INTO public.organization_members (
+    organization_id,
+    user_id,
+    role,
+    status
+  )
+  VALUES (
+    org_id,
+    v_user_id,
+    member_role,
+    CASE WHEN v_user_id IS NULL THEN 'PENDING' ELSE 'ACTIVE' END
+  )
+  ON CONFLICT (organization_id, user_id)
+  DO UPDATE SET
+    role = EXCLUDED.role,
+    status = CASE WHEN EXCLUDED.user_id IS NULL THEN 'PENDING' ELSE 'ACTIVE' END,
+    updated_at = now()
+  RETURNING id INTO v_member_id;
+  
+  -- Se o usuário não existir, criar um perfil preliminar
+  IF v_user_id IS NULL THEN
+    PERFORM public.create_preliminary_profile(
+      member_email,
+      'USER'::public.user_role
+    );
+  END IF;
+  
+  RETURN v_member_id;
+END;
+$$;
 
 -- 3. Funções para gerenciamento de organizações
 -- Função para criar uma organização
@@ -70,36 +120,28 @@ SECURITY DEFINER
 AS $$
 DECLARE
   v_org_id uuid;
-  v_owner_id uuid;
 BEGIN
   -- Buscar ID do usuário pelo email
-  SELECT id INTO v_owner_id
+  SELECT id INTO v_org_id
   FROM auth.users
   WHERE email = owner_email;
   
-  IF v_owner_id IS NULL THEN
+  IF v_org_id IS NULL THEN
     RAISE EXCEPTION 'Usuário não encontrado com o email fornecido';
   END IF;
-  
-  -- Criar a organização
-  INSERT INTO public.organizations (name, owner_id)
-  VALUES (org_name, v_owner_id)
-  RETURNING id INTO v_org_id;
   
   -- Adicionar o proprietário como membro admin da organização
   INSERT INTO public.organization_members (
     organization_id, 
     user_id, 
-    email, 
     role, 
     status
   )
   VALUES (
     v_org_id, 
-    v_owner_id, 
-    owner_email, 
-    'admin', 
-    'active'
+    v_org_id, 
+    'leader', 
+    'ACTIVE'
   );
   
   RETURN v_org_id;
@@ -128,22 +170,19 @@ BEGIN
   INSERT INTO public.organization_members (
     organization_id,
     user_id,
-    email,
     role,
     status
   )
   VALUES (
     org_id,
     v_user_id,
-    leader_email,
     'leader',
-    CASE WHEN v_user_id IS NULL THEN 'invited' ELSE 'active' END
+    CASE WHEN v_user_id IS NULL THEN 'PENDING' ELSE 'ACTIVE' END
   )
-  ON CONFLICT (organization_id, email)
+  ON CONFLICT (organization_id, user_id)
   DO UPDATE SET
-    user_id = EXCLUDED.user_id,
     role = EXCLUDED.role,
-    status = CASE WHEN EXCLUDED.user_id IS NULL THEN 'invited' ELSE 'active' END,
+    status = CASE WHEN EXCLUDED.user_id IS NULL THEN 'PENDING' ELSE 'ACTIVE' END,
     updated_at = now()
   RETURNING id INTO v_member_id;
   
@@ -151,7 +190,7 @@ BEGIN
   IF v_user_id IS NULL THEN
     PERFORM public.create_preliminary_profile(
       leader_email,
-      'LEADER'::public.user_role
+      'USER'::public.user_role
     );
   END IF;
   

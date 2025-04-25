@@ -1,4 +1,4 @@
--- Desativar RLS em todas as tabelas
+-- Desativar RLS em todas as tabelas temporariamente para reconfiguração
 ALTER TABLE IF EXISTS "public"."teams" DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS "public"."team_members" DISABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS "public"."demographic_data" DISABLE ROW LEVEL SECURITY;
@@ -19,19 +19,6 @@ BEGIN
     END LOOP;
 END$$;
 
--- Função básica para verificar admin
-CREATE OR REPLACE FUNCTION public.is_admin()
-RETURNS boolean
-LANGUAGE sql SECURITY DEFINER
-SET search_path = public
-AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.user_profiles
-    WHERE id = auth.uid()
-    AND role IN ('ADMIN', 'SUPPORT')
-  );
-$$;
-
 -- Função para obter email do usuário autenticado
 CREATE OR REPLACE FUNCTION public.get_auth_email()
 RETURNS text
@@ -44,93 +31,158 @@ AS $$
   );
 $$;
 
--- Reativar RLS para todas as tabelas
-ALTER TABLE IF EXISTS "public"."demographic_data" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "public"."survey_responses" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "public"."open_question_responses" ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS "public"."user_profiles" ENABLE ROW LEVEL SECURITY;
+-- Função para verificar se o usuário é uma organização
+CREATE OR REPLACE FUNCTION public.is_organization()
+RETURNS boolean
+LANGUAGE sql SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 
+    FROM public.user_profiles 
+    WHERE auth_id = auth.uid() 
+    AND role = 'ORGANIZATION'
+  );
+$$;
+
+-- Função para verificar se o usuário é um usuário comum
+CREATE OR REPLACE FUNCTION public.is_regular_user()
+RETURNS boolean
+LANGUAGE sql SECURITY DEFINER
+SET search_path = public
+AS $$
+  SELECT EXISTS (
+    SELECT 1 
+    FROM public.user_profiles 
+    WHERE auth_id = auth.uid() 
+    AND role = 'USER'
+  );
+$$;
 
 -- Permissões básicas
 GRANT ALL ON ALL TABLES IN SCHEMA public TO anon, authenticated, service_role;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated, service_role;
 
--- Política para dados demográficos
-CREATE POLICY "demographic_data_policy" ON public.demographic_data
-    FOR ALL TO authenticated
-    USING (
-        user_id = auth.uid() OR
-        public.is_admin() OR
-        EXISTS (
-            SELECT 1 FROM public.team_members tm
-            WHERE tm.email = public.get_auth_email()
-            AND tm.team_id = demographic_data.team_id
-        )
-    )
-    WITH CHECK (user_id = auth.uid());
+-- POLÍTICAS DE ACESSO PARA PROFILES
+-- Política para visualizar perfis
+CREATE POLICY "user_profiles_select_policy" 
+ON public.user_profiles
+FOR SELECT
+USING (
+  auth_id = auth.uid() OR             -- Próprio perfil
+  role = 'ORGANIZATION' OR            -- Perfis de organizações são visíveis
+  EXISTS (                            -- Perfis das organizações do usuário
+    SELECT 1 FROM organization_members om
+    WHERE om.organization_id = auth_id
+    AND om.user_id = auth.uid()
+  )
+);
 
--- Política para respostas da pesquisa
-CREATE POLICY "survey_responses_policy" ON public.survey_responses
-    FOR ALL TO authenticated
-    USING (
-        user_id = auth.uid() OR
-        public.is_admin() OR
-        EXISTS (
-            SELECT 1 FROM public.team_members tm
-            WHERE tm.email = public.get_auth_email()
-            AND tm.team_id = survey_responses.team_id
-            AND tm.status = 'answered'
-        )
-    )
-    WITH CHECK (user_id = auth.uid());
+-- Política para atualizar perfis
+CREATE POLICY "user_profiles_update_policy" 
+ON public.user_profiles
+FOR UPDATE
+USING (auth_id = auth.uid())
+WITH CHECK (auth_id = auth.uid());
 
--- Política para respostas abertas
-CREATE POLICY "open_question_responses_policy" ON public.open_question_responses
-    FOR ALL TO authenticated
-    USING (
-        user_id = auth.uid() OR
-        public.is_admin() OR
-        EXISTS (
-            SELECT 1 FROM public.team_members tm
-            WHERE tm.email = public.get_auth_email()
-            AND tm.team_id = open_question_responses.team_id
-            AND tm.status = 'answered'
-        )
-    )
-    WITH CHECK (user_id = auth.uid());
+-- POLÍTICAS SIMPLIFICADAS PARA TEAMS
+-- Política básica para visualização de equipes
+CREATE POLICY "teams_view_policy" 
+ON public.teams
+FOR SELECT
+USING (true);  -- Todos podem visualizar equipes
 
--- Políticas para perfis de usuário
-CREATE POLICY "user_profiles_select_policy" ON public.user_profiles
-    FOR SELECT TO authenticated
-    USING (
-        id = auth.uid() OR
-        auth_id = auth.uid() OR
-        email = public.get_auth_email() OR
-        public.is_admin() OR
-        EXISTS (
-            SELECT 1 FROM public.team_members tm
-            WHERE tm.email = public.get_auth_email()
-            AND tm.team_id IN (
-                SELECT team_id FROM public.team_members
-                WHERE email = user_profiles.email
-            )
-        )
-    );
+-- Política para gerenciamento de equipes
+CREATE POLICY "teams_manage_policy" 
+ON public.teams
+FOR ALL
+USING (
+  organization_id = auth.uid() OR     -- É dono da equipe
+  auth.role() = 'service_role'        -- Permissão para funções de serviço
+);
 
-CREATE POLICY "user_profiles_insert_policy" ON public.user_profiles
-    FOR INSERT TO authenticated
-    WITH CHECK (email = public.get_auth_email());
+-- Política para criação de equipes
+CREATE POLICY "teams_insert_policy" 
+ON public.teams
+FOR INSERT
+WITH CHECK (
+  auth.role() = 'authenticated'       -- Qualquer usuário autenticado pode criar equipes
+);
 
-CREATE POLICY "user_profiles_update_policy" ON public.user_profiles
-    FOR UPDATE TO authenticated
-    USING (
-        id = auth.uid() OR
-        auth_id = auth.uid() OR
-        email = public.get_auth_email() OR
-        public.is_admin()
-    )
-    WITH CHECK (
-        id = auth.uid() OR
-        auth_id = auth.uid() OR
-        email = public.get_auth_email() OR
-        public.is_admin()
-    );
+-- POLÍTICAS SIMPLIFICADAS PARA TEAM_MEMBERS
+-- Política básica para visualização de membros
+CREATE POLICY "team_members_view_policy" 
+ON public.team_members
+FOR SELECT
+USING (true);  -- Todos podem visualizar membros de equipes
+
+-- Política para inserção de membros
+CREATE POLICY "team_members_insert_policy" 
+ON public.team_members
+FOR INSERT
+WITH CHECK (true);  -- Permitir qualquer inserção
+
+-- Política para atualização de membros
+CREATE POLICY "team_members_update_policy" 
+ON public.team_members
+FOR UPDATE
+USING (true);  -- Permitir qualquer atualização
+
+-- Política para deleção de membros
+CREATE POLICY "team_members_delete_policy"
+ON public.team_members
+FOR DELETE
+USING (auth.role() = 'authenticated');  -- Manter restrição apenas para deleção
+
+-- POLÍTICAS PARA DEMOGRAPHIC_DATA
+CREATE POLICY "demographic_data_policy" 
+ON public.demographic_data
+FOR ALL
+USING (
+  user_id = auth.uid() OR             -- Próprio usuário
+  EXISTS (                            -- Organização dona da equipe
+    SELECT 1 FROM teams t
+    WHERE t.id = team_id
+    AND t.organization_id = auth.uid()
+  ) OR
+  auth.role() = 'service_role'        -- Permissão para funções de serviço
+)
+WITH CHECK (user_id = auth.uid() OR auth.role() = 'service_role');
+
+-- POLÍTICAS PARA SURVEY_RESPONSES
+CREATE POLICY "survey_responses_policy" 
+ON public.survey_responses
+FOR ALL
+USING (
+  user_id = auth.uid() OR             -- Próprio usuário
+  EXISTS (                            -- Organização dona da equipe
+    SELECT 1 FROM teams t
+    WHERE t.id = team_id
+    AND t.organization_id = auth.uid()
+  ) OR
+  auth.role() = 'service_role'        -- Permissão para funções de serviço
+)
+WITH CHECK (user_id = auth.uid() OR auth.role() = 'service_role');
+
+-- POLÍTICAS PARA OPEN_QUESTION_RESPONSES
+CREATE POLICY "open_question_responses_policy" 
+ON public.open_question_responses
+FOR ALL
+USING (
+  user_id = auth.uid() OR             -- Próprio usuário
+  EXISTS (                            -- Organização dona da equipe
+    SELECT 1 FROM teams t
+    WHERE t.id = team_id
+    AND t.organization_id = auth.uid()
+  ) OR
+  auth.role() = 'service_role'        -- Permissão para funções de serviço
+)
+WITH CHECK (user_id = auth.uid() OR auth.role() = 'service_role');
+
+-- Reativar RLS para todas as tabelas
+ALTER TABLE IF EXISTS "public"."teams" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "public"."team_members" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "public"."demographic_data" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "public"."survey_responses" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "public"."open_question_responses" ENABLE ROW LEVEL SECURITY;
+ALTER TABLE IF EXISTS "public"."user_profiles" ENABLE ROW LEVEL SECURITY;
