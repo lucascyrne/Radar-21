@@ -27,11 +27,8 @@ export interface User {
 }
 
 export enum UserRole {
-  COLLABORATOR = "COLLABORATOR",
-  LEADER = "LEADER",
+  USER = "USER",
   ORGANIZATION = "ORGANIZATION",
-  ADMIN = "ADMIN",
-  SUPPORT = "SUPPORT",
 }
 
 export enum UserStatus {

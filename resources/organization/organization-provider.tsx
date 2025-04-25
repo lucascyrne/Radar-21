@@ -1,5 +1,6 @@
 "use client";
 
+import supabase from "@/lib/supabase/client";
 import { ReactNode, useCallback, useEffect, useState } from "react";
 import { useAuth } from "../auth/auth-hook";
 import OrganizationContext, { initialState } from "./organization-context";
@@ -27,23 +28,44 @@ export const OrganizationProvider = ({
 
   // Inicializar a organização com base no usuário atual
   useEffect(() => {
-    if (user?.role === "ORGANIZATION") {
-      // Se o usuário for uma organização, usá-lo como organização selecionada
-      const userOrg: Organization = {
-        id: user.id,
-        name: user.name || user.email || "Minha Organização",
-        owner_id: user.id,
-        created_at: user.email_confirmed_at || new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      };
+    const initializeOrganization = async () => {
+      if (!user?.id) return;
 
-      updateState({
-        organizations: [userOrg],
-        selectedOrganization: userOrg,
-        isLoading: false,
-      });
-    }
-  }, [user, updateState]);
+      try {
+        // Buscar perfil do usuário
+        const { data: profile } = await supabase
+          .from("user_profiles")
+          .select("*")
+          .eq("auth_id", user.id)
+          .maybeSingle();
+
+        if (profile?.role === "ORGANIZATION") {
+          // Se o usuário for uma organização, usá-lo como organização selecionada
+          const userOrg: Organization = {
+            id: profile.id, // Usar o ID do perfil
+            name: user.user_metadata?.name || user.email || "Minha Organização",
+            created_at:
+              profile.created_at || user.created_at || new Date().toISOString(),
+            updated_at: profile.updated_at || new Date().toISOString(),
+          };
+
+          updateState({
+            organizations: [userOrg],
+            selectedOrganization: userOrg,
+            isLoading: false,
+          });
+        }
+      } catch (error) {
+        console.error("Erro ao inicializar organização:", error);
+        updateState({
+          error: "Erro ao carregar organização",
+          isLoading: false,
+        });
+      }
+    };
+
+    initializeOrganization();
+  }, [user]);
 
   // Selecionar uma organização
   const selectOrganization = (organization: Organization | null) => {

@@ -1,6 +1,7 @@
 "use client";
 
 import supabase from "@/lib/supabase/client";
+import { PostgrestError } from "@supabase/supabase-js";
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/auth-hook";
 import { useInvite } from "../invite/invite-hook";
@@ -12,6 +13,12 @@ import {
   TeamMemberStatus,
 } from "./team-model";
 import { TeamService } from "./team.service";
+
+interface UserProfile {
+  id: string;
+  role: string;
+  auth_id: string;
+}
 
 interface TeamProviderProps {
   children: ReactNode;
@@ -105,38 +112,51 @@ export function TeamProvider({ children }: TeamProviderProps) {
         console.log("Carregando equipes para usuário:", userId);
 
         // Primeiro, verificar o papel do usuário
-        const { data: userProfile, error: profileError } = await supabase
+        const { data: userProfile, error: profileError } = (await supabase
           .from("user_profiles")
-          .select("role")
+          .select("*")
           .eq("auth_id", userId)
-          .single();
+          .single()) as {
+          data: UserProfile | null;
+          error: PostgrestError | null;
+        };
 
-        if (profileError) {
-          console.error("Erro ao verificar perfil do usuário:", profileError);
+        if (profileError || !userProfile) {
           setState((prev) => ({
             ...prev,
             isLoading: false,
-            error: profileError.message,
+            error:
+              profileError?.message || "Erro ao carregar perfil do usuário",
             teams: [],
             selectedTeam: null,
           }));
           loadingTeamsRef.current = false;
           initialLoadAttempted.current = true;
+          teamsLoadedRef.current = true;
           return;
         }
 
-        let teamsData;
-        let teamsError;
+        let teamsData: Team[] = [];
+        let teamsError: PostgrestError | null = null;
 
-        if (userProfile.role === "ORGANIZATION") {
-          // Se for uma organização, buscar times onde é owner ou organization_id
+        if (userProfile.role === "admin") {
+          // Se for admin, buscar todos os times
           const { data, error } = await supabase
             .from("teams")
-            .select("id, name, owner_email, team_size, created_at")
-            .or(`owner_id.eq.${userId},organization_id.eq.${userId}`);
+            .select("*")
+            .order("created_at", { ascending: false });
 
-          teamsData = data;
           teamsError = error;
+          const mappedTeams: Team[] =
+            data?.map((team) => ({
+              id: team.id,
+              name: team.name,
+              owner_email: team.owner_email,
+              team_size: team.team_size,
+              created_at: team.created_at,
+              organization_id: team.organization_id,
+            })) ?? [];
+          teamsData = mappedTeams;
         } else {
           // Se for um usuário regular, buscar times via team_members
           const { data: memberData, error: memberError } = await supabase
@@ -150,10 +170,12 @@ export function TeamProvider({ children }: TeamProviderProps) {
             const teamIds = memberData.map((mt) => mt.team_id);
             const { data, error } = await supabase
               .from("teams")
-              .select("id, name, owner_email, team_size, created_at")
+              .select(
+                "id, name, owner_email, team_size, created_at, organization_id"
+              )
               .in("id", teamIds);
 
-            teamsData = data;
+            teamsData = (data ?? []) as Team[];
             teamsError = error;
           }
         }
@@ -169,6 +191,7 @@ export function TeamProvider({ children }: TeamProviderProps) {
           }));
           loadingTeamsRef.current = false;
           initialLoadAttempted.current = true;
+          teamsLoadedRef.current = true;
           return;
         }
 
@@ -190,15 +213,14 @@ export function TeamProvider({ children }: TeamProviderProps) {
 
         const uniqueTeams = teamsData
           .map(
-            (team) =>
-              ({
-                id: team.id,
-                name: team.name,
-                owner_id: "", // Campo não usado mais
-                owner_email: team.owner_email,
-                team_size: team.team_size,
-                created_at: team.created_at,
-              } as Team)
+            (team): Team => ({
+              id: team.id,
+              name: team.name,
+              organization_id: team.organization_id,
+              owner_email: team.owner_email,
+              team_size: team.team_size,
+              created_at: team.created_at,
+            })
           )
           .sort(
             (a, b) =>

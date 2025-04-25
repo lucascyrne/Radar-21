@@ -1,3 +1,5 @@
+import { TeamMemberStatus } from "../team/team-model";
+
 export enum InviteStatus {
   PENDING = "PENDING",
   ACCEPTED = "ACCEPTED",
@@ -26,8 +28,6 @@ export interface TeamInvite {
   created_at: string;
   updated_at: string;
 }
-
-export type TeamMemberStatus = "invited" | "answered" | "pending_survey";
 
 export interface TeamMemberData {
   status: TeamMemberStatus;

@@ -1,17 +1,41 @@
-import { createContext } from 'react';
-import { CreateTeamFormValues, Team, TeamState, TeamMember, TeamMemberStatus, TeamSurveyResponse } from './team-model';
+import { createContext } from "react";
+import {
+  CreateTeamFormValues,
+  Team,
+  TeamMember,
+  TeamMemberStatus,
+  TeamState,
+  TeamSurveyResponse,
+} from "./team-model";
 
 // Tipo do contexto de equipes
 export interface TeamContextType extends TeamState {
   loadTeams: (userId: string) => Promise<void>;
   loadTeamMembers: (teamId: string) => Promise<void>;
   loadTeamSurveyResponses: (teamId: string) => Promise<TeamSurveyResponse[]>;
-  getCurrentMember: (teamId: string, userEmail: string) => Promise<TeamMember | null>;
-  createTeam: (data: CreateTeamFormValues, userId: string, userEmail: string) => Promise<Team>;
-  addTeamMember: (teamId: string, userId: string | null, email: string, role: 'leader' | 'member', status: TeamMemberStatus) => Promise<void>;
+  getCurrentMember: (
+    teamId: string,
+    userEmail: string
+  ) => Promise<TeamMember | null>;
+  createTeam: (
+    data: CreateTeamFormValues,
+    userId: string,
+    userEmail: string
+  ) => Promise<Team>;
+  addTeamMember: (
+    teamId: string,
+    userId: string | null,
+    email: string,
+    role: "leader" | "member",
+    status: TeamMemberStatus
+  ) => Promise<void>;
   selectTeam: (teamId: string) => void;
   generateInviteMessage: (teamName: string, fromEmail: string) => string;
-  updateMemberStatus: (teamId: string, email: string, status: TeamMemberStatus) => Promise<void>;
+  updateMemberStatus: (
+    teamId: string,
+    email: string,
+    status: TeamMemberStatus
+  ) => Promise<void>;
   resetTeamsLoaded: () => void;
   resetMembersLoaded: (teamId: string) => void;
   refreshTeams: () => Promise<void>;
@@ -36,19 +60,18 @@ export const TeamContext = createContext<TeamContextType>({
   loadTeamSurveyResponses: async () => [],
   getCurrentMember: async () => null,
   createTeam: async () => ({
-    id: '',
-    name: '',
-    owner_id: '',
-    owner_email: '',
+    id: "",
+    name: "",
+    owner_email: "",
     team_size: 0,
-    created_at: ''
+    created_at: "",
   }),
   addTeamMember: async () => {},
   selectTeam: () => {},
-  generateInviteMessage: () => '',
+  generateInviteMessage: () => "",
   updateMemberStatus: async () => {},
   resetTeamsLoaded: () => {},
   resetMembersLoaded: () => {},
   refreshTeams: async () => {},
   clearState: () => {},
-}); 
+});

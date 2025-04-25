@@ -75,7 +75,6 @@ export const TeamService = {
         .from("teams")
         .insert({
           name,
-          owner_id: ownerId,
           owner_email: ownerEmail,
           team_size: teamSize,
         })
@@ -289,7 +288,7 @@ export const TeamService = {
       const teamIds = memberTeams.map((mt) => mt.team_id);
       const { data: teams, error } = await supabase
         .from("teams")
-        .select("id, name, owner_id, owner_email, team_size, created_at")
+        .select("id, name, owner_email, team_size, created_at, organization_id")
         .in("id", teamIds);
 
       if (error) {

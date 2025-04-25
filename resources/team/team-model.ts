@@ -35,7 +35,6 @@ export type InviteEmailFormValues = z.infer<typeof inviteEmailSchema>;
 export interface Team {
   id: string;
   name: string;
-  owner_id: string;
   owner_email: string;
   team_size: number;
   organization_id?: string;

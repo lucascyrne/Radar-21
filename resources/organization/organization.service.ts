@@ -175,11 +175,11 @@ export class OrganizationService {
     organizationId: string
   ): Promise<{ data: OrganizationTeamOverview[]; error: any }> {
     try {
-      // Buscar todos os times do usuário/organização
+      // Buscar todos os times da organização
       const { data: teamsData, error: teamsError } = await supabase
         .from("teams")
         .select("id, name, team_size, created_at, owner_email")
-        .eq("owner_id", organizationId);
+        .eq("organization_id", organizationId);
 
       if (teamsError) {
         return { data: [], error: teamsError };
@@ -242,11 +242,11 @@ export class OrganizationService {
     teamId?: string
   ): Promise<{ data: OrganizationOpenAnswer[]; error: any }> {
     try {
-      // Buscar times do usuário/organização
+      // Buscar times da organização
       const { data: teamsData, error: teamsError } = await supabase
         .from("teams")
         .select("id, name")
-        .eq("owner_id", organizationId);
+        .eq("organization_id", organizationId);
 
       if (teamsError) {
         return { data: [], error: teamsError };

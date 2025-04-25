@@ -175,15 +175,7 @@ export const AuthService = {
 
       // Validar o role antes de prosseguir
       const normalizedRole = role.toUpperCase();
-      if (
-        ![
-          "COLLABORATOR",
-          "LEADER",
-          "ORGANIZATION",
-          "ADMIN",
-          "SUPPORT",
-        ].includes(normalizedRole)
-      ) {
+      if (!["USER", "ORGANIZATION"].includes(normalizedRole)) {
         throw new Error("Papel de usuário inválido");
       }
 
@@ -329,23 +321,47 @@ export const AuthService = {
 
   async getUserByEmail(email: string): Promise<string | null> {
     try {
-      // Buscar usuário pelo email no perfil
-      const { data, error } = await supabase
+      // Primeiro tentar buscar pelo email diretamente
+      const { data: profileData, error: profileError } = await supabase
         .from("user_profiles")
-        .select("id")
+        .select("id, auth_id")
         .eq("email", email)
         .single();
 
-      if (error) {
-        if (error.code === "PGRST116") {
-          // Usuário não encontrado
-          return null;
+      if (profileError) {
+        if (profileError.code === "PGRST116") {
+          // Tentar buscar pelo auth.users
+          const { data: authData, error: authError } =
+            await supabase.auth.admin.getUserById(email);
+
+          if (authError || !authData?.user) {
+            return null;
+          }
+
+          // Se encontrou na auth.users mas não no profile, criar o profile
+          const { data: newProfile, error: createError } = await supabase
+            .from("user_profiles")
+            .insert({
+              email: email,
+              auth_id: authData.user.id,
+              role: authData.user.user_metadata?.role || "USER",
+            })
+            .select("id")
+            .single();
+
+          if (createError) {
+            console.error("Erro ao criar perfil:", createError);
+            return null;
+          }
+
+          return newProfile?.id || null;
         }
-        console.error("Erro ao buscar usuário:", error);
+        console.error("Erro ao buscar usuário:", profileError);
         return null;
       }
 
-      return data?.id || null;
+      // Retornar o ID do perfil ou o auth_id se o perfil não tiver ID próprio
+      return profileData?.id || profileData?.auth_id || null;
     } catch (error) {
       console.error("Erro ao buscar usuário:", error);
       return null;
