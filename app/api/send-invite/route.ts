@@ -12,9 +12,16 @@ console.log(
 // Inicializar o cliente Resend com a chave de API correta
 const resend = new Resend(resendApiKey);
 
+// Criar cliente Supabase com autenticação anônima
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
 );
 
 export const runtime = "edge"; // Otimização: usar Edge Runtime
@@ -64,14 +71,14 @@ export async function POST(request: NextRequest) {
       // Criar perfil preliminar
       supabase.rpc("create_preliminary_profile", {
         user_email: email,
-        user_role: "COLLABORATOR",
+        user_role: "USER",
       }),
       // Registrar membro na equipe
       supabase.from("team_members").upsert(
         {
           team_id: teamId,
           email: email,
-          status: "invited",
+          status: "PENDING",
           role: "member",
           updated_at: new Date().toISOString(),
         },

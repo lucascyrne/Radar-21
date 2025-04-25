@@ -22,8 +22,7 @@ interface RegisterFormProps {
 }
 
 const roleDescriptions = {
-  COLLABORATOR: "Membro da equipe que responde à pesquisa",
-  LEADER: "Líder da equipe que avalia e gerencia os resultados",
+  USER: "Usuário que participa de equipes e responde pesquisas",
   ORGANIZATION: "Representante da organização que gerencia múltiplas equipes",
 };
 
@@ -72,7 +71,7 @@ export function RegisterForm({
       return false;
     }
 
-    if (!["COLLABORATOR", "LEADER", "ORGANIZATION"].includes(role)) {
+    if (!["USER", "ORGANIZATION"].includes(role)) {
       setError("Papel inválido selecionado");
       return false;
     }
@@ -187,16 +186,10 @@ export function RegisterForm({
               <SelectValue placeholder="Selecione seu papel" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="COLLABORATOR">Colaborador</SelectItem>
-              <SelectItem value="LEADER">Líder</SelectItem>
+              <SelectItem value="USER">Usuário</SelectItem>
               <SelectItem value="ORGANIZATION">Organização</SelectItem>
             </SelectContent>
           </Select>
-          {role && (
-            <p className="text-sm text-muted-foreground">
-              {roleDescriptions[role as keyof typeof roleDescriptions]}
-            </p>
-          )}
         </div>
       )}
 
@@ -207,11 +200,7 @@ export function RegisterForm({
           </div>
           <div className="p-3 bg-blue-50 rounded-md border border-blue-100">
             <p className="font-medium text-blue-800">
-              {predefinedRole === "ORGANIZATION"
-                ? "Organização"
-                : predefinedRole === "LEADER"
-                ? "Líder"
-                : "Colaborador"}
+              {predefinedRole === "ORGANIZATION" ? "Organização" : "Usuário"}
             </p>
             <p className="text-sm text-blue-700 mt-1">
               {

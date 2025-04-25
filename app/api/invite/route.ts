@@ -111,14 +111,20 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      // Adicionar o usuário ao time
-      const { error: addError } = await supabase.from("team_members").insert({
-        team_id: teamId,
-        user_id: userId,
-        email: email,
-        role: role,
-        status: "invited",
-      });
+      // Adicionar o usuário ao time usando upsert
+      const { error: addError } = await supabase.from("team_members").upsert(
+        {
+          team_id: teamId,
+          user_id: userId,
+          email: email,
+          role: role,
+          status: "invited",
+          updated_at: new Date().toISOString(),
+        },
+        {
+          onConflict: "team_id,email",
+        }
+      );
 
       if (addError) {
         console.error("[invite] Erro ao adicionar membro:", addError);
