@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   if (error || error_description) {
     return NextResponse.redirect(
       new URL(
-        `/auth?error=${encodeURIComponent(
+        `/members?error=${encodeURIComponent(
           error_description || error || "unknown_error"
         )}`,
         requestUrl.origin
@@ -33,7 +33,7 @@ export async function GET(request: NextRequest) {
       if (error) {
         console.error("Erro ao trocar código por sessão:", error);
         return NextResponse.redirect(
-          new URL("/auth?error=session_exchange_failed", requestUrl.origin)
+          new URL("/members?error=session_exchange_failed", requestUrl.origin)
         );
       }
 
@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
       } = await supabase.auth.getSession();
 
       if (!session) {
-        return NextResponse.redirect(new URL("/auth", requestUrl.origin));
+        return NextResponse.redirect(new URL("/members", requestUrl.origin));
       }
 
       if (invite) {
@@ -56,7 +56,7 @@ export async function GET(request: NextRequest) {
           );
         } else {
           return NextResponse.redirect(
-            new URL("/auth/verify-email", requestUrl.origin)
+            new URL("/members/verify-email", requestUrl.origin)
           );
         }
       }
@@ -65,7 +65,7 @@ export async function GET(request: NextRequest) {
     } catch (error) {
       console.error("Erro no processamento do callback:", error);
       return NextResponse.redirect(
-        new URL("/auth?error=callback_processing", requestUrl.origin)
+        new URL("/members?error=callback_processing", requestUrl.origin)
       );
     }
   }

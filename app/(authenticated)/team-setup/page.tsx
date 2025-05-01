@@ -78,9 +78,9 @@ export default function TeamSetupPage() {
   useEffect(() => {
     if (!user) {
       console.log(
-        "Usuário não autenticado em team-setup, redirecionando para /auth"
+        "Usuário não autenticado em team-setup, redirecionando para /members/login"
       );
-      router.push("/auth");
+      router.push("/members/login");
       return;
     }
 
@@ -227,7 +227,7 @@ export default function TeamSetupPage() {
       try {
         if (!selectedTeam || !user?.email) return;
 
-        const inviteUrl = `${window.location.origin}/auth?invite=${
+        const inviteUrl = `${window.location.origin}/members?invite=${
           selectedTeam.id
         }&email=${encodeURIComponent(email)}`;
 

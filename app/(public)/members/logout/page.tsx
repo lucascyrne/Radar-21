@@ -3,7 +3,7 @@
 import { useAuth } from "@/resources/auth/auth-hook";
 import { useEffect } from "react";
 
-export default function OrgLogoutPage() {
+export default function LogoutPage() {
   const { signOut } = useAuth();
 
   useEffect(() => {
@@ -17,24 +17,17 @@ export default function OrgLogoutPage() {
         // Aguardar um momento para garantir que a sessão seja limpa
         await new Promise((resolve) => setTimeout(resolve, 500));
 
-        // Determinar se estamos no subdomínio de organização
-        const isOrgSubdomain = window.location.hostname.startsWith("org.");
-
-        // Redirecionar para o login correto com base no domínio
+        // Redirecionar para a página inicial usando o domínio completo
         const baseUrl = window.location.origin;
-        if (isOrgSubdomain) {
-          window.location.href = `${baseUrl}/org-auth/login`;
-        } else {
-          window.location.href = `/org-auth/login`;
-        }
+        window.location.href = `${baseUrl}/members/login`;
       } catch (error) {
         console.error("Erro ao fazer logout:", error);
-        window.location.href = "/org-auth/login";
+        window.location.href = "/members/login";
       }
     };
 
     handleLogout();
-  }, []);
+  }, [signOut]);
 
   return (
     <div className="min-h-screen flex items-center justify-center">

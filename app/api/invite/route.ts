@@ -31,41 +31,82 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar se o usuário já existe
-    const { data: userData, error: userError } = await supabase
+    // Buscar informações do usuário em todas as fontes possíveis
+    let userId = null;
+    let userRole = null;
+
+    // 1. Verificar em user_profiles
+    const { data: profileData, error: profileError } = await supabase
       .from("user_profiles")
       .select("id, auth_id, role")
       .eq("email", email)
-      .single();
+      .maybeSingle();
 
-    let userId = userData?.auth_id || null;
+    if (!profileError && profileData) {
+      console.log("[invite] Usuário encontrado em user_profiles:", profileData);
+      userId = profileData.auth_id;
+      userRole = profileData.role;
+    }
 
-    // Se o usuário não existir, criar um perfil preliminar
-    if (!userData) {
-      // Certificar-se de que nunca criamos uma organização através de convites
-      const userRole = role === "leader" ? "LEADER" : "COLLABORATOR";
+    // 2. Se não encontrou, verificar em auth.users
+    if (!userId) {
+      const { data: authData, error: authError } = await supabase
+        .from("auth.users")
+        .select("id, user_metadata")
+        .eq("email", email)
+        .maybeSingle();
 
-      const { data: newProfile, error: profileError } = await supabase.rpc(
-        "create_preliminary_profile",
-        {
-          user_email: email,
-          user_role: userRole,
-        }
-      );
-
-      if (profileError) {
-        console.error(
-          "[invite] Erro ao criar perfil preliminar:",
-          profileError
-        );
-        return NextResponse.json(
-          { error: "Erro ao criar perfil preliminar" },
-          { status: 500 }
-        );
+      if (!authError && authData) {
+        console.log("[invite] Usuário encontrado em auth.users:", authData);
+        userId = authData.id;
+        userRole = authData.user_metadata?.role;
       }
     }
 
-    // Verificar se o time existe
+    // 3. Verificar se é uma organização
+    if (userRole === "ORGANIZATION") {
+      return NextResponse.json(
+        {
+          error: "Usuário inelegível",
+          message:
+            "Contas do tipo Organização não podem ser membros de equipes",
+        },
+        { status: 403 }
+      );
+    }
+
+    // 4. Se o usuário não existir, criar um perfil preliminar
+    if (!userId) {
+      const userRole = role === "leader" ? "LEADER" : "USER";
+
+      try {
+        const { data: newProfile, error: profileError } = await supabase.rpc(
+          "create_preliminary_profile",
+          {
+            user_email: email,
+            user_role: userRole,
+          }
+        );
+
+        if (profileError) {
+          console.error(
+            "[invite] Erro ao criar perfil preliminar:",
+            profileError
+          );
+          // Continuamos mesmo com erro para tentar registrar o membro
+        } else {
+          console.log("[invite] Perfil preliminar criado com sucesso");
+        }
+      } catch (profileErr) {
+        console.error(
+          "[invite] Exceção ao criar perfil preliminar:",
+          profileErr
+        );
+        // Continuamos mesmo com erro
+      }
+    }
+
+    // 5. Verificar se o time existe
     const { data: teamData, error: teamError } = await supabase
       .from("teams")
       .select("id, name, owner_email")
@@ -80,7 +121,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verificar se o usuário já é membro do time
+    // 6. Verificar se o usuário já é membro do time
     const { data: existingMember, error: memberError } = await supabase
       .from("team_members")
       .select("id, status")
@@ -93,13 +134,20 @@ export async function POST(request: NextRequest) {
 
       // Se o usuário já é membro, apenas atualizar o status se necessário
       if (existingMember.status !== "answered") {
+        const updateData: any = {
+          status: "invited",
+          role: role,
+          updated_at: new Date().toISOString(),
+        };
+
+        // Adicionar user_id se ele existir
+        if (userId) {
+          updateData.user_id = userId;
+        }
+
         const { error: updateError } = await supabase
           .from("team_members")
-          .update({
-            status: "invited",
-            role: role,
-            updated_at: new Date().toISOString(),
-          })
+          .update(updateData)
           .eq("id", existingMember.id);
 
         if (updateError) {
@@ -111,20 +159,25 @@ export async function POST(request: NextRequest) {
         }
       }
     } else {
-      // Adicionar o usuário ao time usando upsert
-      const { error: addError } = await supabase.from("team_members").upsert(
-        {
-          team_id: teamId,
-          user_id: userId,
-          email: email,
-          role: role,
-          status: "invited",
-          updated_at: new Date().toISOString(),
-        },
-        {
+      // 7. Adicionar novo membro à equipe
+      const memberData: any = {
+        team_id: teamId,
+        email: email,
+        role: role,
+        status: "invited",
+        updated_at: new Date().toISOString(),
+      };
+
+      // Adicionar user_id apenas se ele existir
+      if (userId) {
+        memberData.user_id = userId;
+      }
+
+      const { error: addError } = await supabase
+        .from("team_members")
+        .upsert(memberData, {
           onConflict: "team_id,email",
-        }
-      );
+        });
 
       if (addError) {
         console.error("[invite] Erro ao adicionar membro:", addError);
@@ -135,13 +188,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Enviar email de convite usando a API existente
+    // 8. Enviar email de convite usando a API existente
     const origin = request.nextUrl.origin;
     const baseUrl =
       origin.startsWith("https://org.") || origin.startsWith("http://org.")
         ? origin.replace(/^(https?:\/\/)org\./, "$1")
         : origin;
-    const inviteUrl = `${baseUrl}/auth?invite=${teamId}&email=${encodeURIComponent(
+    const inviteUrl = `${baseUrl}/members?invite=${teamId}&email=${encodeURIComponent(
       email
     )}`;
 
@@ -167,6 +220,8 @@ export async function POST(request: NextRequest) {
       success: true,
       message: "Convite processado com sucesso",
       memberId: existingMember?.id || null,
+      userId: userId, // Retornar para debug
+      userRole: userRole, // Retornar para debug
     });
   } catch (error: any) {
     console.error("[invite] Erro no processamento:", error);

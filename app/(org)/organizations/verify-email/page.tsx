@@ -27,7 +27,7 @@ export default function VerifyEmailPage() {
             </p>
           </div>
           <Button asChild className="w-full mt-6">
-            <Link href="/org-auth/login">Voltar para Login</Link>
+            <Link href="/organizations/login">Voltar para Login</Link>
           </Button>
         </div>
       </div>

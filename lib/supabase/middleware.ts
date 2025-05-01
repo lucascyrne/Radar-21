@@ -22,7 +22,7 @@ export async function middleware(request: NextRequest) {
 
     // Se não houver sessão, redirecionar para login
     if (!session) {
-      const redirectUrl = new URL("/auth/login", request.url);
+      const redirectUrl = new URL("/members/login", request.url);
       redirectUrl.searchParams.set("redirectedFrom", request.nextUrl.pathname);
       return NextResponse.redirect(redirectUrl);
     }

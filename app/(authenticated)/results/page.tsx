@@ -8,7 +8,6 @@ import { ResultsTable } from "@/components/survey/results-table";
 import { Card, CardContent } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import supabase from "@/lib/supabase/client";
 import { useAuth } from "@/resources/auth/auth-hook";
 import { useSurvey } from "@/resources/survey/survey-hook";
 import {
@@ -130,95 +129,16 @@ export default function ResultsPage() {
 
         console.log("Carregando dados da equipe:", teamId);
 
-        // Primeiro, buscar todas as respostas do survey
-        const { data: surveyData, error: surveyError } = await supabase
-          .from("survey_responses")
-          .select("*")
-          .eq("team_id", teamId)
-          .eq("is_complete", true);
+        // Carregar respostas do survey via team service
+        const teamResponses = await loadTeamSurveyResponses(teamId);
 
-        if (surveyError) {
-          console.error("Erro ao buscar respostas da pesquisa:", surveyError);
-          throw surveyError;
-        }
-
-        console.log(
-          "Respostas da pesquisa encontradas:",
-          surveyData?.length || 0
-        );
-
-        if (!surveyData || surveyData.length === 0) {
-          console.log(
-            "Nenhuma resposta da pesquisa encontrada, tentando outro método"
-          );
-
-          // Tentativa alternativa: usar a função do contexto
-          const teamResponses = await loadTeamSurveyResponses(teamId);
-
-          if (!teamResponses || teamResponses.length === 0) {
-            console.warn("Não foi possível encontrar respostas da equipe");
-            return;
-          }
-
-          processTeamResponses(teamResponses);
+        if (!teamResponses || teamResponses.length === 0) {
+          console.warn("Não foi possível encontrar respostas da equipe");
           return;
         }
 
-        // Agora, buscar os papéis dos membros da equipe
-        const { data: teamMembers, error: teamMembersError } = await supabase
-          .from("team_members")
-          .select("user_id, role")
-          .eq("team_id", teamId);
-
-        if (teamMembersError) {
-          console.error("Erro ao buscar membros da equipe:", teamMembersError);
-          throw teamMembersError;
-        }
-
-        // Criar um mapa de user_id para role
-        const roleMap = new Map(
-          teamMembers.map((member) => [member.user_id, member.role])
-        );
-
-        // Transformar os dados para o formato esperado
-        const processedResponses = surveyData.map((item: any) => {
-          const role = roleMap.get(item.user_id) || "member";
-
-          // Extrair apenas as respostas às questões (q1-q12)
-          const responses: Record<string, number> = {};
-          for (let i = 1; i <= 12; i++) {
-            const key = `q${i}`;
-            if (item[key] !== null && item[key] !== undefined) {
-              responses[key] = item[key];
-            }
-          }
-
-          return {
-            id: item.id,
-            user_id: item.user_id,
-            team_id: item.team_id,
-            role: role,
-            ...responses,
-          };
-        });
-
-        console.log("Respostas processadas:", processedResponses);
-
-        // Verificar detalhes das respostas processadas
-        const leaderCount = processedResponses.filter(
-          (r) => r.role === "leader"
-        ).length;
-        const memberCount = processedResponses.filter(
-          (r) => r.role === "member"
-        ).length;
-
-        console.log("Detalhes das respostas processadas:", {
-          total: processedResponses.length,
-          leaders: leaderCount,
-          members: memberCount,
-        });
-
-        processTeamResponses(processedResponses);
+        console.log("Respostas da equipe obtidas:", teamResponses);
+        processTeamResponses(teamResponses);
       } catch (error) {
         console.error("Erro ao carregar resultados:", error);
         toast.error("Não foi possível carregar os resultados da equipe.");
@@ -229,10 +149,14 @@ export default function ResultsPage() {
     const processTeamResponses = (responses: any[]) => {
       if (!responses || responses.length === 0) return;
 
+      console.log("Processando respostas brutas:", responses);
+
       // Separar respostas do líder e membros da equipe
       const leaderResponses = responses.filter(
         (member) => member.role === "leader"
       );
+
+      console.log("Respostas de líderes encontradas:", leaderResponses.length);
 
       // Pegar apenas a primeira resposta do líder, se houver mais de uma
       const leaderResponse =
@@ -243,10 +167,11 @@ export default function ResultsPage() {
         (member) => member.role === "member"
       );
 
-      console.log("Respostas separadas:", {
+      console.log("Processando dados:", {
+        total: responses.length,
         leaderCount: leaderResponses.length,
-        leader: leaderResponse,
-        teamMembers: teamMemberResponses.length,
+        leaderResponse: leaderResponse ? "Disponível" : "Não disponível",
+        membersCount: teamMemberResponses.length,
       });
 
       if (teamMemberResponses.length === 0) {
@@ -263,27 +188,30 @@ export default function ResultsPage() {
         // Filtrar apenas membros regulares (não líderes) que responderam esta questão
         const validResponses = teamMemberResponses.filter(
           (member) =>
-            member.role === "member" &&
             member[questionId] !== undefined &&
-            member[questionId] !== null
+            member[questionId] !== null &&
+            member[questionId] !== 0
         );
 
-        // Debug para validar que nenhum líder está sendo incluído
-        const userIds = validResponses.map((r) => r.user_id);
-        if (validResponses.some((r) => r.role !== "member")) {
-          console.error(
-            "ERRO: Líderes incluídos no cálculo da média da equipe",
-            validResponses.filter((r) => r.role !== "member")
-          );
+        if (validResponses.length === 0) {
+          console.warn(`Nenhuma resposta válida para a questão ${questionId}`);
+          return {
+            questionId,
+            average: 0,
+            memberCount: 0,
+          };
         }
 
         const sum = validResponses.reduce(
-          (acc, member) => acc + (member[questionId] || 0),
+          (acc, member) => acc + (parseFloat(member[questionId]) || 0),
           0
         );
 
-        const average =
-          validResponses.length > 0 ? sum / validResponses.length : 0;
+        const average = sum / validResponses.length;
+
+        console.log(
+          `Questão ${questionId}: média ${average} (${validResponses.length} respostas)`
+        );
 
         return {
           questionId,
@@ -292,7 +220,9 @@ export default function ResultsPage() {
         };
       });
 
-      console.log("Médias calculadas (excluindo o líder):", teamAverages);
+      console.log(
+        `Calculadas médias para ${teamAverages.length} questões da equipe.`
+      );
 
       // Definir resultados da equipe
       setTeamResults(
@@ -304,18 +234,30 @@ export default function ResultsPage() {
 
       // Definir resultados do líder se disponível
       if (leaderResponse) {
-        const leaderDataPoints = questionIds
-          .filter(
-            (key) =>
-              leaderResponse[key] !== undefined && leaderResponse[key] !== null
-          )
-          .map((key) => ({
-            category: SurveyService.getCompetencyName(key),
-            value: Number(leaderResponse[key]),
-          }));
+        console.log("Respostas do líder:", leaderResponse);
 
+        const leaderDataPoints = questionIds.map((key) => ({
+          category: SurveyService.getCompetencyName(key),
+          value: Number(leaderResponse[key] || 0),
+        }));
+
+        console.log(`Obtidas ${leaderDataPoints.length} respostas do líder.`);
         console.log("Dados do líder:", leaderDataPoints);
-        setLeaderResults(leaderDataPoints);
+
+        if (leaderDataPoints.length > 0) {
+          setLeaderResults(leaderDataPoints);
+        } else {
+          console.warn("Líder não tem respostas válidas");
+          setLeaderResults([]);
+        }
+      } else {
+        console.warn("Resposta do líder não disponível");
+        // Criar valores vazios para o líder (zeros)
+        const emptyLeaderResults = questionIds.map((key) => ({
+          category: SurveyService.getCompetencyName(key),
+          value: 0,
+        }));
+        setLeaderResults(emptyLeaderResults);
       }
     };
 
@@ -393,6 +335,13 @@ export default function ResultsPage() {
                     <h2 className="text-xl font-semibold mb-4">
                       Gráfico Radar
                     </h2>
+                    <div className="text-sm text-muted-foreground mb-4">
+                      Este gráfico mostra a comparação entre sua avaliação, a
+                      média da equipe (excluindo o líder) e a avaliação da
+                      liderança. A diferença entre a média da equipe e a
+                      avaliação da liderança é especialmente importante para
+                      identificar pontos de convergência e divergência.
+                    </div>
                     <RadarChart
                       userResults={userResults}
                       teamResults={teamResults}
@@ -406,6 +355,12 @@ export default function ResultsPage() {
                     <h2 className="text-xl font-semibold mb-4">
                       Tabela Comparativa
                     </h2>
+                    <div className="text-sm text-muted-foreground mb-4">
+                      Esta tabela compara sua avaliação com a média da equipe
+                      (excluindo o líder) e a avaliação da liderança. Valores
+                      positivos na coluna de diferença indicam que a equipe
+                      avalia a competência mais positivamente que o líder.
+                    </div>
                     <ResultsTable
                       userResults={userResults}
                       teamResults={teamResults}

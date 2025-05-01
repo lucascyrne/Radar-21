@@ -71,10 +71,10 @@ export default function LoginPage() {
                 Por favor, acesse através do portal de organizações em:
               </p>
               <a
-                href="https://org.radar21.com.br/auth/login"
+                href="https://org.radar21.com.br/members/login"
                 className="block mt-2 text-blue-600 hover:underline font-medium"
               >
-                org.radar21.com.br/auth/login
+                org.radar21.com.br/members/login
               </a>
             </div>
           )}

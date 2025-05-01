@@ -63,7 +63,7 @@ export default function VerifyEmailPage() {
               <Button
                 variant="link"
                 className="p-0 h-auto font-normal"
-                onClick={() => router.push("/auth")}
+                onClick={() => router.push("/members")}
               >
                 tente novamente
               </Button>

@@ -22,7 +22,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
 
   // Verificar se o usuário tem o papel correto
   useEffect(() => {
-    const isAuthPage = pathname?.includes("/org-auth/");
+    const isAuthPage = pathname?.includes("/organizations/");
 
     if (!isLoading) {
       // Se estiver em uma página de autenticação, não redirecionar
@@ -30,9 +30,9 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
 
       // Caso contrário, aplicar as regras de redirecionamento
       if (!isAuthenticated || !user) {
-        router.push("/org-auth/login");
+        router.push("/organizations/login");
       } else if (user.role !== "ORGANIZATION") {
-        router.push("/org-auth/login");
+        router.push("/organizations/login");
       }
     }
   }, [user, isLoading, isAuthenticated, pathname]);
@@ -47,7 +47,7 @@ export default function OrgLayout({ children }: { children: React.ReactNode }) {
   }
 
   if (
-    !pathname?.includes("/org-auth/") &&
+    !pathname?.includes("/organizations/") &&
     (isLoading || !user || user.role !== "ORGANIZATION")
   ) {
     return (

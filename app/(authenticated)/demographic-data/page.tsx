@@ -43,7 +43,7 @@ export default function ProfileSurveyPage() {
     if (error.demographicData) {
       toast.error(error.demographicData);
     }
-  }, [error.demographicData, toast]);
+  }, [error.demographicData]);
 
   const handleSubmit = useCallback(
     async (data: DemographicData) => {

@@ -33,23 +33,22 @@ export async function POST(request: NextRequest) {
     );
 
     // Verificar o papel do usuário para garantir que não seja organização
-    const { data: userProfile, error: profileError } = await supabase
-      .from("user_profiles")
-      .select("role")
-      .eq("auth_id", userId)
-      .single();
+    if (userId) {
+      const { data: userProfile, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("role")
+        .eq("auth_id", userId)
+        .maybeSingle();
 
-    if (profileError) {
-      console.error(`Erro ao verificar perfil do usuário:`, profileError);
-      // Continuamos mesmo com erro, assumindo que não é uma organização
-    } else if (userProfile?.role === "ORGANIZATION") {
-      return NextResponse.json(
-        {
-          error: "Acesso negado",
-          message: "Contas de organização não podem ser membros de equipes",
-        },
-        { status: 403 }
-      );
+      if (!profileError && userProfile?.role === "ORGANIZATION") {
+        return NextResponse.json(
+          {
+            error: "Acesso negado",
+            message: "Contas de organização não podem ser membros de equipes",
+          },
+          { status: 403 }
+        );
+      }
     }
 
     // Verificar se o membro já existe na equipe
@@ -58,7 +57,7 @@ export async function POST(request: NextRequest) {
       .select("*")
       .eq("team_id", teamId)
       .eq("email", email)
-      .single();
+      .maybeSingle();
 
     if (memberError && memberError.code !== "PGRST116") {
       console.error(`Erro ao verificar membro:`, memberError);
@@ -70,33 +69,47 @@ export async function POST(request: NextRequest) {
     if (existingMember) {
       console.log(`Membro existente encontrado com id ${existingMember.id}`);
 
-      // Atualizar o userId e manter o status atual
-      const { error: updateError } = await supabase
-        .from("team_members")
-        .update({
-          user_id: userId,
-        })
-        .eq("id", existingMember.id);
+      // Preparar dados para atualização, apenas incluir user_id se ele for válido
+      const updateData: any = {};
 
-      if (updateError) {
-        console.error(`Erro ao atualizar membro:`, updateError);
-        throw new Error(`Erro ao atualizar membro: ${updateError.message}`);
+      if (userId) {
+        updateData.user_id = userId;
+      }
+
+      // Atualizar apenas se temos dados para atualizar
+      if (Object.keys(updateData).length > 0) {
+        const { error: updateError } = await supabase
+          .from("team_members")
+          .update(updateData)
+          .eq("id", existingMember.id);
+
+        if (updateError) {
+          console.error(`Erro ao atualizar membro:`, updateError);
+          throw new Error(`Erro ao atualizar membro: ${updateError.message}`);
+        }
       }
 
       memberId = existingMember.id;
     } else {
       console.log(`Membro não encontrado. Criando novo membro.`);
 
+      // Preparar dados para inserção
+      const memberData: any = {
+        team_id: teamId,
+        email: email,
+        role: "member",
+        status: "invited",
+      };
+
+      // Adicionar user_id apenas se ele existir
+      if (userId) {
+        memberData.user_id = userId;
+      }
+
       // Adicionar novo membro à equipe
       const { data: newMember, error: insertError } = await supabase
         .from("team_members")
-        .insert({
-          team_id: teamId,
-          user_id: userId,
-          email: email,
-          role: "member",
-          status: "invited",
-        })
+        .insert(memberData)
         .select()
         .single();
 

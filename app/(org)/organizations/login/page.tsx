@@ -28,7 +28,7 @@ export default function OrgLoginPage() {
     if (isAuthenticated && user?.role === "ORGANIZATION") {
       router.push("/dashboard");
     }
-  }, [isAuthenticated, user, router]);
+  }, [isAuthenticated, user]);
 
   const handleSubmit = async (data: { email: string; password: string }) => {
     try {
@@ -72,10 +72,10 @@ export default function OrgLoginPage() {
                 Para acessar como colaborador ou líder, use:
               </p>
               <a
-                href="https://radar21.com.br/auth/login"
+                href="https://radar21.com.br/members/login"
                 className="block mt-2 text-blue-600 hover:underline font-medium"
               >
-                radar21.com.br/auth/login
+                radar21.com.br/members/login
               </a>
             </div>
           )}

@@ -60,51 +60,120 @@ export async function POST(request: NextRequest) {
       `${request.nextUrl.origin.replace(
         "org.",
         ""
-      )}/auth?invite=${teamId}&email=${encodeURIComponent(email)}`;
+      )}/members?invite=${teamId}&email=${encodeURIComponent(email)}`;
 
     console.log(
       `[send-invite] Processando convite para: ${email}, time: ${teamId}, url: ${finalInviteUrl}`
     );
 
-    // 2. Executar operações em paralelo
-    const [profileResult, memberResult] = await Promise.all([
-      // Criar perfil preliminar
-      supabase.rpc("create_preliminary_profile", {
-        user_email: email,
-        user_role: "USER",
-      }),
-      // Registrar membro na equipe
-      supabase.from("team_members").upsert(
-        {
-          team_id: teamId,
-          email: email,
-          status: "PENDING",
-          role: "member",
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "team_id,email",
-        }
-      ),
-    ]);
+    // 2. Verificar se o usuário já existe no sistema
+    let userId = null;
+    let userRole = "USER";
 
-    // Verificar erros críticos
-    if (memberResult.error) {
-      console.error(
-        "[send-invite] Erro ao registrar membro:",
-        memberResult.error
+    // Primeiro, verificar na tabela user_profiles
+    const { data: profileData, error: profileError } = await supabase
+      .from("user_profiles")
+      .select("id, auth_id, role")
+      .eq("email", email)
+      .maybeSingle();
+
+    if (!profileError && profileData) {
+      console.log(
+        "[send-invite] Usuário encontrado em user_profiles:",
+        profileData
       );
+      userId = profileData.auth_id;
+      userRole = profileData.role;
+    } else {
+      // Se não encontrou no profile, verificar na tabela auth.users
+      const { data: authData, error: authError } = await supabase
+        .from("auth.users")
+        .select("id, user_metadata")
+        .eq("email", email)
+        .maybeSingle();
+
+      if (!authError && authData) {
+        console.log(
+          "[send-invite] Usuário encontrado em auth.users:",
+          authData
+        );
+        userId = authData.id;
+        userRole = authData.user_metadata?.role || "USER";
+      }
+    }
+
+    // 3. Verificar se o usuário é uma organização
+    if (userRole === "ORGANIZATION") {
+      return NextResponse.json(
+        {
+          error: "Usuário inelegível",
+          message:
+            "Contas do tipo Organização não podem ser convidadas como membros de equipes.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // 4. Criar perfil preliminar se necessário
+    if (!userId) {
+      try {
+        const { data: newProfile, error: createError } = await supabase.rpc(
+          "create_preliminary_profile",
+          {
+            user_email: email,
+            user_role: "USER",
+          }
+        );
+
+        if (createError) {
+          console.error(
+            "[send-invite] Erro ao criar perfil preliminar:",
+            createError
+          );
+        } else if (newProfile) {
+          console.log("[send-invite] Perfil preliminar criado:", newProfile);
+          // Não atribuímos userId aqui pois o perfil é preliminar
+        }
+      } catch (profileErr) {
+        console.error(
+          "[send-invite] Exceção ao criar perfil preliminar:",
+          profileErr
+        );
+      }
+    }
+
+    // 5. Registrar ou atualizar membro na equipe
+    const memberData: any = {
+      team_id: teamId,
+      email: email,
+      status: "pending_survey",
+      role: "member",
+      updated_at: new Date().toISOString(),
+    };
+
+    // Adicionar user_id apenas se ele existir
+    if (userId) {
+      memberData.user_id = userId;
+    }
+
+    const { error: memberError } = await supabase
+      .from("team_members")
+      .upsert(memberData, {
+        onConflict: "team_id,email",
+      });
+
+    if (memberError) {
+      console.error("[send-invite] Erro ao registrar membro:", memberError);
       return NextResponse.json(
         {
           error: "Erro ao registrar membro",
-          details: memberResult.error.message,
+          details: memberError.message,
         },
         { status: 500 }
       );
     }
 
-    // 3. Enviar email de forma assíncrona
-    // Não esperamos a conclusão do envio para retornar a resposta
+    // 6. Enviar email de forma assíncrona
     resend.emails
       .send({
         from: "Radar21 <noreply@radar21.com.br>",
@@ -139,7 +208,11 @@ export async function POST(request: NextRequest) {
       });
 
     console.log("[send-invite] Convite processado com sucesso");
-    return NextResponse.json({ success: true });
+    return NextResponse.json({
+      success: true,
+      userId: userId, // Retornar o userId para debug
+      userRole: userRole, // Retornar o role para debug
+    });
   } catch (error: any) {
     console.error("[send-invite] Erro no processamento:", error);
     return NextResponse.json(

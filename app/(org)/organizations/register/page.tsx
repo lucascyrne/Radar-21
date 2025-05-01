@@ -6,13 +6,13 @@ import { useAuth } from "@/resources/auth/auth-hook";
 import { useRouter } from "next/navigation";
 import { useEffect } from "react";
 
-export default function RegisterPage() {
+export default function OrgRegisterPage() {
   const { isAuthenticated, signUpWithEmail } = useAuth();
   const router = useRouter();
 
   useEffect(() => {
     if (isAuthenticated) {
-      router.push("/team-setup");
+      router.push("/dashboard");
     }
   }, [isAuthenticated]);
 
@@ -22,10 +22,11 @@ export default function RegisterPage() {
     role: string;
   }) => {
     try {
+      // Forçar o role como ORGANIZATION, independentemente do selecionado
       const response = await signUpWithEmail(
         data.email,
         data.password,
-        data.role
+        "ORGANIZATION"
       );
 
       if (response.error) {
@@ -34,7 +35,7 @@ export default function RegisterPage() {
 
       if (response.data.user) {
         // Redirecionar para a página de verificação de email
-        router.push("/auth/verify-email");
+        router.push("/organizations/verify-email");
         return undefined;
       }
 
@@ -50,12 +51,16 @@ export default function RegisterPage() {
       <div className="min-h-screen flex items-center justify-center">
         <div className="w-full max-w-md p-8 space-y-8">
           <div className="text-center">
-            <h1 className="text-2xl font-bold">Criar Conta</h1>
+            <h1 className="text-2xl font-bold">Cadastro de Organização</h1>
             <p className="mt-2 text-muted-foreground">
-              Registre-se para começar a usar o Radar21
+              Crie sua conta de organização no Radar21
             </p>
           </div>
-          <RegisterForm onSubmit={handleSubmit} />
+          <RegisterForm
+            onSubmit={handleSubmit}
+            hideRoleSelection={true}
+            predefinedRole="ORGANIZATION"
+          />
         </div>
       </div>
     </Layout>
