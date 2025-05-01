@@ -7,19 +7,22 @@ SELECT
     t.owner_email AS organization_email,
     t.id AS team_id,
     t.name AS team_name,
-    COUNT(DISTINCT tm.id) FILTER (WHERE tm.status = 'ACTIVE') AS members_answered,
+    COUNT(DISTINCT tm.id) FILTER (WHERE tm.status = 'answered') AS members_answered,
     t.team_size AS total_members,
     t.created_at AS team_created_at,
-    COUNT(DISTINCT CASE WHEN tm.role = 'leader' AND tm.status = 'ACTIVE' THEN tm.id END) AS leaders_answered,
-    COUNT(DISTINCT CASE WHEN tm.role = 'leader' THEN tm.id END) AS total_leaders
+    COUNT(DISTINCT CASE WHEN tm.role = 'leader' AND tm.status = 'answered' THEN tm.id END) AS leaders_answered,
+    COUNT(DISTINCT CASE WHEN tm.role = 'leader' THEN tm.id END) AS total_leaders,
+    CASE WHEN t.team_size > 0 THEN
+        ROUND((COUNT(DISTINCT tm.id) FILTER (WHERE tm.status = 'answered')::numeric / t.team_size) * 100)
+    ELSE 0 END AS completion_percentage
 FROM teams t
 LEFT JOIN team_members tm ON tm.team_id = t.id
 GROUP BY t.organization_id, t.owner_email, t.id, t.name, t.team_size, t.created_at;
 
--- View para respostas de pesquisa por equipe
+-- View para respostas da pesquisa por equipe (simplificada para evitar redundância com survey_responses)
 CREATE OR REPLACE VIEW "public"."team_survey_responses" AS
 SELECT 
-    t.id AS team_id,
+    sr.team_id,
     t.name AS team_name,
     t.organization_id,
     t.owner_email AS organization_email,
@@ -27,65 +30,43 @@ SELECT
     tm.email AS member_email,
     tm.role AS member_role,
     tm.status AS response_status,
-    sr.q1,
-    sr.q2,
-    sr.q3,
-    sr.q4,
-    sr.q5,
-    sr.q6,
-    sr.q7,
-    sr.q8,
-    sr.q9,
-    sr.q10,
-    sr.q11,
-    sr.q12,
-    sr.created_at AS response_date
-FROM teams t
-JOIN team_members tm ON tm.team_id = t.id
-LEFT JOIN survey_responses sr ON sr.user_id = tm.user_id AND sr.team_id = t.id;
+    sr.q1, sr.q2, sr.q3, sr.q4, sr.q5, sr.q6, sr.q7, sr.q8, sr.q9, sr.q10, sr.q11, sr.q12,
+    sr.created_at AS response_date,
+    sr.updated_at AS updated_at
+FROM survey_responses sr
+JOIN teams t ON t.id = sr.team_id
+JOIN team_members tm ON tm.user_id = sr.user_id AND tm.team_id = sr.team_id;
 
--- View para métricas de organização
-CREATE OR REPLACE VIEW "public"."organization_metrics" AS
-SELECT
-    t.organization_id,
-    t.owner_email AS organization_email,
-    COUNT(DISTINCT t.id) AS total_teams,
-    COUNT(DISTINCT tm.id) AS total_members,
-    COUNT(DISTINCT CASE WHEN tm.status = 'ACTIVE' THEN tm.id END) AS total_responses,
-    COUNT(DISTINCT CASE WHEN tm.role = 'leader' THEN tm.id END) AS total_leaders,
-    COUNT(DISTINCT CASE WHEN tm.role = 'leader' AND tm.status = 'ACTIVE' THEN tm.id END) AS leaders_responded
-FROM teams t
-LEFT JOIN team_members tm ON tm.team_id = t.id
-GROUP BY t.organization_id, t.owner_email;
-
--- View para respostas de perguntas abertas por organização
+-- View para respostas de perguntas abertas (simplificada para usar a tabela original)
 CREATE OR REPLACE VIEW "public"."organization_open_answers" AS 
 SELECT 
     t.organization_id,
     t.owner_email AS organization_email,
     t.id AS team_id,
     t.name AS team_name,
-    tm.user_id,
+    oqr.user_id,
     tm.email AS member_email,
     tm.role AS member_role,
     oqr.q13 AS leadership_strengths,
     oqr.q14 AS leadership_improvements,
     oqr.created_at AS response_date
-FROM teams t
-JOIN team_members tm ON tm.team_id = t.id
-LEFT JOIN open_question_responses oqr ON oqr.user_id = tm.user_id AND oqr.team_id = t.id
+FROM open_question_responses oqr
+JOIN teams t ON t.id = oqr.team_id
+JOIN team_members tm ON tm.user_id = oqr.user_id AND tm.team_id = oqr.team_id
 WHERE (oqr.q13 IS NOT NULL OR oqr.q14 IS NOT NULL);
 
--- View para comparação de competências
+-- View para comparação de competências (simplificada para refletir as tabelas reais)
 CREATE OR REPLACE VIEW "public"."competency_comparison" AS
 WITH team_data AS (
     SELECT
-        tsr.team_id,
-        tsr.member_role AS role,
-        tsr.q1, tsr.q2, tsr.q3, tsr.q4, tsr.q5, tsr.q6, 
-        tsr.q7, tsr.q8, tsr.q9, tsr.q10, tsr.q11, tsr.q12
-    FROM team_survey_responses tsr
-    WHERE tsr.response_status = 'ACTIVE'
+        sr.team_id,
+        tm.role,
+        sr.user_id,
+        sr.q1, sr.q2, sr.q3, sr.q4, sr.q5, sr.q6, 
+        sr.q7, sr.q8, sr.q9, sr.q10, sr.q11, sr.q12
+    FROM survey_responses sr
+    JOIN team_members tm ON sr.user_id = tm.user_id AND sr.team_id = tm.team_id
+    WHERE sr.is_complete = true
 ),
 leader_data AS (
     SELECT
@@ -126,112 +107,124 @@ team_avg AS (
     GROUP BY team_id
 )
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Abertura' as competency,
-    ld.q1 as leader_score,
-    ta.q1 as team_average,
-    (ld.q1 - ta.q1) as difference
+    COALESCE(ld.q1, 0) as leader_score,
+    COALESCE(ta.q1, 0) as team_average,
+    COALESCE(COALESCE(ta.q1, 0) - COALESCE(ld.q1, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL
 UNION ALL
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Agilidade' as competency,
-    ld.q2 as leader_score,
-    ta.q2 as team_average,
-    (ld.q2 - ta.q2) as difference
+    COALESCE(ld.q2, 0) as leader_score,
+    COALESCE(ta.q2, 0) as team_average,
+    COALESCE(COALESCE(ta.q2, 0) - COALESCE(ld.q2, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL
 UNION ALL
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Confiança' as competency,
-    ld.q3 as leader_score,
-    ta.q3 as team_average,
-    (ld.q3 - ta.q3) as difference
+    COALESCE(ld.q3, 0) as leader_score,
+    COALESCE(ta.q3, 0) as team_average,
+    COALESCE(COALESCE(ta.q3, 0) - COALESCE(ld.q3, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL
 UNION ALL
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Empatia' as competency,
-    ld.q4 as leader_score,
-    ta.q4 as team_average,
-    (ld.q4 - ta.q4) as difference
+    COALESCE(ld.q4, 0) as leader_score,
+    COALESCE(ta.q4, 0) as team_average,
+    COALESCE(COALESCE(ta.q4, 0) - COALESCE(ld.q4, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL
 UNION ALL
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Articulação' as competency,
-    ld.q5 as leader_score,
-    ta.q5 as team_average,
-    (ld.q5 - ta.q5) as difference
+    COALESCE(ld.q5, 0) as leader_score,
+    COALESCE(ta.q5, 0) as team_average,
+    COALESCE(COALESCE(ta.q5, 0) - COALESCE(ld.q5, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL
 UNION ALL
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Adaptabilidade' as competency,
-    ld.q6 as leader_score,
-    ta.q6 as team_average,
-    (ld.q6 - ta.q6) as difference
+    COALESCE(ld.q6, 0) as leader_score,
+    COALESCE(ta.q6, 0) as team_average,
+    COALESCE(COALESCE(ta.q6, 0) - COALESCE(ld.q6, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL
 UNION ALL
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Inovação' as competency,
-    ld.q7 as leader_score,
-    ta.q7 as team_average,
-    (ld.q7 - ta.q7) as difference
+    COALESCE(ld.q7, 0) as leader_score,
+    COALESCE(ta.q7, 0) as team_average,
+    COALESCE(COALESCE(ta.q7, 0) - COALESCE(ld.q7, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL
 UNION ALL
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Comunicação' as competency,
-    ld.q8 as leader_score,
-    ta.q8 as team_average,
-    (ld.q8 - ta.q8) as difference
+    COALESCE(ld.q8, 0) as leader_score,
+    COALESCE(ta.q8, 0) as team_average,
+    COALESCE(COALESCE(ta.q8, 0) - COALESCE(ld.q8, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL
 UNION ALL
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Descentralização' as competency,
-    ld.q9 as leader_score,
-    ta.q9 as team_average,
-    (ld.q9 - ta.q9) as difference
+    COALESCE(ld.q9, 0) as leader_score,
+    COALESCE(ta.q9, 0) as team_average,
+    COALESCE(COALESCE(ta.q9, 0) - COALESCE(ld.q9, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL
 UNION ALL
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Auto-organização' as competency,
-    ld.q10 as leader_score,
-    ta.q10 as team_average,
-    (ld.q10 - ta.q10) as difference
+    COALESCE(ld.q10, 0) as leader_score,
+    COALESCE(ta.q10, 0) as team_average,
+    COALESCE(COALESCE(ta.q10, 0) - COALESCE(ld.q10, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL
 UNION ALL
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Colaboração' as competency,
-    ld.q11 as leader_score,
-    ta.q11 as team_average,
-    (ld.q11 - ta.q11) as difference
+    COALESCE(ld.q11, 0) as leader_score,
+    COALESCE(ta.q11, 0) as team_average,
+    COALESCE(COALESCE(ta.q11, 0) - COALESCE(ld.q11, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL
 UNION ALL
 SELECT
-    ld.team_id,
+    COALESCE(ld.team_id, ta.team_id) as team_id,
     'Resiliência' as competency,
-    ld.q12 as leader_score,
-    ta.q12 as team_average,
-    (ld.q12 - ta.q12) as difference
+    COALESCE(ld.q12, 0) as leader_score,
+    COALESCE(ta.q12, 0) as team_average,
+    COALESCE(COALESCE(ta.q12, 0) - COALESCE(ld.q12, 0), 0) as difference
 FROM leader_data ld
-JOIN team_avg ta ON ld.team_id = ta.team_id;
+FULL OUTER JOIN team_avg ta ON ld.team_id = ta.team_id
+WHERE COALESCE(ld.team_id, ta.team_id) IS NOT NULL;
 
 -- Configurar a view como somente leitura
 REVOKE ALL ON "public"."team_survey_responses" FROM PUBLIC;
@@ -239,7 +232,6 @@ GRANT SELECT ON "public"."team_survey_responses" TO authenticated;
 GRANT SELECT ON "public"."organization_team_overview" TO authenticated;
 GRANT SELECT ON "public"."organization_open_answers" TO authenticated;
 GRANT SELECT ON "public"."competency_comparison" TO authenticated;
-GRANT SELECT ON "public"."organization_metrics" TO authenticated;
 
 -- Função para envio de lembretes
 CREATE OR REPLACE FUNCTION send_reminder_emails()
@@ -264,8 +256,8 @@ begin
       t.name as team_name
     from team_members tm
     inner join teams t on t.id = tm.team_id
-    inner join user_profiles up on up.id = tm.user_id
-    where tm.status = 'PENDING'
+    inner join user_profiles up on up.email = tm.email
+    where tm.status = 'invited'
     and (
       tm.last_reminder_sent is null 
       or tm.last_reminder_sent < now() - interval '3 days'
@@ -288,7 +280,7 @@ begin
               <h1>Complete seu cadastro no Radar21</h1>
               <p>Você foi convidado para participar da equipe %s.</p>
               <p>Complete seu cadastro para começar.</p>
-              <a href="%s/auth" style="background-color: #2563EB; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
+              <a href="%s/members/login" style="background-color: #2563EB; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px;">
                 Completar Cadastro
               </a>
             </div>',

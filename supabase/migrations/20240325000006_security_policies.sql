@@ -68,15 +68,7 @@ GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA public TO anon, authenticated, service_
 CREATE POLICY "user_profiles_select_policy" 
 ON public.user_profiles
 FOR SELECT
-USING (
-  auth_id = auth.uid() OR             -- Próprio perfil
-  role = 'ORGANIZATION' OR            -- Perfis de organizações são visíveis
-  EXISTS (                            -- Perfis das organizações do usuário
-    SELECT 1 FROM organization_members om
-    WHERE om.organization_id = auth_id
-    AND om.user_id = auth.uid()
-  )
-);
+USING (true);  -- Permitir todos a visualizarem perfis para facilitar associação
 
 -- Política para atualizar perfis
 CREATE POLICY "user_profiles_update_policy" 
@@ -147,27 +139,46 @@ USING (
   ) OR
   auth.role() = 'service_role'        -- Permissão para funções de serviço
 )
-WITH CHECK (user_id = auth.uid() OR auth.role() = 'service_role');
+WITH CHECK (
+  user_id = auth.uid() OR 
+  auth.role() = 'service_role'
+);
 
 -- POLÍTICAS PARA SURVEY_RESPONSES
-CREATE POLICY "survey_responses_policy" 
+CREATE POLICY "survey_responses_select_policy" 
+ON public.survey_responses
+FOR SELECT
+USING (
+  user_id = auth.uid() OR             -- Próprio usuário
+  EXISTS (                            -- Organização dona da equipe
+    SELECT 1 FROM teams t
+    WHERE t.id = team_id
+    AND t.organization_id = auth.uid()
+  ) OR
+  EXISTS (                            -- Membro da mesma equipe
+    SELECT 1 FROM team_members tm
+    WHERE tm.team_id = team_id
+    AND tm.user_id = auth.uid()
+  ) OR
+  auth.role() = 'service_role'        -- Permissão para funções de serviço
+);
+
+CREATE POLICY "survey_responses_insert_update_policy" 
 ON public.survey_responses
 FOR ALL
 USING (
   user_id = auth.uid() OR             -- Próprio usuário
-  EXISTS (                            -- Organização dona da equipe
-    SELECT 1 FROM teams t
-    WHERE t.id = team_id
-    AND t.organization_id = auth.uid()
-  ) OR
   auth.role() = 'service_role'        -- Permissão para funções de serviço
 )
-WITH CHECK (user_id = auth.uid() OR auth.role() = 'service_role');
+WITH CHECK (
+  user_id = auth.uid() OR 
+  auth.role() = 'service_role'
+);
 
 -- POLÍTICAS PARA OPEN_QUESTION_RESPONSES
-CREATE POLICY "open_question_responses_policy" 
+CREATE POLICY "open_question_responses_select_policy" 
 ON public.open_question_responses
-FOR ALL
+FOR SELECT
 USING (
   user_id = auth.uid() OR             -- Próprio usuário
   EXISTS (                            -- Organização dona da equipe
@@ -175,9 +186,29 @@ USING (
     WHERE t.id = team_id
     AND t.organization_id = auth.uid()
   ) OR
+  EXISTS (                            -- Membro da mesma equipe
+    SELECT 1 FROM team_members tm
+    WHERE tm.team_id = team_id
+    AND tm.user_id = auth.uid()
+  ) OR
+  auth.role() = 'service_role'        -- Permissão para funções de serviço
+);
+
+CREATE POLICY "open_question_responses_insert_update_policy" 
+ON public.open_question_responses
+FOR ALL
+USING (
+  user_id = auth.uid() OR             -- Próprio usuário
   auth.role() = 'service_role'        -- Permissão para funções de serviço
 )
-WITH CHECK (user_id = auth.uid() OR auth.role() = 'service_role');
+WITH CHECK (
+  user_id = auth.uid() OR 
+  auth.role() = 'service_role'
+);
+
+-- Comando para sincronizar e corrigir associações existentes
+SELECT public.sync_user_profiles();
+SELECT public.sync_team_members_with_auth_users();
 
 -- Reativar RLS para todas as tabelas
 ALTER TABLE IF EXISTS "public"."teams" ENABLE ROW LEVEL SECURITY;
