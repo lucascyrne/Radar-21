@@ -40,6 +40,65 @@ export class OrganizationService {
     return { data: orgData as Organization, error: orgError };
   }
 
+  // Função para associar membros automaticamente à organização
+  static async syncTeamMembersToOrganization(
+    organizationId: string,
+    teamId: string
+  ): Promise<{ success: boolean; error: any }> {
+    try {
+      console.log(
+        `Sincronizando membros do time ${teamId} para a organização ${organizationId}`
+      );
+
+      // Buscar membros do time
+      const { data: teamMembers, error: membersError } = await supabase
+        .from("team_members")
+        .select("user_id, email, role")
+        .eq("team_id", teamId);
+
+      if (membersError) {
+        throw membersError;
+      }
+
+      // Para cada membro, criar ou atualizar como membro da organização
+      for (const member of teamMembers || []) {
+        if (!member.user_id) continue; // Pular membros sem user_id
+
+        // Verificar se já é membro da organização
+        const { data: existingMember, error: checkError } = await supabase
+          .from("organization_members")
+          .select("id")
+          .eq("organization_id", organizationId)
+          .eq("user_id", member.user_id)
+          .maybeSingle();
+
+        if (checkError && checkError.code !== "PGRST116") {
+          console.error("Erro ao verificar membro:", checkError);
+          continue;
+        }
+
+        if (!existingMember) {
+          // Adicionar como membro da organização
+          await supabase.from("organization_members").insert({
+            organization_id: organizationId,
+            user_id: member.user_id,
+            role: member.role,
+            status: "answered",
+          });
+
+          console.log(
+            `Membro ${member.email} adicionado à organização ${organizationId}`
+          );
+        }
+      }
+
+      return { success: true, error: null };
+    } catch (error) {
+      console.error("Erro ao sincronizar membros:", error);
+      return { success: false, error };
+    }
+  }
+
   // Buscar organizações do usuário atual
   static async getMyOrganizations(): Promise<{
     data: Organization[];
@@ -59,7 +118,6 @@ export class OrganizationService {
     const { data: memberOrgs, error: memberError } = await supabase
       .from("organization_members")
       .select("organization_id, organizations(*)")
-      .eq("status", "active")
       .order("created_at", { ascending: false });
 
     if (memberError) {

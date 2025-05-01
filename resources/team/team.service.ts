@@ -17,6 +17,11 @@ const cache = {
 // Tempo de expiração do cache em milissegundos (5 minutos)
 const CACHE_EXPIRATION = 5 * 60 * 1000;
 
+interface TeamMemberWithTeam {
+  team_id: string;
+  teams: Team;
+}
+
 export const TeamService = {
   /**
    * Busca um usuário pelo email
@@ -71,12 +76,26 @@ export const TeamService = {
         teamSize,
       });
 
+      // Verificar se o usuário é uma organização
+      const { data: userProfile, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("role")
+        .eq("auth_id", ownerId)
+        .single();
+
+      if (profileError && profileError.code !== "PGRST116") {
+        console.error("Erro ao verificar perfil do usuário:", profileError);
+      }
+
+      const isOrganization = userProfile?.role === "ORGANIZATION";
+
       const { data, error } = await supabase
         .from("teams")
         .insert({
           name,
           owner_email: ownerEmail,
           team_size: teamSize,
+          organization_id: isOrganization ? ownerId : null,
         })
         .select()
         .single();
@@ -89,6 +108,25 @@ export const TeamService = {
           hint: error.hint,
         });
         throw new Error(`Erro ao criar equipe: ${error.message}`);
+      }
+
+      // Se o criador for uma organização, configurar a relação com a organização
+      if (isOrganization && data) {
+        try {
+          // Importar dinamicamente o serviço da organização
+          const { OrganizationService } = await import(
+            "../organization/organization.service"
+          );
+
+          // Sincronizar membros com a organização
+          await OrganizationService.syncTeamMembersToOrganization(
+            ownerId,
+            data.id
+          );
+        } catch (syncError) {
+          console.error("Erro ao sincronizar com organização:", syncError);
+          // Continuar mesmo com o erro
+        }
       }
 
       return data as Team;
@@ -114,6 +152,23 @@ export const TeamService = {
     status: string
   ): Promise<void> {
     try {
+      // Se não temos userId, tentar encontrar pelo email
+      if (!userId) {
+        // Verificar se existe um usuário com este email
+        const { data: userProfile } = await supabase
+          .from("user_profiles")
+          .select("auth_id")
+          .eq("email", email)
+          .maybeSingle();
+
+        if (userProfile?.auth_id) {
+          userId = userProfile.auth_id;
+          console.log(
+            `Encontrado usuário existente com ID ${userId} para o email ${email}`
+          );
+        }
+      }
+
       // Se houver um userId, verificar se não é uma organização
       if (userId) {
         const { data: userProfile, error: profileError } = await supabase
@@ -147,6 +202,8 @@ export const TeamService = {
         throw checkError;
       }
 
+      let memberId: string | null = null;
+
       if (existingMember) {
         // Se o membro já existe, não rebaixar seu status
         let newStatus = status;
@@ -167,10 +224,12 @@ export const TeamService = {
           updates.user_id = userId;
         }
 
-        const { error: updateError } = await supabase
+        const { data: updatedMember, error: updateError } = await supabase
           .from("team_members")
           .update(updates)
-          .eq("id", existingMember.id);
+          .eq("id", existingMember.id)
+          .select()
+          .single();
 
         if (updateError) {
           // Em caso de erro com RLS, tenta usar a API do servidor
@@ -205,19 +264,25 @@ export const TeamService = {
           } else {
             throw updateError;
           }
+        } else {
+          memberId = updatedMember?.id || existingMember.id;
         }
       } else {
         // Se o membro não existe, criar novo
         const memberStatus = userId ? status : "invited";
 
         try {
-          const { error } = await supabase.from("team_members").insert({
-            team_id: teamId,
-            user_id: userId,
-            email,
-            role,
-            status: memberStatus,
-          });
+          const { data: newMember, error } = await supabase
+            .from("team_members")
+            .insert({
+              team_id: teamId,
+              user_id: userId,
+              email,
+              role,
+              status: memberStatus,
+            })
+            .select()
+            .single();
 
           if (error) {
             // Em caso de erro com RLS, tenta usar a API do servidor
@@ -246,10 +311,40 @@ export const TeamService = {
             } else {
               throw error;
             }
+          } else {
+            memberId = newMember?.id || null;
           }
         } catch (insertError: any) {
           console.error("Erro ao inserir membro na equipe:", insertError);
           throw insertError;
+        }
+      }
+
+      // Sincronizar com a organização se o membro foi adicionado com sucesso e temos userId
+      if (memberId && userId) {
+        try {
+          // Verificar se o time pertence a uma organização
+          const { data: team, error: teamError } = await supabase
+            .from("teams")
+            .select("organization_id")
+            .eq("id", teamId)
+            .single();
+
+          if (!teamError && team && team.organization_id) {
+            // Importar dinamicamente o serviço da organização
+            const { OrganizationService } = await import(
+              "../organization/organization.service"
+            );
+
+            // Sincronizar membros com a organização
+            await OrganizationService.syncTeamMembersToOrganization(
+              team.organization_id,
+              teamId
+            );
+          }
+        } catch (syncError) {
+          console.error("Erro ao sincronizar com organização:", syncError);
+          // Continuar mesmo com o erro
         }
       }
 
@@ -268,36 +363,79 @@ export const TeamService = {
    */
   async getUserTeams(userId: string): Promise<{ teams: Team[] }> {
     try {
-      // Primeiro, buscar os IDs dos times do usuário
-      const { data: memberTeams, error: memberError } = await supabase
+      // Primeiro, verificar a role do usuário
+      const { data: userProfile, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("role, email")
+        .eq("auth_id", userId)
+        .single();
+
+      if (profileError) {
+        console.error("Erro ao buscar perfil do usuário:", profileError);
+        throw profileError;
+      }
+
+      // Se for uma organização, buscar times diretamente da tabela teams
+      if (userProfile?.role === "ORGANIZATION") {
+        const { data: teams, error } = await supabase
+          .from("teams")
+          .select(
+            "id, name, owner_email, team_size, created_at, organization_id"
+          )
+          .eq("organization_id", userId)
+          .order("created_at", { ascending: false });
+
+        if (error) {
+          console.error("Erro na query de times da organização:", error);
+          throw error;
+        }
+
+        console.log("Times encontrados para organização:", teams);
+        return { teams: teams || [] };
+      }
+
+      // Se for um usuário regular, buscar através de team_members usando o email
+      if (!userProfile?.email) {
+        console.error("Email do usuário não encontrado");
+        return { teams: [] };
+      }
+
+      const { data: memberTeams, error: memberError } = (await supabase
         .from("team_members")
-        .select("team_id")
-        .eq("user_id", userId);
+        .select(
+          `
+          team_id,
+          teams (
+            id,
+            name,
+            owner_email,
+            team_size,
+            created_at,
+            organization_id
+          )
+        `
+        )
+        .eq("email", userProfile.email)) as {
+        data: TeamMemberWithTeam[] | null;
+        error: any;
+      };
 
       if (memberError) {
         console.error("Erro ao buscar associações de equipe:", memberError);
         throw memberError;
       }
 
-      // Se não houver times, retornar array vazio
-      if (!memberTeams || memberTeams.length === 0) {
-        return { teams: [] };
-      }
+      // Extrair e formatar os times dos resultados
+      const teams = (memberTeams || [])
+        .filter((mt): mt is TeamMemberWithTeam => mt.teams !== null)
+        .map((mt) => mt.teams)
+        .sort(
+          (a, b) =>
+            new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+        );
 
-      // Buscar detalhes dos times usando os IDs encontrados
-      const teamIds = memberTeams.map((mt) => mt.team_id);
-      const { data: teams, error } = await supabase
-        .from("teams")
-        .select("id, name, owner_email, team_size, created_at, organization_id")
-        .in("id", teamIds);
-
-      if (error) {
-        console.error("Erro na query:", error);
-        throw error;
-      }
-
-      console.log("Teams encontradas:", teams);
-      return { teams: teams || [] };
+      console.log("Times encontrados para usuário:", teams);
+      return { teams };
     } catch (error) {
       console.error("Erro ao buscar equipes do usuário:", error);
       throw error;
@@ -500,7 +638,7 @@ export const TeamService = {
       // Verificar se o usuário é uma organização
       const { data: userProfile, error: profileError } = await supabase
         .from("user_profiles")
-        .select("role")
+        .select("role, auth_id")
         .eq("auth_id", userId)
         .single();
 
@@ -514,25 +652,42 @@ export const TeamService = {
         return null;
       }
 
-      // Verificar se o membro já existe
-      const { data: existingMember, error: checkError } = await supabase
+      // Garantir que o perfil de usuário esteja atualizado
+      if (userProfile) {
+        const { error: updateProfileError } = await supabase
+          .from("user_profiles")
+          .update({ email: email })
+          .eq("auth_id", userId);
+
+        if (updateProfileError) {
+          console.error(
+            "Erro ao atualizar perfil de usuário:",
+            updateProfileError
+          );
+        }
+      }
+
+      // Verificar se o membro já existe pelo email ou userId
+      const { data: existingMembers, error: checkError } = await supabase
         .from("team_members")
         .select("*")
         .eq("team_id", teamId)
-        .eq("email", email)
-        .single();
+        .or(`email.eq.${email},user_id.eq.${userId}`);
 
-      if (checkError && checkError.code !== "PGRST116") {
+      if (checkError) {
         throw checkError;
       }
 
+      let existingMember = existingMembers?.length ? existingMembers[0] : null;
+
       if (existingMember) {
         console.log("Membro existente encontrado:", existingMember);
-        // Sempre atualizar o user_id e status para garantir associação
+        // Sempre atualizar o user_id e email para garantir associação correta
         const { data: updatedMember, error: updateError } = await supabase
           .from("team_members")
           .update({
             user_id: userId,
+            email: email,
             status:
               existingMember.status === "answered" ? "answered" : "invited",
           })
@@ -562,6 +717,21 @@ export const TeamService = {
 
       if (insertError) throw insertError;
       console.log("Novo membro criado:", newMember);
+
+      // Atualizar status para answered
+      const { data: answeredMember, error: statusError } = await supabase
+        .from("team_members")
+        .update({ status: "answered" })
+        .eq("id", newMember.id)
+        .select()
+        .single();
+
+      if (statusError) {
+        console.error("Erro ao atualizar status para respondido:", statusError);
+      } else {
+        console.log("Status atualizado para respondido:", answeredMember);
+      }
+
       return newMember?.id || null;
     } catch (error) {
       console.error("Erro ao processar convite:", error);
@@ -686,57 +856,119 @@ export const TeamService = {
         `[TeamService] Buscando respostas da pesquisa para equipe ${teamId}`
       );
 
-      // Primeiro, buscar todas as respostas da pesquisa
+      // Primeiro, buscar todos os membros da equipe com seus emails e papéis
+      const { data: members, error: membersError } = await supabase
+        .from("team_members")
+        .select("*")
+        .eq("team_id", teamId);
+
+      if (membersError) {
+        console.error("Erro ao buscar membros da equipe:", membersError);
+        throw membersError;
+      }
+
+      console.log("Membros da equipe encontrados:", members);
+
+      // Criar um mapa de email para role e user_id
+      const memberMap = new Map();
+      for (const member of members || []) {
+        memberMap.set(member.email, {
+          role: member.role,
+          user_id: member.user_id,
+          id: member.id,
+        });
+      }
+
+      // Buscar todas as respostas da pesquisa para o time
       const { data: responses, error } = await supabase
         .from("survey_responses")
         .select("*")
-        .eq("team_id", teamId)
-        .eq("is_complete", true);
+        .eq("team_id", teamId);
 
       if (error) {
         console.error("Erro ao buscar respostas da equipe:", error);
         return [];
       }
 
-      if (!responses || responses.length === 0) {
-        console.log("Nenhuma resposta encontrada para a equipe");
-        return [];
-      }
+      console.log("Respostas da pesquisa encontradas:", responses);
 
-      // Buscar os papéis dos membros
-      const { data: members, error: membersError } = await supabase
-        .from("team_members")
-        .select("user_id, role")
-        .eq("team_id", teamId);
+      // Mapear respostas para incluir role com base no email ou user_id
+      const resultsWithRoles = [];
 
-      if (membersError) {
-        console.error("Erro ao buscar papéis dos membros:", membersError);
-        // Continuar mesmo sem os papéis
-        return responses.map((r) => ({ ...r, role: "member" }));
-      }
+      // Primeiro adicionar as respostas encontradas
+      if (responses && responses.length > 0) {
+        for (const response of responses) {
+          // Tentar encontrar o membro correspondente por user_id
+          let memberInfo = null;
 
-      // Criar um mapa de user_id para role
-      const roleMap = new Map(
-        members.map((member) => [member.user_id, member.role])
-      );
+          // Encontrar o membro pelo user_id
+          if (response.user_id) {
+            // Percorrer memberMap para encontrar a entrada com o user_id correspondente
+            for (const [email, info] of memberMap.entries()) {
+              if (info.user_id === response.user_id) {
+                memberInfo = { email, ...info };
+                break;
+              }
+            }
+          }
 
-      // Mapear papéis para as respostas
-      const resultsWithRoles = responses.map((response) => {
-        const role = roleMap.get(response.user_id) || "member";
-        return {
-          ...response,
-          role,
-        };
-      });
+          // Se não encontrou pelo user_id, tente buscar o email do usuário
+          if (!memberInfo) {
+            const { data: userData } = await supabase
+              .from("user_profiles")
+              .select("email")
+              .eq("auth_id", response.user_id)
+              .maybeSingle();
 
-      console.log(
-        `[TeamService] Encontradas ${resultsWithRoles.length} respostas totais. Detalhes:`,
-        {
-          total: resultsWithRoles.length,
-          leaders: resultsWithRoles.filter((r) => r.role === "leader").length,
-          members: resultsWithRoles.filter((r) => r.role === "member").length,
+            if (userData && userData.email) {
+              memberInfo = memberMap.get(userData.email);
+            }
+          }
+
+          const role = memberInfo ? memberInfo.role : "member";
+          const email = memberInfo ? memberInfo.email : "";
+
+          resultsWithRoles.push({
+            ...response,
+            role,
+            email,
+          });
         }
-      );
+      }
+
+      // Garantir que temos pelo menos uma resposta (mesmo vazia) para cada membro da equipe
+      for (const [email, info] of memberMap.entries()) {
+        // Verificar se o membro já tem uma resposta no resultado
+        const hasResponse = resultsWithRoles.some(
+          (r) => r.email === email || (r.user_id && r.user_id === info.user_id)
+        );
+
+        // Se não tiver resposta, adicionar uma vazia
+        if (!hasResponse) {
+          resultsWithRoles.push({
+            user_id: info.user_id,
+            team_id: teamId,
+            email: email,
+            role: info.role,
+            q1: 0,
+            q2: 0,
+            q3: 0,
+            q4: 0,
+            q5: 0,
+            q6: 0,
+            q7: 0,
+            q8: 0,
+            q9: 0,
+            q10: 0,
+            q11: 0,
+            q12: 0,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          });
+        }
+      }
+
+      console.log(`[TeamService] Respostas processadas:`, resultsWithRoles);
 
       return resultsWithRoles;
     } catch (error) {

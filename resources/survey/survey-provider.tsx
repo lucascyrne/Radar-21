@@ -535,12 +535,6 @@ export const SurveyProvider: React.FC<SurveyProviderProps> = ({ children }) => {
         ...prev,
         userId: user.id,
         teamId: selectedTeam.id,
-        loading: {
-          ...prev.loading,
-          demographicData: true,
-          survey: true,
-          openQuestions: true,
-        },
       }));
     }
   }, [user?.id, selectedTeam?.id]);

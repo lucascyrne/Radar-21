@@ -1,10 +1,9 @@
 import { TeamMemberStatus } from "../team/team-model";
 
 export enum InviteStatus {
-  PENDING = "PENDING",
-  ACCEPTED = "ACCEPTED",
-  REJECTED = "REJECTED",
-  EXPIRED = "EXPIRED",
+  PENDING = "pending_survey",
+  ACCEPTED = "answered",
+  INVITED = "invited",
 }
 
 export interface InviteData {

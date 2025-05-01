@@ -101,6 +101,7 @@ export class SurveyService {
     teamId: string
   ): Promise<SurveyResponse | null> {
     try {
+      // Tentar primeiro pelo user_id diretamente
       const { data, error } = await supabase
         .from("survey_responses")
         .select("*")
@@ -113,29 +114,83 @@ export class SurveyService {
         return handleDataError(error);
       }
 
-      if (!data) return null;
+      // Se encontrou, retornar as respostas
+      if (data) {
+        console.log("Respostas encontradas pelo user_id:", data);
+        return this.formatSurveyResponse(data);
+      }
 
-      const responses: SurveyResponses = {};
-      for (let i = 1; i <= 12; i++) {
-        const key = `q${i}`;
-        if (data[key] !== null) {
-          responses[key] = data[key];
+      // Se não encontrou pelo user_id, tentar buscar pelo email
+      const { data: userProfile } = await supabase
+        .from("user_profiles")
+        .select("email")
+        .eq("auth_id", userId)
+        .maybeSingle();
+
+      if (!userProfile?.email) {
+        console.log("Email do usuário não encontrado");
+        return null;
+      }
+
+      // Buscar membro da equipe pelo email
+      const { data: teamMember } = await supabase
+        .from("team_members")
+        .select("*")
+        .eq("email", userProfile.email)
+        .eq("team_id", teamId)
+        .maybeSingle();
+
+      if (!teamMember) {
+        console.log("Membro da equipe não encontrado");
+        return null;
+      }
+
+      console.log("Membro da equipe encontrado:", teamMember);
+
+      // Buscar respostas baseadas no user_id do membro (se existir)
+      if (teamMember.user_id) {
+        const { data: memberResponses } = await supabase
+          .from("survey_responses")
+          .select("*")
+          .eq("user_id", teamMember.user_id)
+          .eq("team_id", teamId)
+          .maybeSingle();
+
+        if (memberResponses) {
+          console.log(
+            "Respostas encontradas pelo user_id do membro:",
+            memberResponses
+          );
+          return this.formatSurveyResponse(memberResponses);
         }
       }
 
-      return {
-        id: data.id,
-        user_id: data.user_id,
-        team_id: data.team_id,
-        created_at: data.created_at,
-        updated_at: data.updated_at,
-        is_complete: data.is_complete,
-        responses,
-      };
+      console.log("Nenhuma resposta encontrada para o usuário");
+      return null;
     } catch (error) {
       console.error("Erro ao carregar respostas:", error);
       return null;
     }
+  }
+
+  static formatSurveyResponse(data: any): SurveyResponse {
+    const responses: SurveyResponses = {};
+    for (let i = 1; i <= 12; i++) {
+      const key = `q${i}`;
+      if (data[key] !== null) {
+        responses[key] = data[key];
+      }
+    }
+
+    return {
+      id: data.id,
+      user_id: data.user_id,
+      team_id: data.team_id,
+      created_at: data.created_at,
+      updated_at: data.updated_at,
+      is_complete: data.is_complete,
+      responses,
+    };
   }
 
   static async saveSurveyResponses(
@@ -303,33 +358,40 @@ export class SurveyService {
 
   static async getTeamResults(teamId: string) {
     try {
-      // Buscar todos os membros da equipe com suas respostas
+      // Buscar todos os membros da equipe com seus emails e papéis
       const { data: members, error: membersError } = await supabase
         .from("team_members")
-        .select(
-          `
-          id,
-          role,
-          survey_responses!inner (
-            q1, q2, q3, q4, q5, q6, q7, q8, q9, q10, q11, q12
-          )
-        `
-        )
-        .eq("team_id", teamId)
-        .eq("status", "answered");
+        .select("id, role, user_id, email")
+        .eq("team_id", teamId);
 
       if (membersError) throw membersError;
       if (!members?.length) return null;
 
-      // Separar líder e membros
-      const leader = members.find((m) => m.role === "leader");
-      const teamMembers = members.filter((m) => m.role === "member");
+      console.log("Total de membros encontrados:", members.length);
 
-      if (!leader || !teamMembers.length) return null;
+      // Criar um mapa de emails e user_ids para facilitar a associação
+      const emailToMember = new Map();
+      const userIdToMember = new Map();
 
-      // Extrair respostas do líder
-      const leaderResponses = leader.survey_responses;
-      if (!leaderResponses) return null;
+      for (const member of members) {
+        emailToMember.set(member.email, member);
+        if (member.user_id) {
+          userIdToMember.set(member.user_id, member);
+        }
+      }
+
+      // Buscar todas as respostas para este time
+      const { data: responses, error: responsesError } = await supabase
+        .from("survey_responses")
+        .select("*")
+        .eq("team_id", teamId);
+
+      if (responsesError) {
+        console.error("Erro ao buscar respostas:", responsesError);
+        return null;
+      }
+
+      console.log("Respostas encontradas:", responses?.length || 0);
 
       // Definir IDs das questões
       const questionIds = Array.from(
@@ -337,15 +399,59 @@ export class SurveyService {
         (_, i) => `q${i + 1}` as keyof SurveyResponseData
       );
 
-      // Calcular média da equipe por questão
+      // Associar respostas aos membros
+      const memberResponses: Record<string, any>[] = [];
+      const leaderResponses: Record<string, any>[] = [];
+
+      // Processar as respostas encontradas
+      if (responses && responses.length > 0) {
+        for (const response of responses) {
+          // Tentar encontrar o membro correspondente por user_id
+          let member = userIdToMember.get(response.user_id);
+
+          // Buscar o email do usuário se não encontrou o membro
+          if (!member && response.user_id) {
+            const { data: userProfile } = await supabase
+              .from("user_profiles")
+              .select("email")
+              .eq("auth_id", response.user_id)
+              .maybeSingle();
+
+            if (userProfile?.email) {
+              member = emailToMember.get(userProfile.email);
+            }
+          }
+
+          // Adicionar à lista correta com base no papel do membro
+          if (member) {
+            if (member.role === "leader") {
+              leaderResponses.push({ ...response, role: "leader" });
+            } else {
+              memberResponses.push({ ...response, role: "member" });
+            }
+          } else {
+            // Se não conseguiu associar, tentar descobrir o papel de outra forma
+            console.log(
+              "Não foi possível associar a resposta a um membro:",
+              response
+            );
+            memberResponses.push({ ...response, role: "member" }); // Assumir membro regular por padrão
+          }
+        }
+      }
+
+      console.log("Respostas processadas:", {
+        membros: memberResponses.length,
+        líderes: leaderResponses.length,
+      });
+
+      // Calcular média da equipe (apenas membros regulares)
       const teamAverage = questionIds.map((questionId) => {
-        const values = teamMembers
-          .map(
-            (member) =>
-              (member.survey_responses as SurveyResponseData)?.[questionId]
-          )
+        const values = memberResponses
+          .map((member) => member[questionId])
           .filter(
-            (value): value is number => value !== undefined && value !== null
+            (value): value is number =>
+              value !== undefined && value !== null && value !== 0
           );
 
         const average = values.length
@@ -355,19 +461,39 @@ export class SurveyService {
         return {
           questionId,
           average: Number(average.toFixed(2)),
+          memberCount: values.length,
         };
       });
 
+      // Usar a primeira resposta do líder ou criar uma resposta vazia
+      let leaderResponse =
+        leaderResponses.length > 0 ? leaderResponses[0] : null;
+
+      // Se não há respostas do líder, criar valores zerados
+      if (!leaderResponse) {
+        // Procurar o líder nos membros da equipe
+        const leader = members.find((m) => m.role === "leader");
+        if (leader) {
+          leaderResponse = {
+            user_id: leader.user_id,
+            team_id: teamId,
+            role: "leader",
+            ...Object.fromEntries(questionIds.map((q) => [q, 0])),
+          };
+        } else {
+          leaderResponse = {
+            team_id: teamId,
+            role: "leader",
+            ...Object.fromEntries(questionIds.map((q) => [q, 0])),
+          };
+        }
+      }
+
       // Formatar respostas do líder
-      const formattedLeaderResponses = questionIds.map((questionId) => {
-        const value = (leader.survey_responses as SurveyResponseData)?.[
-          questionId
-        ];
-        return {
-          questionId,
-          value: value !== undefined && value !== null ? Number(value) : 0,
-        };
-      });
+      const formattedLeaderResponses = questionIds.map((questionId) => ({
+        questionId,
+        value: Number(leaderResponse[questionId] || 0),
+      }));
 
       return {
         teamAverage,

@@ -1,14 +1,12 @@
 "use client";
 
 import supabase from "@/lib/supabase/client";
-import { PostgrestError } from "@supabase/supabase-js";
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "../auth/auth-hook";
 import { useInvite } from "../invite/invite-hook";
 import { initialTeamState, TeamContext } from "./team-context";
 import {
   CreateTeamFormValues,
-  Team,
   TeamMember,
   TeamMemberStatus,
 } from "./team-model";
@@ -111,156 +109,54 @@ export function TeamProvider({ children }: TeamProviderProps) {
 
         console.log("Carregando equipes para usuário:", userId);
 
-        // Primeiro, verificar o papel do usuário
-        const { data: userProfile, error: profileError } = (await supabase
-          .from("user_profiles")
-          .select("*")
-          .eq("auth_id", userId)
-          .single()) as {
-          data: UserProfile | null;
-          error: PostgrestError | null;
-        };
+        const { teams: userTeams } = await TeamService.getUserTeams(userId);
+        console.log("Times atualizados:", userTeams);
 
-        if (profileError || !userProfile) {
+        // Se houver times, carregar os membros do primeiro time
+        if (userTeams.length > 0) {
+          console.log("Carregando membros do time:", userTeams[0].id);
+          const members = await TeamService.getTeamMembers(userTeams[0].id);
+
           setState((prev) => ({
             ...prev,
+            teams: userTeams,
+            selectedTeam: userTeams[0],
+            teamMembers: members,
             isLoading: false,
-            error:
-              profileError?.message || "Erro ao carregar perfil do usuário",
-            teams: [],
-            selectedTeam: null,
+            isInitialLoading: false,
           }));
-          loadingTeamsRef.current = false;
-          initialLoadAttempted.current = true;
+
+          // Marcar o time como carregado
+          loadedMembersRef.current.add(userTeams[0].id);
           teamsLoadedRef.current = true;
-          return;
-        }
 
-        let teamsData: Team[] = [];
-        let teamsError: PostgrestError | null = null;
-
-        if (userProfile.role === "admin") {
-          // Se for admin, buscar todos os times
-          const { data, error } = await supabase
-            .from("teams")
-            .select("*")
-            .order("created_at", { ascending: false });
-
-          teamsError = error;
-          const mappedTeams: Team[] =
-            data?.map((team) => ({
-              id: team.id,
-              name: team.name,
-              owner_email: team.owner_email,
-              team_size: team.team_size,
-              created_at: team.created_at,
-              organization_id: team.organization_id,
-            })) ?? [];
-          teamsData = mappedTeams;
-        } else {
-          // Se for um usuário regular, buscar times via team_members
-          const { data: memberData, error: memberError } = await supabase
-            .from("team_members")
-            .select("team_id")
-            .eq("email", user?.email || "");
-
-          if (memberError) {
-            teamsError = memberError;
-          } else if (memberData && memberData.length > 0) {
-            const teamIds = memberData.map((mt) => mt.team_id);
-            const { data, error } = await supabase
-              .from("teams")
-              .select(
-                "id, name, owner_email, team_size, created_at, organization_id"
-              )
-              .in("id", teamIds);
-
-            teamsData = (data ?? []) as Team[];
-            teamsError = error;
+          // Se o usuário atual estiver logado, encontrar e definir o membro atual
+          if (user?.email) {
+            const currentMember =
+              members.find((m) => m.email === user.email) || null;
+            setState((prev) => ({ ...prev, currentMember }));
           }
-        }
-
-        if (teamsError) {
-          console.error("Erro ao buscar equipes:", teamsError);
+        } else {
           setState((prev) => ({
             ...prev,
-            isLoading: false,
-            error: teamsError.message,
-            teams: [],
-            selectedTeam: null,
-          }));
-          loadingTeamsRef.current = false;
-          initialLoadAttempted.current = true;
-          teamsLoadedRef.current = true;
-          return;
-        }
-
-        // Se não encontramos equipes, definir estado como vazio mas não em loading
-        if (!teamsData || teamsData.length === 0) {
-          setState((prev) => ({
-            ...prev,
-            teams: [],
+            teams: userTeams,
             selectedTeam: null,
             teamMembers: [],
+            currentMember: null,
             isLoading: false,
-            error: null,
+            isInitialLoading: false,
           }));
-          loadingTeamsRef.current = false;
-          initialLoadAttempted.current = true;
           teamsLoadedRef.current = true;
-          return;
         }
-
-        const uniqueTeams = teamsData
-          .map(
-            (team): Team => ({
-              id: team.id,
-              name: team.name,
-              organization_id: team.organization_id,
-              owner_email: team.owner_email,
-              team_size: team.team_size,
-              created_at: team.created_at,
-            })
-          )
-          .sort(
-            (a, b) =>
-              new Date(b.created_at).getTime() -
-              new Date(a.created_at).getTime()
-          );
-
-        console.log(
-          "Equipes encontradas após processamento:",
-          uniqueTeams.length
-        );
-
-        // Atualizar estado com dados frescos
-        setState((prev) => ({
-          ...prev,
-          teams: uniqueTeams,
-          selectedTeam: prev.selectedTeam || uniqueTeams[0] || null,
-          isLoading: false,
-          error: null,
-        }));
-
-        // Se temos uma equipe selecionada, carregar seus membros
-        if (uniqueTeams[0]?.id) {
-          await loadTeamMembers(uniqueTeams[0].id);
-        }
-
-        teamsLoadedRef.current = true;
-      } catch (error: any) {
-        console.error("Erro ao carregar equipes:", error);
+      } catch (err) {
+        console.error("Erro ao atualizar times:", err);
         setState((prev) => ({
           ...prev,
           isLoading: false,
-          error: error.message,
-          teams: [], // Garantir que teams seja um array vazio em caso de erro
-          selectedTeam: null,
-          teamMembers: [],
+          error: "Erro ao carregar times e membros",
         }));
       } finally {
         loadingTeamsRef.current = false;
-        initialLoadAttempted.current = true;
       }
     },
     [user?.email]
@@ -599,38 +495,71 @@ export function TeamProvider({ children }: TeamProviderProps) {
   }, [user?.id, user?.email, pendingInviteId]);
 
   // Carregar respostas da pesquisa da equipe
-  const loadTeamSurveyResponses = useCallback(async (teamId: string) => {
-    try {
-      setState((prev) => ({ ...prev, isLoading: true }));
-      console.log(`Carregando respostas da pesquisa para equipe ${teamId}`);
+  const loadTeamSurveyResponses = useCallback(
+    async (teamId: string) => {
+      try {
+        setState((prev) => ({ ...prev, isLoading: true }));
+        console.log(`Carregando respostas da pesquisa para equipe ${teamId}`);
 
-      if (!teamId) {
-        throw new Error("ID da equipe não fornecido");
+        if (!teamId) {
+          throw new Error("ID da equipe não fornecido");
+        }
+
+        // Primeiro carregar os membros da equipe para garantir que temos os papéis corretos
+        if (loadedMembersRef.current.has(teamId) === false) {
+          console.log("Carregando membros primeiro para obter os papéis");
+          await loadTeamMembers(teamId);
+          loadedMembersRef.current.add(teamId);
+        }
+
+        // Carregar as respostas da pesquisa
+        const responses = await TeamService.getTeamSurveyResponses(teamId);
+
+        console.log(
+          `Obtidas ${responses.length} respostas para a equipe ${teamId}`
+        );
+
+        // Adicionar os papéis corretos às respostas usando os membros já carregados
+        const responsesWithRoles = responses.map((response) => {
+          // Tentar encontrar o papel do membro na lista de membros da equipe
+          const member = state.teamMembers.find(
+            (m) => m.user_id === response.user_id
+          );
+
+          if (member) {
+            return {
+              ...response,
+              role: member.role, // Usar o papel do membro da lista
+            };
+          }
+          return response;
+        });
+
+        // Log para debug dos papéis atribuídos
+        console.log(
+          "Papéis dos respondentes:",
+          responsesWithRoles.map((r) => r.role)
+        );
+
+        setState((prev) => ({
+          ...prev,
+          teamSurveyResponses: responsesWithRoles,
+          isLoading: false,
+        }));
+
+        return responsesWithRoles;
+      } catch (error: any) {
+        console.error("Erro ao carregar respostas da equipe:", error);
+        setState((prev) => ({
+          ...prev,
+          isLoading: false,
+          error: error.message || "Erro ao carregar respostas da equipe",
+        }));
+        return [];
       }
-
-      const responses = await TeamService.getTeamSurveyResponses(teamId);
-
-      console.log(
-        `Obtidas ${responses.length} respostas para a equipe ${teamId}`
-      );
-
-      setState((prev) => ({
-        ...prev,
-        teamSurveyResponses: responses,
-        isLoading: false,
-      }));
-
-      return responses;
-    } catch (error: any) {
-      console.error("Erro ao carregar respostas da equipe:", error);
-      setState((prev) => ({
-        ...prev,
-        isLoading: false,
-        error: error.message || "Erro ao carregar respostas da equipe",
-      }));
-      return [];
-    }
-  }, []);
+    },
+    [state.teamMembers, loadTeamMembers]
+  );
 
   return (
     <TeamContext.Provider

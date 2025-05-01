@@ -23,23 +23,14 @@ export const AuthService = {
       // Determinar a URL base com base no ambiente atual
       let baseUrl;
       if (typeof window !== "undefined") {
-        // Verificar se estamos em um subdomínio org
-        const isOrgSubdomain = window.location.hostname.startsWith("org.");
-
-        if (isOrgSubdomain) {
-          // Se estiver no subdomínio org, manter o mesmo host para o callback
-          baseUrl = window.location.origin;
-        } else {
-          // Se estiver no domínio principal, manter o domínio principal
-          baseUrl = window.location.origin;
-        }
+        baseUrl = window.location.origin;
       } else {
         // Fallback para servidor
         baseUrl = "https://radar21.com.br";
       }
 
       // Construir a URL de redirecionamento completa
-      const redirectUrl = options.redirectTo || `${baseUrl}/auth/callback`;
+      const redirectUrl = options.redirectTo || `${baseUrl}/members/callback`;
 
       console.log("Iniciando fluxo OAuth com redirect para:", redirectUrl);
 
@@ -48,7 +39,6 @@ export const AuthService = {
         provider: "google",
         options: {
           redirectTo: redirectUrl,
-          // Incluímos queryParams se forem fornecidos
           queryParams: options.queryParams,
         },
       });
@@ -179,36 +169,13 @@ export const AuthService = {
         throw new Error("Papel de usuário inválido");
       }
 
-      // Determinar URL de redirecionamento apropriado com base no hostname
+      // Determinar URL de redirecionamento
       let redirectUrl;
       if (typeof window !== "undefined") {
-        const isOrgSubdomain = window.location.hostname.startsWith("org.");
-
-        if (normalizedRole === "ORGANIZATION" && !isOrgSubdomain) {
-          // Se estiver registrando uma organização mas não estiver no subdomínio org,
-          // redirecionar para o subdomínio org
-          const protocol = window.location.protocol;
-          const host = window.location.host;
-          redirectUrl = `${protocol}//org.${host.replace(
-            /^org\./,
-            ""
-          )}/auth/callback?type=signup`;
-        } else if (normalizedRole !== "ORGANIZATION" && isOrgSubdomain) {
-          // Se estiver registrando um usuário regular mas estiver no subdomínio org,
-          // redirecionar para o domínio principal
-          const protocol = window.location.protocol;
-          const host = window.location.host;
-          redirectUrl = `${protocol}//${host.replace(
-            /^org\./,
-            ""
-          )}/auth/callback?type=signup`;
-        } else {
-          // Caso padrão: mesmo domínio
-          redirectUrl = `${window.location.origin}/auth/callback?type=signup`;
-        }
+        redirectUrl = `${window.location.origin}/members/callback?type=signup`;
       } else {
         // Fallback para servidor
-        redirectUrl = `https://radar21.com.br/auth/callback?type=signup`;
+        redirectUrl = `https://radar21.com.br/members/callback?type=signup`;
       }
 
       // Criar o usuário no Supabase Auth
@@ -239,8 +206,6 @@ export const AuthService = {
         email: data.user.email,
       });
 
-      // Retornar imediatamente após criar o usuário
-      // O trigger handle_new_user cuidará da criação do perfil
       return {
         data: {
           user: data.user,
@@ -292,6 +257,45 @@ export const AuthService = {
       });
 
       if (updateError) throw updateError;
+
+      // Verificar e sincronizar perfil de usuário
+      const { data: profile } = await supabase
+        .from("user_profiles")
+        .select("id, auth_id, email")
+        .eq("email", user.email)
+        .maybeSingle();
+
+      if (profile) {
+        // Se encontrou o perfil mas o auth_id não está associado, atualizá-lo
+        if (!profile.auth_id || profile.auth_id !== user.id) {
+          await supabase
+            .from("user_profiles")
+            .update({ auth_id: user.id })
+            .eq("id", profile.id);
+          console.log(`Perfil atualizado para o usuário ${user.email}`);
+        }
+      } else {
+        // Se não encontrou o perfil, criar um
+        await supabase.from("user_profiles").insert({
+          email: user.email,
+          auth_id: user.id,
+          role: user.role || "USER",
+        });
+        console.log(`Perfil criado para o usuário ${user.email}`);
+      }
+
+      // Sincronizar team_members onde o email corresponde ao usuário
+      const { error: updateTeamError } = await supabase
+        .from("team_members")
+        .update({ user_id: user.id })
+        .eq("email", user.email)
+        .is("user_id", null);
+
+      if (updateTeamError) {
+        console.error("Erro ao sincronizar equipes:", updateTeamError);
+      } else {
+        console.log(`Associações de equipe sincronizadas para ${user.email}`);
+      }
     } catch (error) {
       console.error("Erro ao processar usuário autenticado:", error);
       throw error;

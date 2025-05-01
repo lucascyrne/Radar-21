@@ -39,7 +39,7 @@ export class InviteService {
         .insert({
           team_id: teamId,
           email: email,
-          status: "PENDING",
+          status: "pending_survey",
           invited_by: invitedBy,
           message: message,
         })
@@ -114,7 +114,7 @@ export class InviteService {
     try {
       const { error } = await supabase
         .from("team_invites")
-        .update({ status: InviteStatus.REJECTED })
+        .update({ status: InviteStatus.INVITED })
         .eq("id", inviteId);
 
       if (error) {
@@ -164,27 +164,77 @@ export class InviteService {
         .from("user_profiles")
         .select("role")
         .eq("auth_id", userId)
-        .single();
+        .maybeSingle();
 
-      if (profileError && profileError.code !== "PGRST116") {
-        console.error("Erro ao verificar perfil do usuário:", profileError);
-      } else if (userProfile?.role === "ORGANIZATION") {
+      if (!profileError && userProfile?.role === "ORGANIZATION") {
         throw new Error(
           "Contas de organização não podem ser membros de equipes"
         );
       }
 
-      const { error: updateError } = await supabase
+      // Verificar se o membro já existe
+      const { data: existingMember, error: memberError } = await supabase
         .from("team_members")
-        .update({
-          user_id: userId,
-          status: "pending_survey" as InviteStatus,
-          updated_at: new Date().toISOString(),
-        })
+        .select("id, status")
         .eq("team_id", pendingTeamId)
-        .eq("email", email);
+        .eq("email", email)
+        .maybeSingle();
 
-      if (updateError) throw updateError;
+      if (memberError && memberError.code !== "PGRST116") {
+        throw memberError;
+      }
+
+      if (existingMember) {
+        // Atualizar o membro existente
+        const { error: updateError } = await supabase
+          .from("team_members")
+          .update({
+            user_id: userId,
+            status: "pending_survey" as InviteStatus,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existingMember.id);
+
+        if (updateError) throw updateError;
+      } else {
+        // Criar novo membro
+        const { error: insertError } = await supabase
+          .from("team_members")
+          .insert({
+            team_id: pendingTeamId,
+            user_id: userId,
+            email: email,
+            role: "member",
+            status: "pending_survey" as InviteStatus,
+            updated_at: new Date().toISOString(),
+          });
+
+        if (insertError) throw insertError;
+      }
+
+      // Se chegou até aqui, finalizar com API para garantir que tudo foi processado corretamente
+      try {
+        const response = await fetch("/api/process-invite", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            teamId: pendingTeamId,
+            userId,
+            email,
+          }),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          console.warn("Aviso na API de processo:", errorData);
+          // Continuar mesmo com aviso
+        }
+      } catch (apiError) {
+        console.warn("Erro ao chamar API de processamento:", apiError);
+        // Continuar mesmo com erro na API
+      }
 
       // Atualizar os metadados do usuário com o teamId
       const { error: userError } = await supabase.auth.updateUser({

@@ -66,45 +66,34 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
 
   // Verifica se estamos em uma página de autenticação
   const isAuthPage = useCallback(() => {
-    return pathname?.startsWith("/auth") || pathname?.startsWith("/org-auth");
+    return (
+      pathname?.startsWith("/members") || pathname?.startsWith("/organizations")
+    );
   }, [pathname]);
-
-  // Verifica se estamos em um subdomínio de organização
-  const isOrgSubdomain = useCallback(() => {
-    if (typeof window !== "undefined") {
-      const hostname = window.location.hostname;
-      return hostname.startsWith("org.");
-    }
-    return false;
-  }, []);
 
   // Redireciona o usuário para a página correta
   const redirectAuthenticatedUser = useCallback(() => {
     if (!state.user || !state.isAuthenticated) return;
 
-    const isOrg = state.user.role === "ORGANIZATION";
-    const onOrgSubdomain = isOrgSubdomain();
-
     // Apenas redirecionar se estiver na página de autenticação
     if (!isAuthPage()) return;
 
-    // Redirecionar para a página inicial apropriada
-    if (isOrg && onOrgSubdomain) {
-      router.push("/dashboard");
-    } else if (isOrg && !onOrgSubdomain) {
-      // Se for organização mas estiver no domínio principal, redirecionar para o subdomínio
-      const protocol = window.location.protocol;
-      const host = window.location.host;
-      window.location.href = `${protocol}//org.${host}/dashboard`;
-    } else if (!isOrg && onOrgSubdomain) {
-      // Se for usuário regular mas estiver no subdomínio org, redirecionar para o domínio principal
-      const protocol = window.location.protocol;
-      const host = window.location.host.replace(/^org\./, "");
-      window.location.href = `${protocol}//${host}/team-setup`;
-    } else if (!isOrg && !onOrgSubdomain) {
-      router.push("/team-setup");
+    // Verificar se estamos no subdomínio org
+    const isOrgSubdomain =
+      typeof window !== "undefined" &&
+      window.location.hostname.startsWith("org.");
+
+    // Obter URL de redirecionamento da query string
+    const searchParams = new URLSearchParams(window.location.search);
+    const redirectTo = searchParams.get("redirect");
+
+    if (redirectTo) {
+      router.push(redirectTo);
+    } else {
+      // Redirecionar para a página inicial apropriada
+      router.push(isOrgSubdomain ? "/dashboard" : "/team-setup");
     }
-  }, [state.user, state.isAuthenticated, isOrgSubdomain, isAuthPage, router]);
+  }, [state.user, state.isAuthenticated]);
 
   // Efeito para redirecionar usuário autenticado
   useEffect(() => {
@@ -113,46 +102,43 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
     }
   }, [state.isAuthenticated]);
 
-  const setSession = useCallback(
-    (session: Session | null) => {
-      if (!session) {
-        updateState({
-          user: null,
-          session: null,
-          isAuthenticated: false,
-          isLoading: false,
-          error: null,
-          surveyResponses: null,
-        });
-
-        if (typeof window !== "undefined") {
-          localStorage.removeItem(SESSION_STORAGE_KEY);
-        }
-        return null;
-      }
-
-      const userRole = session.user.user_metadata?.role;
-      const user: User = {
-        id: session.user.id,
-        email: session.user.email || "",
-        name: session.user.user_metadata?.name || "",
-        avatar_url: session.user.user_metadata?.avatar_url || "",
-        role: userRole,
-        email_confirmed_at: session.user.email_confirmed_at,
-      };
-
+  const setSession = useCallback((session: Session | null) => {
+    if (!session) {
       updateState({
-        user,
-        session,
-        isAuthenticated: true,
+        user: null,
+        session: null,
+        isAuthenticated: false,
         isLoading: false,
         error: null,
+        surveyResponses: null,
       });
 
-      return user;
-    },
-    [updateState]
-  );
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(SESSION_STORAGE_KEY);
+      }
+      return null;
+    }
+
+    const userRole = session.user.user_metadata?.role;
+    const user: User = {
+      id: session.user.id,
+      email: session.user.email || "",
+      name: session.user.user_metadata?.name || "",
+      avatar_url: session.user.user_metadata?.avatar_url || "",
+      role: userRole,
+      email_confirmed_at: session.user.email_confirmed_at,
+    };
+
+    updateState({
+      user,
+      session,
+      isAuthenticated: true,
+      isLoading: false,
+      error: null,
+    });
+
+    return user;
+  }, []);
 
   useEffect(() => {
     const {
@@ -187,7 +173,6 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           throw new Error("Erro ao fazer login");
         }
 
-        const user = setSession(session);
         return session;
       } catch (error: any) {
         console.error("Erro no login:", error);
@@ -212,20 +197,20 @@ export const AuthProvider = ({ children }: AuthProviderProps) => {
           : false;
 
       if (isOrgSubdomain) {
-        router.push("/org-auth/login");
+        router.push("/organizations/login");
       } else {
-        router.push("/auth/login");
+        router.push("/members/login");
       }
     } catch (error: any) {
       updateState({ error: error.message, isLoading: false });
     }
-  }, [router]);
+  }, []);
 
   const signInWithGoogle = useCallback(async () => {
     try {
       updateState({ isLoading: true, error: null });
       await AuthService.signInWithGoogle({
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: `${window.location.origin}/members/callback`,
       });
     } catch (error: any) {
       updateState({ error: error.message, isLoading: false });
