@@ -54,7 +54,7 @@ export const Header = memo(function Header() {
 
   const handleLogout = async () => {
     setIsSheetOpen(false);
-    router.push("/auth/logout");
+    router.push("/members/logout");
   };
 
   // Obter as iniciais do email do usuário
@@ -146,13 +146,16 @@ export const Header = memo(function Header() {
               </div>
             ) : (
               <div className="flex items-center space-x-2">
-                <Link href="/auth/login" onClick={() => setIsSheetOpen(false)}>
+                <Link
+                  href="/members/login"
+                  onClick={() => setIsSheetOpen(false)}
+                >
                   <Button size="sm" variant="default">
                     Acessar
                   </Button>
                 </Link>
                 <a
-                  href="https://org.radar21.com.br/auth/login"
+                  href="https://org.radar21.com.br/organizations/login"
                   target="_blank"
                   rel="noopener noreferrer"
                 >
@@ -216,13 +219,13 @@ export const Header = memo(function Header() {
                     ) : (
                       <div className="flex flex-col space-y-2">
                         <Link
-                          href="/auth/login"
+                          href="/members/login"
                           onClick={() => setIsSheetOpen(false)}
                         >
                           <Button className="w-full">Acessar</Button>
                         </Link>
                         <a
-                          href="https://org.radar21.com.br/auth/login"
+                          href="https://org.radar21.com.br/organizations/login"
                           target="_blank"
                           rel="noopener noreferrer"
                           className="w-full"

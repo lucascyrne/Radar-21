@@ -29,7 +29,7 @@ export function OrgHeader() {
 
   const handleSignOut = useCallback(async () => {
     await signOut();
-    router.push("/org-auth/login");
+    router.push("/organizations/login");
   }, []);
 
   const getUserInitials = useCallback(() => {

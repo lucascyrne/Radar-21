@@ -79,7 +79,9 @@ export function LoginForm({
           <p className="text-muted-foreground">
             Ainda não tem uma conta?{" "}
             <Link
-              href={isOrgLogin ? "/org-auth/register" : "/auth/register"}
+              href={
+                isOrgLogin ? "/organizations/register" : "/members/register"
+              }
               className="text-primary hover:underline font-medium"
             >
               Registre-se

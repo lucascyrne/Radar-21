@@ -52,27 +52,17 @@ export function ResultsTable({
 
     // Calcular a diferença entre a média da equipe e o líder
     // Valores positivos indicam que a equipe avalia melhor que o líder
-    const hasTeamAndLeaderData =
-      teamResults &&
-      teamResults.length > 0 &&
-      leaderResults &&
-      leaderResults.length > 0;
-
-    const difference = hasTeamAndLeaderData
-      ? Number((teamValue - leaderValue).toFixed(1))
-      : undefined;
+    const difference = Number((teamValue - leaderValue).toFixed(1));
 
     // Determinar a cor da diferença com base no valor
-    const getDifferenceColor = (diff: number | undefined) => {
-      if (diff === undefined) return "";
+    const getDifferenceColor = (diff: number) => {
       if (diff > 0.5) return "text-green-600"; // Equipe avalia melhor que o líder
       if (diff < -0.5) return "text-red-600"; // Equipe avalia pior que o líder
       return "text-orange-500"; // Avaliações próximas
     };
 
     // Determinar o ícone para a diferença
-    const getDifferenceIcon = (diff: number | undefined) => {
-      if (diff === undefined) return <Minus size={16} />;
+    const getDifferenceIcon = (diff: number) => {
       if (diff > 0.5)
         return <ArrowUpIcon size={16} className="text-green-600" />;
       if (diff < -0.5)
@@ -80,8 +70,7 @@ export function ResultsTable({
       return <Minus size={16} className="text-orange-500" />;
     };
 
-    const getDifferenceText = (diff: number | undefined) => {
-      if (diff === undefined) return "Sem dados suficientes";
+    const getDifferenceText = (diff: number) => {
       if (diff > 0.5) return "Equipe avalia melhor que o líder";
       if (diff < -0.5) return "Equipe avalia pior que o líder";
       return "Avaliações próximas";
@@ -99,98 +88,124 @@ export function ResultsTable({
     };
   });
 
+  // Ordenar dados pela maior diferença (equipe - líder)
+  const sortedData = [...data].sort((a, b) => {
+    if (a.difference === undefined) return 1;
+    if (b.difference === undefined) return -1;
+    return b.difference - a.difference;
+  });
+
   return (
-    <div className="overflow-x-auto">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>Competência</TableHead>
-            <TableHead className="text-right">Sua avaliação</TableHead>
-            {teamResults && teamResults.length > 0 && (
-              <TableHead className="text-right">Média da equipe</TableHead>
-            )}
-            {leaderResults && leaderResults.length > 0 && (
-              <TableHead className="text-right">
-                Avaliação da liderança
-              </TableHead>
-            )}
-            {teamResults &&
-              teamResults.length > 0 &&
-              leaderResults &&
-              leaderResults.length > 0 && (
-                <TableHead className="text-right">
-                  Diferença (Equipe - Líder)
-                </TableHead>
-              )}
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {data.map((row) => (
-            <TableRow key={row.category}>
-              <TableCell className="font-medium">{row.category}</TableCell>
-              <TableCell className="text-right">
-                {row.user.toFixed(1)}
-              </TableCell>
+    <div className="space-y-4">
+      <div className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Competência</TableHead>
+              <TableHead className="text-right">Sua avaliação</TableHead>
               {teamResults && teamResults.length > 0 && (
-                <TableCell className="text-right">
-                  {row.team.toFixed(1)}
-                </TableCell>
+                <TableHead className="text-right">Média da equipe</TableHead>
               )}
               {leaderResults && leaderResults.length > 0 && (
-                <TableCell className="text-right">
-                  {row.leader.toFixed(1)}
-                </TableCell>
+                <TableHead className="text-right">
+                  Avaliação da liderança
+                </TableHead>
               )}
               {teamResults &&
                 teamResults.length > 0 &&
                 leaderResults &&
                 leaderResults.length > 0 && (
-                  <TableCell
-                    className={`text-right font-medium ${row.differenceColor} flex items-center justify-end gap-1`}
-                    title={row.differenceText}
-                  >
-                    {row.difference !== undefined ? (
-                      <>
-                        {row.differenceIcon}
-                        <span>
-                          {row.difference > 0 ? "+" : ""}
-                          {row.difference.toFixed(1)}
-                        </span>
-                      </>
-                    ) : (
-                      <span>-</span>
-                    )}
-                  </TableCell>
+                  <TableHead className="text-right">
+                    Diferença (Equipe - Líder)
+                  </TableHead>
                 )}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {sortedData.map((row) => (
+              <TableRow key={row.category}>
+                <TableCell className="font-medium">{row.category}</TableCell>
+                <TableCell className="text-right">
+                  {row.user.toFixed(1)}
+                </TableCell>
+                {teamResults && teamResults.length > 0 && (
+                  <TableCell className="text-right font-medium">
+                    {row.team.toFixed(1)}
+                  </TableCell>
+                )}
+                {leaderResults && leaderResults.length > 0 && (
+                  <TableCell className="text-right">
+                    {row.leader.toFixed(1)}
+                  </TableCell>
+                )}
+                {teamResults &&
+                  teamResults.length > 0 &&
+                  leaderResults &&
+                  leaderResults.length > 0 && (
+                    <TableCell
+                      className={`text-right font-medium ${row.differenceColor} flex items-center justify-end gap-1`}
+                      title={row.differenceText}
+                    >
+                      {row.difference !== undefined ? (
+                        <>
+                          {row.differenceIcon}
+                          <span>
+                            {row.difference > 0 ? "+" : ""}
+                            {row.difference.toFixed(1)}
+                          </span>
+                        </>
+                      ) : (
+                        <span>-</span>
+                      )}
+                    </TableCell>
+                  )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
       {teamResults &&
         teamResults.length > 0 &&
         leaderResults &&
         leaderResults.length > 0 && (
-          <div className="mt-4 text-sm text-muted-foreground">
-            <p>
-              <ArrowUpIcon size={16} className="inline text-green-600" />{" "}
-              <span className="text-green-600 font-medium">
-                Diferença positiva:
-              </span>{" "}
-              Equipe avalia a competência melhor que o líder
+          <div className="mt-4 p-3 bg-gray-50 rounded-md text-sm">
+            <p className="font-medium mb-2">
+              Legenda da diferença (Equipe - Líder):
             </p>
-            <p>
-              <ArrowDownIcon size={16} className="inline text-red-600" />{" "}
-              <span className="text-red-600 font-medium">
-                Diferença negativa:
-              </span>{" "}
-              Equipe avalia a competência pior que o líder
-            </p>
-            <p>
-              <Minus size={16} className="inline text-orange-500" />{" "}
-              <span className="text-orange-500 font-medium">
-                Diferença neutra:
-              </span>{" "}
-              Líder e equipe têm avaliações similares
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+              <div className="flex items-center gap-2">
+                <ArrowUpIcon size={16} className="text-green-600" />
+                <span className="text-green-600 font-medium">
+                  Diferença positiva:
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  Equipe avalia melhor que o líder
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <ArrowDownIcon size={16} className="text-red-600" />
+                <span className="text-red-600 font-medium">
+                  Diferença negativa:
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  Equipe avalia pior que o líder
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Minus size={16} className="text-orange-500" />
+                <span className="text-orange-500 font-medium">
+                  Diferença neutra:
+                </span>
+                <span className="text-muted-foreground text-xs">
+                  Avaliações similares
+                </span>
+              </div>
+            </div>
+            <p className="mt-2 text-xs text-muted-foreground">
+              As competências estão ordenadas pela maior diferença entre a
+              equipe e o líder, destacando as áreas com maior divergência de
+              percepção.
             </p>
           </div>
         )}

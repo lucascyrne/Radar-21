@@ -18,7 +18,7 @@ export function OrgLayout({ children }: OrgLayoutProps) {
   useEffect(() => {
     if (!user?.id) {
       toast.error("Usuário não autenticado");
-      router.push("/auth/login");
+      router.push("/members/login");
       return;
     }
 

@@ -127,6 +127,22 @@ export default function InviteUserForm({
     setIsSubmitting(true);
 
     try {
+      // Verificar se o email pertence a uma conta do tipo ORGANIZATION
+      const { data: profileData, error: profileError } = await supabase
+        .from("user_profiles")
+        .select("role")
+        .eq("email", data.email)
+        .maybeSingle();
+
+      if (!profileError && profileData?.role === "ORGANIZATION") {
+        toast.error("Usuário inelegível", {
+          description:
+            "Contas do tipo Organização não podem ser convidadas como membros de equipes.",
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       // Verificar se o membro já existe na equipe
       const existingMember = teamMembers.find(
         (member) => member.email === data.email
@@ -140,9 +156,6 @@ export default function InviteUserForm({
         return;
       }
 
-      // Verificar se o usuário já existe no sistema
-      const userId = await checkUserExists(data.email);
-
       // Gerar URL de convite incluindo o email
       // Verificar se estamos no subdomínio da organização
       const isOrgSubdomain = window.location.hostname.startsWith("org.");
@@ -150,7 +163,7 @@ export default function InviteUserForm({
         ? window.location.origin.replace("org.", "") // Remover o "org." do domínio
         : window.location.origin;
 
-      const inviteUrl = `${baseUrl}/auth?invite=${teamId}&email=${encodeURIComponent(
+      const inviteUrl = `${baseUrl}/members?invite=${teamId}&email=${encodeURIComponent(
         data.email
       )}`;
 
@@ -211,17 +224,6 @@ export default function InviteUserForm({
         );
       }
 
-      // Adicionar membro à equipe com status 'invited'
-      try {
-        await addTeamMember(teamId, userId, data.email, "member", "invited");
-      } catch (memberError: any) {
-        console.error("Erro ao adicionar membro localmente:", memberError);
-        // Mesmo com erro aqui, continuamos pois o convite já foi enviado
-      }
-
-      // Recarregar membros da equipe para mostrar o novo membro
-      await loadTeamMembers(teamId);
-
       // Limpar formulário
       form.reset({
         email: "",
@@ -232,6 +234,9 @@ export default function InviteUserForm({
         description:
           "O membro foi adicionado à equipe e recebeu um email de convite.",
       });
+
+      // Recarregar membros da equipe para mostrar o novo membro
+      await loadTeamMembers(teamId);
 
       // Chamar callback de sucesso, se fornecido
       onInviteSent();
@@ -258,7 +263,7 @@ export default function InviteUserForm({
         ? window.location.origin.replace("org.", "") // Remover o "org." do domínio
         : window.location.origin;
 
-      const inviteUrl = `${baseUrl}/auth?invite=${teamId}&email=${encodeURIComponent(
+      const inviteUrl = `${baseUrl}/members?invite=${teamId}&email=${encodeURIComponent(
         email
       )}`;
 
